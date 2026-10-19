@@ -1,0 +1,32 @@
+{
+  "name": "basics",
+  "version": "0.1.0",
+  "description": "Personal tech-stack knowledge vault shared with your coding agents via MCP",
+  "type": "module",
+  "bin": {
+    "basics": "dist/cli.js",
+    "basics-mcp": "dist/mcp/server.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev:mcp": "tsx src/mcp/server.ts",
+    "cli": "tsx src/cli.ts",
+    "test": "tsx --test test/*.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "commander": "^15.0.0",
+    "gray-matter": "^4.0.3",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3"
+  }
+}
