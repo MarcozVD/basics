@@ -3,6 +3,8 @@
 Vault personal de tu stack tecnológico (estilo Obsidian: Markdown + frontmatter + `[[wikilinks]]`)
 que tus agentes de código consultan y amplían vía MCP.
 
+> **Estado: experimental (0.0.x).** API, schema y CLI pueden cambiar sin aviso.
+
 ## Estructura del vault
 
 ```

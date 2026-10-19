@@ -1,6 +1,6 @@
 {
   "name": "@marcozvd/basics",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "description": "Personal tech-stack knowledge vault shared with your coding agents via MCP",
   "type": "module",
   "repository": {
@@ -23,7 +23,8 @@
     "dev:mcp": "tsx src/mcp/server.ts",
     "cli": "tsx src/cli.ts",
     "test": "tsx --test test/*.test.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build && npm test"
   },
   "license": "MIT",
   "engines": {

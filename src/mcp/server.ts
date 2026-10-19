@@ -14,7 +14,7 @@ const json = (value: unknown) => ({ content: [{ type: "text" as const, text: JSO
 const text = (value: string) => ({ content: [{ type: "text" as const, text: value }] });
 const fail = (message: string) => ({ content: [{ type: "text" as const, text: message }], isError: true });
 
-const server = new McpServer({ name: "basics", version: "0.1.0" });
+const server = new McpServer({ name: "basics", version: "0.0.1" });
 
 server.registerTool(
   "list_layers",
