@@ -17,19 +17,35 @@ vault/
 
 El vault es una carpeta normal: se puede abrir también con Obsidian y versionar con git.
 
+## Instalación
+
+Paquete npm: [`@marcozvd/basics`](https://www.npmjs.com/package/@marcozvd/basics). Funciona con npm o pnpm.
+
+```bash
+npm install -g @marcozvd/basics     # o: pnpm add -g @marcozvd/basics
+basics --help
+```
+
+## Desarrollo
+
+```bash
+npm install && npm run build        # o: pnpm install && pnpm build
+npm test                            # o: pnpm test
+```
+
 ## Uso
 
 ```bash
-npm install && npm run build
-
-npm run cli -- list
-npm run cli -- validate                  # esquemas, ids duplicados, links rotos
-npm run cli -- new tech django -l backend
-npm run cli -- recommend "API REST para servir modelos de ML"
-npm run cli -- inbox                     # propuestas de agentes
-npm run cli -- inbox approve django
-npm run cli -- init-project ../mi-app -s fastapi,postgresql,pytest
+basics list
+basics validate                     # esquemas, ids duplicados, links rotos
+basics new tech django -l backend
+basics recommend "API REST para servir modelos de ML"
+basics inbox                        # propuestas de agentes
+basics inbox approve django
+basics init-project ../mi-app -s fastapi,postgresql,pytest
 ```
+
+Desde el repo sin instalar: `npm run cli -- <comando>` o `pnpm cli <comando>`.
 
 `init-project` escribe `STACK.md` (prácticas + checks del stack elegido) y añade un puntero en `AGENTS.md`.
 

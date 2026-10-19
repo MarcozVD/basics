@@ -1,8 +1,19 @@
 {
-  "name": "basics",
+  "name": "@marcozvd/basics",
   "version": "0.1.0",
   "description": "Personal tech-stack knowledge vault shared with your coding agents via MCP",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MarcozVD/basics.git"
+  },
+  "files": [
+    "dist",
+    "vault"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "bin": {
     "basics": "dist/cli.js",
     "basics-mcp": "dist/mcp/server.js"
