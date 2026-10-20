@@ -2,21 +2,43 @@ import { markdown } from "@codemirror/lang-markdown";
 import type { NoteData } from "@marcozvd/basics-core";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import CodeMirror, { EditorView } from "@uiw/react-codemirror";
-import { cn } from "cn";
-import { AlertTriangle, Trash2 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Check, ChevronDown, MoreHorizontal, Trash2 } from "lucide-react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useBlocker, useNavigate, useParams } from "react-router";
+import { ActionSwapButton } from "@/components/motion/action-swap";
+import { Alert, AlertAction, AlertContent, AlertDescription, AlertIcon, AlertTitle } from "@/components/motion/alert";
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/motion/breadcrumb";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/motion/collapsible";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/motion/popover";
+import { Tabs, TabsList, TabsTrigger } from "@/components/motion/tabs";
+import { Tooltip } from "@/components/motion/tooltip";
+import { MarkdownPreview } from "@/components/note-form/markdown-preview";
 import { NoteForm } from "@/components/note-form/note-form";
+import { NotePreview, TypeChip, TypeDot } from "@/components/note-form/note-preview";
+import { wikilinkExtensions } from "@/components/note-form/wikilink-editor";
 import { ErrorState, Loading } from "@/components/state";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { type TranslationKey, useT } from "@/i18n";
+import { type TranslationKey, useI18n } from "@/i18n";
 import { ApiRequestError, deleteNote as deleteNoteApi, saveNote } from "@/lib/api";
-import { queryKeys, useNote, useNotes } from "@/lib/queries";
+import { SPRING_SWAP } from "@/lib/ease";
+import { queryKeys, useActivity, useNote, useNotes } from "@/lib/queries";
 import { rememberRecentNote } from "@/lib/recent-notes";
-import { useTheme } from "@/lib/theme";
+import { formatRelativeTime } from "@/lib/relative-time";
 import { toast } from "@/lib/toast";
+import { cn } from "@/lib/utils";
+
+type ViewMode = "edit" | "preview" | "split";
+
+const VIEW_KEY = "basics-editor-view";
+const CONNECTIONS_KEY = "basics-editor-connections-open";
 
 function issuesToErrors(issues: unknown): Record<string, string> {
   const errors: Record<string, string> = {};
@@ -30,14 +52,78 @@ function issuesToErrors(issues: unknown): Record<string, string> {
   return errors;
 }
 
+function readView(): ViewMode {
+  try {
+    const stored = localStorage.getItem(VIEW_KEY);
+    if (stored === "edit" || stored === "preview" || stored === "split") return stored;
+  } catch {
+    // Private mode: fall back to the breakpoint.
+  }
+  return typeof window !== "undefined" && window.innerWidth >= 1280 ? "split" : "edit";
+}
+
+function readConnections(): boolean {
+  try {
+    return localStorage.getItem(CONNECTIONS_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function ConnectionRow({ id, broken }: { id: string; broken: boolean }) {
+  const t = useI18n().t;
+  const navigate = useNavigate();
+  const notes = useNotes();
+  const summary = notes.data?.find((note) => note.id === id);
+  const title = summary?.title || id;
+
+  const row = (
+    <button
+      type="button"
+      title={broken ? t("editor.wikilinkMissing") : title}
+      onClick={() => {
+        if (broken) {
+          window.dispatchEvent(new CustomEvent("basics:new-note", { detail: { id } }));
+          return;
+        }
+        navigate(`/notes/${encodeURIComponent(id)}`);
+      }}
+      className={cn(
+        "flex w-full min-w-0 items-center gap-1.5 rounded-lg px-1.5 py-1 text-left transition-colors hover:bg-muted/60 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring",
+        broken && "text-destructive",
+      )}
+    >
+      <TypeDot type={summary?.type} />
+      <span className="min-w-0 flex-1 truncate text-xs">{title}</span>
+      <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{id}</span>
+    </button>
+  );
+
+  return broken ? row : <NotePreview id={id}>{row}</NotePreview>;
+}
+
+function ConnectionList({ ids, empty, broken }: { ids: string[]; empty: string; broken: boolean }) {
+  if (ids.length === 0) return <p className="px-1.5 text-xs text-muted-foreground">{empty}</p>;
+  return (
+    <ul className="flex flex-col">
+      {ids.map((id) => (
+        <li key={id}>
+          <ConnectionRow id={id} broken={broken} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export function EditorPage() {
   const { id } = useParams();
-  const t = useT();
+  const { t, language } = useI18n();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { resolvedTheme } = useTheme();
+  const reduce = useReducedMotion() ?? false;
   const noteQuery = useNote(id);
   const allNotes = useNotes();
+  const noteActivity = useActivity({ noteId: id, limit: 100 });
 
   const [data, setData] = useState<NoteData | null>(null);
   const [body, setBody] = useState("");
@@ -46,8 +132,14 @@ export function EditorPage() {
   const [conflict, setConflict] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
-  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [view, setView] = useState<ViewMode>(readView);
+  const [connectionsOpen, setConnectionsOpen] = useState(readConnections);
   const allowLeave = useRef(false);
+  const savedTimer = useRef<number | undefined>(undefined);
+
+  useEffect(() => () => window.clearTimeout(savedTimer.current), []);
 
   useEffect(() => {
     if (id) rememberRecentNote(id);
@@ -75,6 +167,11 @@ export function EditorPage() {
     }
   }, [noteQuery.data, baseHash, dirty]);
 
+  const markDirty = () => {
+    setDirty(true);
+    setSaved(false);
+  };
+
   const save = useCallback(
     async (overwrite = false) => {
       if (!id || !data || baseHash === null || saving) return;
@@ -87,6 +184,9 @@ export function EditorPage() {
         setDirty(false);
         setConflict(false);
         setErrors({});
+        setSaved(true);
+        window.clearTimeout(savedTimer.current);
+        savedTimer.current = window.setTimeout(() => setSaved(false), 1600);
         queryClient.setQueryData(queryKeys.note(id), result);
         toast.success(t(overwrite ? "editor.overwritten" : "editor.saved"));
       } catch (error) {
@@ -113,12 +213,12 @@ export function EditorPage() {
     const onKeyDown = (event: KeyboardEvent) => {
       if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== "s") return;
       event.preventDefault();
-      if (deleteOpen || blocker.state === "blocked") return;
+      if (blocker.state === "blocked") return;
       void save();
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [save, deleteOpen, blocker.state]);
+  }, [save, blocker.state]);
 
   const remove = useMutation({
     mutationFn: () => deleteNoteApi(id ?? "", baseHash ?? undefined),
@@ -126,12 +226,11 @@ export function EditorPage() {
       allowLeave.current = true;
       queryClient.removeQueries({ queryKey: queryKeys.note(id ?? "") });
       toast.success(t("editor.deleted"));
-      setDeleteOpen(false);
       navigate("/explore");
     },
     onError: (error) => {
       if (error instanceof ApiRequestError && error.status === 409) setConflict(true);
-      setDeleteOpen(false);
+      setConfirmDelete(false);
       toast.error(t("editor.deleteFailed"));
     },
   });
@@ -147,6 +246,47 @@ export function EditorPage() {
       setErrors({});
     } else if (result.error) {
       toast.error(t("state.error.title"));
+    }
+  };
+
+  const readers = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const event of noteActivity.data ?? []) {
+      if (!seen.has(event.agent)) seen.set(event.agent, event.ts);
+    }
+    return [...seen.entries()];
+  }, [noteActivity.data]);
+
+  const typeById = useMemo(() => new Map((allNotes.data ?? []).map((note) => [note.id, note.type])), [allNotes.data]);
+
+  const wikilinkOptions = useMemo(
+    () =>
+      (allNotes.data ?? []).map((note) => ({
+        id: note.id,
+        title: note.title || note.id,
+        detail: `${note.id} · ${t(`type.${note.type}` as TranslationKey)}`,
+      })),
+    [allNotes.data, t],
+  );
+
+  const extensions = useMemo(() => [markdown(), EditorView.lineWrapping, ...wikilinkExtensions(wikilinkOptions)], [wikilinkOptions]);
+
+  const setViewMode = (next: string) => {
+    const mode = next as ViewMode;
+    setView(mode);
+    try {
+      localStorage.setItem(VIEW_KEY, mode);
+    } catch {
+      // Private mode: only the current session remembers it.
+    }
+  };
+
+  const setConnections = (next: boolean) => {
+    setConnectionsOpen(next);
+    try {
+      localStorage.setItem(CONNECTIONS_KEY, next ? "1" : "0");
+    } catch {
+      // Private mode: only the current session remembers it.
     }
   };
 
@@ -169,143 +309,296 @@ export function EditorPage() {
 
   const title = data.title ?? note.id;
   const typeLabel = t(`type.${note.type}` as TranslationKey);
-  const known = new Set((allNotes.data ?? []).map((item) => item.id));
-
-  const renderLinks = (ids: string[], empty: string) => {
-    if (ids.length === 0) return <p className="text-xs text-muted-foreground">{empty}</p>;
-    return (
-      <ul className="flex flex-col gap-0.5">
-        {ids.map((link) => {
-          const broken = allNotes.data !== undefined && !known.has(link);
-          return (
-            <li key={link}>
-              <button
-                type="button"
-                onClick={() => navigate(`/notes/${encodeURIComponent(link)}`)}
-                title={broken ? t("editor.brokenLink", { id: link }) : link}
-                className={cn(
-                  "flex w-full items-center gap-1 rounded-md px-1.5 py-1 text-left font-mono text-[11px] hover:bg-muted",
-                  broken && "text-amber-700 dark:text-amber-400",
-                )}
-              >
-                <span className="truncate">{link}</span>
-                {broken && <AlertTriangle className="size-3 shrink-0" aria-hidden="true" />}
-              </button>
-            </li>
-          );
-        })}
-      </ul>
-    );
-  };
+  const unresolved = note.links.filter((link) => allNotes.data !== undefined && !typeById.has(link));
+  const editorPane = (
+    <div className="overflow-hidden rounded-2xl border border-border bg-card">
+      <CodeMirror
+        value={body}
+        minHeight={view === "split" ? "45vh" : "55vh"}
+        theme="none"
+        basicSetup={{ foldGutter: false, highlightActiveLine: false, autocompletion: false }}
+        extensions={extensions}
+        aria-label={t("editor.body")}
+        onChange={(value) => {
+          setBody(value);
+          markDirty();
+        }}
+      />
+    </div>
+  );
+  const previewPane = (
+    <div className={cn("rounded-2xl border border-border bg-card/40 px-5 py-4", view === "split" && "min-h-[45vh]")}>
+      <MarkdownPreview body={body} />
+    </div>
+  );
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden">
-      <header className="flex shrink-0 items-center gap-3 border-b px-4 py-2">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <h1 className="truncate text-base font-semibold">{title}</h1>
-            <Badge variant="outline">{typeLabel}</Badge>
-            {dirty && (
-              <span
-                role="img"
-                aria-label={t("editor.unsaved")}
-                title={t("editor.unsaved")}
-                className="size-2 shrink-0 rounded-full bg-amber-500"
-              />
+    <div className="mx-auto w-full px-5 pt-4 pb-32" style={{ maxWidth: view === "split" ? 1200 : 760 }}>
+      <header className="sticky top-0 z-30 -mx-5 flex items-center gap-2 border-b border-border/60 bg-background px-5 py-2">
+        <Breadcrumb className="min-w-0 flex-1">
+          <BreadcrumbList maxItems={Number.POSITIVE_INFINITY} className="flex-nowrap gap-x-0.5 text-xs">
+            <BreadcrumbItem key="explore">
+              <BreadcrumbLink
+                render={(props) => <a {...props} href="/explore" />}
+                onClick={(event) => {
+                  event.preventDefault();
+                  navigate("/explore");
+                }}
+              >
+                {t("nav.explore")}
+              </BreadcrumbLink>
+            </BreadcrumbItem>
+            <BreadcrumbItem key="type">
+              <BreadcrumbSeparator />
+              <BreadcrumbLink
+                render={(props) => <a {...props} href={`/explore?type=${note.type}`} />}
+                onClick={(event) => {
+                  event.preventDefault();
+                  navigate(`/explore?type=${note.type}`);
+                }}
+              >
+                {typeLabel}
+              </BreadcrumbLink>
+            </BreadcrumbItem>
+            <BreadcrumbItem key="title">
+              <BreadcrumbSeparator />
+              <BreadcrumbPage className="max-w-[42vw] truncate">{title}</BreadcrumbPage>
+            </BreadcrumbItem>
+          </BreadcrumbList>
+        </Breadcrumb>
+
+        <AnimatePresence initial={false}>
+          {dirty ? (
+            <motion.span
+              key="dirty"
+              role="img"
+              aria-label={t("editor.unsaved")}
+              title={t("editor.unsaved")}
+              initial={{ scale: 0, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0, opacity: 0 }}
+              transition={reduce ? { duration: 0 } : SPRING_SWAP}
+              className="size-2 shrink-0 rounded-full bg-amber-500"
+            />
+          ) : null}
+        </AnimatePresence>
+
+        <ActionSwapButton
+          items={[
+            { id: "save", label: t("editor.save") },
+            { id: "saved", label: <Check className="size-4" aria-hidden="true" />, ariaLabel: t("editor.saved") },
+          ]}
+          value={saved ? "saved" : "save"}
+          cycle={false}
+          variant="primary"
+          size="sm"
+          animation="blur"
+          onClick={() => void save()}
+          disabled={saving}
+        />
+
+        <Popover
+          side="bottom"
+          align="end"
+          sideOffset={8}
+          panelRadius={14}
+          className="shrink-0"
+          onOpenChange={(open) => !open && setConfirmDelete(false)}
+        >
+          <PopoverTrigger>
+            <button
+              type="button"
+              aria-label={t("editor.more")}
+              title={t("editor.more")}
+              className="grid size-8 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
+            >
+              <MoreHorizontal className="size-4" aria-hidden="true" />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent className="w-60 p-1.5">
+            {confirmDelete ? (
+              <div className="flex flex-col gap-2 p-1.5">
+                <p className="text-sm font-medium">{t("editor.delete.title")}</p>
+                <p className="text-xs leading-relaxed text-muted-foreground">{t("editor.delete.description", { id: note.id })}</p>
+                <div className="flex justify-end gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setConfirmDelete(false)}
+                    className="rounded-full px-3 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  >
+                    {t("editor.cancel")}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={remove.isPending}
+                    onClick={() => remove.mutate()}
+                    className="rounded-full bg-destructive px-3 py-1 text-xs font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                  >
+                    {t("editor.delete")}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => setConfirmDelete(true)}
+                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-sm text-destructive transition-colors hover:bg-destructive/10"
+              >
+                <Trash2 className="size-3.5" aria-hidden="true" />
+                {t("editor.delete")}
+              </button>
             )}
-          </div>
-          <div className="mt-0.5 flex min-w-0 items-center gap-3 text-[11px] text-muted-foreground">
-            <span className="truncate font-mono">{note.id}</span>
-            <span className="truncate">
-              {t("editor.source")}: <span className="font-mono">{data.source}</span>
-            </span>
-            <span className="truncate">
-              {t("editor.updated")}: {data.updated ?? "—"}
-            </span>
-          </div>
-        </div>
-        <Button variant="destructive" size="sm" onClick={() => setDeleteOpen(true)}>
-          <Trash2 aria-hidden="true" />
-          {t("editor.delete")}
-        </Button>
-        <Button size="sm" onClick={() => void save()} disabled={saving}>
-          {t("editor.save")}
-        </Button>
+          </PopoverContent>
+        </Popover>
       </header>
 
-      {conflict && (
-        <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-amber-500/40 bg-amber-500/10 px-4 py-2 text-xs">
-          <AlertTriangle className="size-4 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden="true" />
-          <span className="font-medium">{t("editor.conflict.title")}</span>
-          <span className="text-muted-foreground">{t("editor.conflict.description")}</span>
-          <span className="ml-auto flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => void reload()}>
+      <Alert
+        open={conflict}
+        variant="warning"
+        className="mt-3 rounded-xl border border-amber-500/30 px-3 py-2"
+        contentClassName="items-center"
+      >
+        <AlertIcon />
+        <AlertContent>
+          <AlertTitle className="text-xs">{t("editor.conflict.title")}</AlertTitle>
+          <AlertDescription className="text-[11px] text-muted-foreground">{t("editor.conflict.description")}</AlertDescription>
+          <AlertAction className="gap-1.5 pt-1.5">
+            <button
+              type="button"
+              onClick={() => void reload()}
+              className="rounded-full border border-border bg-background px-3 py-1 text-xs font-medium transition-colors hover:bg-muted"
+            >
               {t("editor.conflict.reload")}
-            </Button>
-            <Button size="sm" onClick={() => void save(true)} disabled={saving}>
+            </button>
+            <button
+              type="button"
+              disabled={saving}
+              onClick={() => void save(true)}
+              className="rounded-full bg-primary px-3 py-1 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+            >
               {t("editor.conflict.overwrite")}
-            </Button>
+            </button>
+          </AlertAction>
+        </AlertContent>
+      </Alert>
+
+      <div className="mt-5 max-w-[720px]">
+        <input
+          aria-label={t("field.title")}
+          value={data.title ?? ""}
+          placeholder={note.id}
+          onChange={(event) => {
+            setData({ ...data, title: event.target.value } as NoteData);
+            markDirty();
+          }}
+          className="-mx-1.5 w-full rounded-lg bg-transparent px-1.5 text-[28px] leading-tight font-semibold tracking-[-0.02em] outline-none transition-colors placeholder:text-muted-foreground/40 hover:bg-muted/40 focus-visible:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring/30"
+        />
+        <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
+          <TypeChip type={note.type} />
+          <span className="min-w-0 truncate font-mono text-[11px] text-muted-foreground">
+            {note.id} · {data.source} · {t("editor.updated")} {data.updated ?? "—"}
           </span>
+          {readers.length > 0 ? (
+            <Tooltip
+              side="top"
+              align="start"
+              content={
+                <span className="flex flex-col gap-0.5 font-mono text-[11px]">
+                  {readers.map(([agent, ts]) => (
+                    <span key={agent}>
+                      {agent} · {formatRelativeTime(ts, language)}
+                    </span>
+                  ))}
+                </span>
+              }
+            >
+              <span className="shrink-0 cursor-default font-mono text-[11px] text-muted-foreground underline decoration-dotted underline-offset-2">
+                {t(readers.length === 1 ? "editor.readByAgent" : "editor.readByAgents", { count: readers.length })}
+              </span>
+            </Tooltip>
+          ) : null}
         </div>
-      )}
-
-      <div className="flex min-h-0 flex-1">
-        <aside className="w-[360px] shrink-0 overflow-y-auto border-r p-3">
-          <NoteForm
-            type={note.type}
-            data={data}
-            errors={errors}
-            onChange={(next) => {
-              setData(next);
-              setDirty(true);
-            }}
-          />
-        </aside>
-
-        <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
-          <CodeMirror
-            value={body}
-            height="100%"
-            theme={resolvedTheme}
-            extensions={[markdown(), EditorView.lineWrapping]}
-            basicSetup={{ foldGutter: false, highlightActiveLine: false }}
-            className="h-full text-sm [&_.cm-editor]:h-full"
-            aria-label={t("editor.body")}
-            onChange={(value) => {
-              setBody(value);
-              setDirty(true);
-            }}
-          />
-        </div>
-
-        <aside className="flex w-[240px] shrink-0 flex-col gap-4 overflow-y-auto border-l p-3">
-          <section>
-            <h2 className="mb-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">{t("editor.links")}</h2>
-            {renderLinks(note.links, t("editor.noLinks"))}
-          </section>
-          <section>
-            <h2 className="mb-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">{t("editor.backlinks")}</h2>
-            {renderLinks(note.backlinks, t("editor.noBacklinks"))}
-          </section>
-        </aside>
       </div>
 
-      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <DialogContent showCloseButton={false}>
-          <DialogHeader>
-            <DialogTitle>{t("editor.delete.title")}</DialogTitle>
-            <DialogDescription>{t("editor.delete.description", { id: note.id })}</DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteOpen(false)}>
-              {t("editor.cancel")}
-            </Button>
-            <Button variant="destructive" onClick={() => remove.mutate()} disabled={remove.isPending}>
-              {t("editor.delete")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <div className="mt-4">
+        <NoteForm
+          type={note.type}
+          data={data}
+          errors={errors}
+          onChange={(next) => {
+            setData(next);
+            markDirty();
+          }}
+        />
+      </div>
+
+      <div className="mt-5 border-t border-border/70 pt-3">
+        <Tabs value={view} onValueChange={setViewMode} variant="segment">
+          <TabsList className="p-0.5">
+            <TabsTrigger value="edit" className="px-3 py-1 text-xs">
+              {t("editor.view.edit")}
+            </TabsTrigger>
+            <TabsTrigger value="preview" className="px-3 py-1 text-xs">
+              {t("editor.view.preview")}
+            </TabsTrigger>
+            <TabsTrigger value="split" className="px-3 py-1 text-xs">
+              {t("editor.view.split")}
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+
+        <div role="tabpanel" aria-label={t("editor.body")} className="mt-3">
+          {view === "edit" ? editorPane : null}
+          {view === "preview" ? previewPane : null}
+          {view === "split" ? (
+            <div className="grid gap-4 md:grid-cols-2">
+              {editorPane}
+              {previewPane}
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      <section className="mt-7 border-t border-border/70 pt-2">
+        <Collapsible open={connectionsOpen} onOpenChange={setConnections}>
+          <CollapsibleTrigger className="min-h-8 w-full justify-start gap-1 rounded-lg px-1 text-[11px] font-semibold tracking-wider text-muted-foreground uppercase hover:bg-muted/40">
+            <span aria-hidden="true" className="inline-flex size-3.5 shrink-0 items-center justify-center text-muted-foreground">
+              <ChevronDown className={cn("size-3.5 transition-transform duration-200", !connectionsOpen && "-rotate-90")} />
+            </span>
+            {t("editor.connections")}
+            <span className="ml-2 font-mono text-[10px] font-normal tracking-normal normal-case">
+              {t("editor.connectionsSummary", {
+                links: note.links.length,
+                backlinks: note.backlinks.length,
+                unresolved: unresolved.length,
+              })}
+            </span>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <div className="mt-2 grid gap-4 pb-2 sm:grid-cols-3">
+              <div className="min-w-0">
+                <h3 className="mb-1 px-1.5 text-[11px] font-medium text-muted-foreground">
+                  {t("editor.links")} <span className="font-mono">{note.links.length}</span>
+                </h3>
+                <ConnectionList ids={note.links} empty={t("editor.noLinks")} broken={false} />
+              </div>
+              <div className="min-w-0">
+                <h3 className="mb-1 px-1.5 text-[11px] font-medium text-muted-foreground">
+                  {t("editor.backlinks")} <span className="font-mono">{note.backlinks.length}</span>
+                </h3>
+                <ConnectionList ids={note.backlinks} empty={t("editor.noBacklinks")} broken={false} />
+              </div>
+              <div className="min-w-0">
+                <h3 className="mb-1 px-1.5 text-[11px] font-medium text-muted-foreground">
+                  {t("editor.unresolved")} <span className="font-mono">{unresolved.length}</span>
+                </h3>
+                <ConnectionList ids={unresolved} empty={t("editor.noneUnresolved")} broken />
+              </div>
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
+      </section>
 
       <Dialog
         open={blocker.state === "blocked"}
@@ -319,21 +612,24 @@ export function EditorPage() {
             <DialogDescription>{t("editor.unsavedDescription")}</DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button
-              variant="outline"
+            <button
+              type="button"
               onClick={() => {
                 if (blocker.state === "blocked") blocker.reset();
               }}
+              className="rounded-full border border-border px-4 py-1.5 text-sm font-medium transition-colors hover:bg-muted"
             >
               {t("editor.stay")}
-            </Button>
-            <Button
+            </button>
+            <button
+              type="button"
               onClick={() => {
                 if (blocker.state === "blocked") blocker.proceed();
               }}
+              className="rounded-full bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
             >
               {t("editor.leave")}
-            </Button>
+            </button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

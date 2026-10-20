@@ -17,8 +17,8 @@ test("creates a note and shows it in Explore", async ({ page }) => {
   await dialog.getByRole("button", { name: "Create", exact: true }).click();
 
   await expect(page).toHaveURL(/\/notes\/e2e-demo$/);
-  await expect(page.getByRole("heading", { name: "e2e-demo", exact: true })).toBeVisible();
+  await expect(page.getByLabel("Title", { exact: true })).toHaveValue("e2e-demo");
 
-  await page.getByRole("link", { name: "Explore", exact: true }).click();
+  await page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Explore", exact: true }).click();
   await expect(page.getByRole("option").filter({ hasText: "e2e-demo" })).toBeVisible();
 });

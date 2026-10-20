@@ -55,9 +55,10 @@ export function NewNoteDialog() {
   });
 
   useEffect(() => {
-    const onOpen = () => {
+    const onOpen = (event: Event) => {
+      const requested = (event as CustomEvent<{ id?: string }>).detail?.id ?? "";
       setType("tech");
-      setId("");
+      setId(requested);
       setLayer(layers.data?.[0]?.id ?? "backend");
       setError("");
       setOpen(true);
