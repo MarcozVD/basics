@@ -23,9 +23,12 @@
     "dist"
   ],
   "dependencies": {
+    "@hono/node-server": "^2.1.5",
     "@marcozvd/basics-core": "0.0.1",
     "@modelcontextprotocol/sdk": "^1.32.1",
+    "chokidar": "^5.0.0",
     "commander": "^15.0.0",
+    "hono": "^4.13.13",
     "zod": "^4.6.7"
   },
   "scripts": {

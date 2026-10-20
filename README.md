@@ -87,6 +87,7 @@ basics recommend "API REST para servir modelos de ML"
 basics inbox                        # propuestas de agentes
 basics inbox approve django
 basics init-project ../mi-app -s fastapi,postgresql,pytest
+basics ui                            # servidor local: API REST + UI web (http://127.0.0.1:4747)
 ```
 
 Desde el repo sin instalar: `npm run cli -- --vault examples/vault <comando>` o `pnpm cli ...`.
@@ -99,6 +100,12 @@ Claude Code:
 
 ```bash
 claude mcp add basics --scope user -- node /ruta/a/basics/packages/basics/dist/mcp/server.js /ruta/a/tu-vault
+```
+
+Con `basics ui` corriendo, también por HTTP (stateless streamable HTTP en el mismo proceso local):
+
+```bash
+claude mcp add --transport http basics http://127.0.0.1:4747/mcp
 ```
 
 Otros clientes MCP (Cursor, etc.): comando `node packages/basics/dist/mcp/server.js [ruta-vault]` por stdio (si se omite, se resuelve con la config global).

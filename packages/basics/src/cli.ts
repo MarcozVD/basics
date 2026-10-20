@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import {
@@ -24,6 +25,18 @@ const program = new Command("basics")
   .option("-v, --vault <dir>", 'vault directory (default: $BASICS_DIR, config "vault", or ~/basics-vault)');
 
 const load = () => Vault.load(resolveVaultDir(program.opts().vault));
+
+function openBrowser(url: string): void {
+  const command = process.platform === "win32" ? "cmd" : process.platform === "darwin" ? "open" : "xdg-open";
+  const args = process.platform === "win32" ? ["/c", "start", "", url] : [url];
+  try {
+    spawn(command, args, { detached: true, stdio: "ignore" })
+      .on("error", () => {})
+      .unref();
+  } catch {
+    // Opening the browser is best effort.
+  }
+}
 
 const config = program.command("config").description("read or change the global basics config");
 config
@@ -154,6 +167,26 @@ inbox.command("reject <id>").action((id: string) => {
   load().reject(id);
   console.log(`rejected ${id}`);
 });
+
+program
+  .command("ui")
+  .description("start the local web UI and HTTP API")
+  .option("-p, --port <n>", "port to listen on", "4747")
+  .option("--no-open", "do not open the browser")
+  .action(async ({ port, open }: { port: string; open: boolean }) => {
+    const root = resolveVaultDir(program.opts().vault);
+    Vault.load(root);
+    const { startServer } = await import("./server/index.js");
+    const server = await startServer({ root, port: Number(port) });
+    console.log(`Basics UI: ${server.url}  (vault: ${root})`);
+    console.log(`MCP over HTTP: ${server.url}/mcp`);
+    if (open) openBrowser(server.url);
+    const stop = () => {
+      void server.close().finally(() => process.exit(0));
+    };
+    process.once("SIGINT", stop);
+    process.once("SIGTERM", stop);
+  });
 
 program
   .command("init-project <dir>")
