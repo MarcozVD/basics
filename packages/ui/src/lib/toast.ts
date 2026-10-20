@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import type { AnimatedToast, ToastStatus } from "@/components/motion/animated-toast-stack";
+import type { AnimatedToast, AnimatedToastAction, ToastStatus } from "@/components/motion/animated-toast-stack";
 
 const DURATION = 4200;
 const LIMIT = 4;
@@ -17,16 +17,25 @@ function dismiss(id: string) {
   emit();
 }
 
-function show(status: ToastStatus, title: string) {
+function show(status: ToastStatus, title: string, action?: AnimatedToastAction) {
   const id = `toast-${Date.now()}-${seed++}`;
-  toasts = [...toasts, { id, title, status, duration: DURATION, dismissible: true, createdAt: Date.now() }].slice(-LIMIT);
+  const wrapped: AnimatedToastAction | undefined = action
+    ? {
+        label: action.label,
+        onClick: (item) => {
+          action.onClick(item);
+          dismiss(id);
+        },
+      }
+    : undefined;
+  toasts = [...toasts, { id, title, status, action: wrapped, duration: DURATION, dismissible: true, createdAt: Date.now() }].slice(-LIMIT);
   emit();
   window.setTimeout(() => dismiss(id), DURATION);
 }
 
 export const toast = {
-  success: (message: string) => show("success", message),
-  error: (message: string) => show("error", message),
+  success: (message: string, action?: AnimatedToastAction) => show("success", message, action),
+  error: (message: string, action?: AnimatedToastAction) => show("error", message, action),
 };
 
 function subscribe(listener: () => void) {

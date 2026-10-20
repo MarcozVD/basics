@@ -1,21 +1,22 @@
-import type { NoteData } from "@marcozvd/basics-core";
+import type { NoteData, NoteType } from "@marcozvd/basics-core";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Check, Pencil, X } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { ArrowLeft, Check, Pencil, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { DiffView } from "@/components/diff-view";
+import { AnimatedBadge } from "@/components/motion/animated-badge";
+import { Button } from "@/components/motion/button/base";
+import { CenterMorphModal, CenterMorphModalContent } from "@/components/motion/center-morph-modal";
 import { NoteForm } from "@/components/note-form/note-form";
 import { ErrorState, Loading } from "@/components/state";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { type TranslationKey, useI18n } from "@/i18n";
+import { agentColor, agentInitial } from "@/lib/agent-color";
 import { ApiRequestError, approveProposal, rejectProposal } from "@/lib/api";
 import { useProposal } from "@/lib/queries";
 import { formatRelativeTime } from "@/lib/relative-time";
 import { toast } from "@/lib/toast";
+import { cn } from "@/lib/utils";
 
 function issuesToErrors(issues: unknown): Record<string, string> {
   const errors: Record<string, string> = {};
@@ -30,26 +31,72 @@ function issuesToErrors(issues: unknown): Record<string, string> {
   return errors;
 }
 
+function isTypingTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  const tag = target.tagName;
+  return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || target.isContentEditable;
+}
+
 function ActionBadge({ action }: { action: "create" | "update" }) {
   const { t } = useI18n();
   return (
-    <Badge
-      variant={action === "create" ? "outline" : "secondary"}
-      className={action === "create" ? "border-primary/50 text-primary" : undefined}
+    <AnimatedBadge
+      status={action === "create" ? "info" : "neutral"}
+      size="sm"
+      showIcon={false}
+      className={cn(
+        "border-transparent font-medium",
+        action === "create" ? "border-primary/30 bg-primary/10 text-primary" : "border-border bg-muted/60 text-muted-foreground",
+      )}
     >
       {t(action === "create" ? "proposal.action.create" : "proposal.action.update")}
-    </Badge>
+    </AnimatedBadge>
+  );
+}
+
+function TypeChip({ type }: { type: NoteType }) {
+  const { t } = useI18n();
+  return (
+    <span className="inline-flex h-6 shrink-0 items-center gap-1.5 rounded-full border border-border bg-muted/40 px-2 text-[11px] text-muted-foreground">
+      <span
+        aria-hidden="true"
+        className="size-1.5 rounded-full ring-1 ring-black/10 dark:ring-white/20"
+        style={{ backgroundColor: `var(--type-${type})` }}
+      />
+      {t(`type.${type}` as TranslationKey)}
+    </span>
+  );
+}
+
+function AgentAvatar({ name, className }: { name: string; className?: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn("grid size-5 shrink-0 place-items-center rounded-md font-mono text-[10px] font-semibold text-[#111113]", className)}
+      style={{ backgroundColor: agentColor(name) }}
+    >
+      {agentInitial(name)}
+    </span>
   );
 }
 
 function GoneState({ message, back }: { message: string; back: string }) {
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
+    <div className="flex min-h-[50vh] flex-col items-center justify-center gap-3 p-6 text-center">
       <p className="text-sm font-medium">{message}</p>
-      <Button asChild variant="outline">
-        <Link to="/inbox">{back}</Link>
-      </Button>
+      <Link
+        to="/inbox"
+        className="inline-flex h-8 items-center rounded-full border border-border px-3 text-xs font-medium transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+      >
+        {back}
+      </Link>
     </div>
+  );
+}
+
+function Kbd({ children }: { children: string }) {
+  return (
+    <kbd className="rounded-full border border-current/30 px-1.5 font-mono text-[10px] leading-4 text-current opacity-60">{children}</kbd>
   );
 }
 
@@ -66,7 +113,10 @@ export function ProposalPage() {
   const [editData, setEditData] = useState<NoteData | null>(null);
   const [editBody, setEditBody] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [rejectOpen, setRejectOpen] = useState(false);
+  const [armed, setArmed] = useState(false);
+  const armTimer = useRef<number | undefined>(undefined);
+
+  useEffect(() => () => window.clearTimeout(armTimer.current), []);
 
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ["inbox"] });
@@ -119,7 +169,7 @@ export function ProposalPage() {
       navigate("/inbox");
     },
     onError: (error) => {
-      setRejectOpen(false);
+      setArmed(false);
       if (error instanceof ApiRequestError && error.status === 404) {
         setGone(true);
         return;
@@ -128,28 +178,34 @@ export function ProposalPage() {
     },
   });
 
-  const openEdit = useCallback(() => {
+  const openEdit = () => {
     if (!proposal) return;
     setEditData(proposal.data);
     setEditBody(proposal.body);
     setErrors({});
     setEditOpen(true);
-  }, [proposal]);
+  };
+
+  const armReject = () => {
+    if (armed) {
+      window.clearTimeout(armTimer.current);
+      setArmed(false);
+      reject.mutate();
+      return;
+    }
+    setArmed(true);
+    armTimer.current = window.setTimeout(() => setArmed(false), 3000);
+  };
 
   const busy = approve.isPending || editApprove.isPending || reject.isPending;
   const goneFromQuery = proposalQuery.error instanceof ApiRequestError && proposalQuery.error.status === 404;
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.metaKey || event.ctrlKey || event.altKey || event.repeat) return;
-      const target = event.target as HTMLElement | null;
-      if (
-        target &&
-        (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT" || target.isContentEditable)
-      ) {
-        return;
-      }
-      if (editOpen || rejectOpen || gone || busy || !proposal) return;
+      if (event.defaultPrevented || event.repeat) return;
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      if (isTypingTarget(event.target)) return;
+      if (editOpen || gone || busy || !proposal) return;
       const key = event.key.toLowerCase();
       if (key === "a") {
         event.preventDefault();
@@ -159,12 +215,12 @@ export function ProposalPage() {
         openEdit();
       } else if (key === "r") {
         event.preventDefault();
-        setRejectOpen(true);
+        armReject();
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [approve, editOpen, rejectOpen, gone, busy, proposal, openEdit]);
+  });
 
   if (gone || goneFromQuery) {
     return <GoneState message={t("proposal.gone")} back={t("proposal.backToInbox")} />;
@@ -172,7 +228,7 @@ export function ProposalPage() {
 
   if (proposalQuery.error) {
     return (
-      <div className="p-6">
+      <div className="mx-auto w-full max-w-[1100px] px-4 py-6">
         <ErrorState error={proposalQuery.error} />
       </div>
     );
@@ -180,122 +236,154 @@ export function ProposalPage() {
 
   if (proposalQuery.isPending || !proposal) {
     return (
-      <div className="p-6">
+      <div className="mx-auto w-full max-w-[1100px] px-4 py-6">
         <Loading />
       </div>
     );
   }
 
   const title = proposal.data.title ?? proposal.id;
-  const typeLabel = t(`type.${proposal.data.type}` as TranslationKey);
+  const name = proposal.meta.proposed_by;
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <header className="flex shrink-0 flex-col gap-2 border-b px-4 py-3">
+    <div className="mx-auto w-full max-w-[1100px] px-4 pb-28 pt-4">
+      <Link
+        to="/inbox"
+        className="inline-flex items-center gap-1 rounded-full text-xs text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+      >
+        <ArrowLeft className="size-3.5" aria-hidden="true" />
+        {t("nav.inbox")}
+      </Link>
+
+      <header className="mt-3">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <ActionBadge action={proposal.meta.action} />
-          <h1 className="min-w-0 truncate text-base font-semibold">{title}</h1>
+          <TypeChip type={proposal.data.type} />
+          <h1 className="min-w-0 truncate text-lg font-semibold tracking-tight">{title}</h1>
           <span className="font-mono text-[11px] text-muted-foreground">{proposal.id}</span>
-          <Badge variant="outline">{typeLabel}</Badge>
         </div>
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-          <span>
-            {t("proposal.proposedBy")}: <span className="font-mono text-foreground">{proposal.meta.proposed_by}</span>
+
+        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
+          <span className="inline-flex items-center gap-1.5">
+            <AgentAvatar name={name} />
+            <span>
+              {t("proposal.proposedBy")} <span className="font-mono text-foreground">{name}</span>
+            </span>
           </span>
           <span>
-            {t("proposal.created")}:{" "}
+            {t("proposal.created")}{" "}
             <time dateTime={proposal.meta.created} title={proposal.meta.created}>
               {formatRelativeTime(proposal.meta.created, language)}
             </time>
           </span>
         </div>
-        <blockquote className="border-l-2 border-primary/40 pl-3 text-sm whitespace-pre-wrap text-muted-foreground italic">
+
+        <blockquote className="mt-3 max-w-3xl border-l-2 border-primary/40 pl-3 text-sm italic whitespace-pre-wrap text-muted-foreground">
           {proposal.meta.reason}
         </blockquote>
       </header>
 
-      <div className="min-h-0 flex-1 p-4">
-        <DiffView before={proposal.current?.text ?? null} after={proposal.proposedText} />
+      <div className="mt-4 h-[calc(100dvh-21rem)] min-h-[320px]">
+        <DiffView before={proposal.current?.text ?? null} after={proposal.proposedText} file={proposal.id} />
       </div>
 
-      <footer className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t bg-background px-4 py-3">
-        <Button variant="destructive" onClick={() => setRejectOpen(true)} disabled={busy}>
-          <X aria-hidden="true" />
-          {t("proposal.reject")}
+      <div
+        role="toolbar"
+        aria-label={t("proposal.actions")}
+        className="fixed bottom-[82px] left-1/2 z-40 flex max-w-[calc(100vw-1rem)] -translate-x-1/2 items-center gap-1 overflow-x-auto rounded-full border border-border bg-card/80 p-1.5 shadow-[0_8px_30px_rgba(0,0,0,0.25)] backdrop-blur-xl [scrollbar-width:none]"
+      >
+        <Button
+          variant="ghost"
+          size="sm"
+          pressScale={0.97}
+          disabled={busy}
+          onClick={armReject}
+          aria-label={armed ? t("proposal.rejectConfirm") : t("proposal.reject")}
+          className="gap-1.5"
+        >
+          <X className="size-3.5" aria-hidden="true" />
+          <span className={cn(armed && "text-destructive")}>{armed ? t("proposal.rejectConfirm") : t("proposal.reject")}</span>
+          <Kbd>r</Kbd>
         </Button>
-        <Button variant="outline" onClick={openEdit} disabled={busy}>
-          <Pencil aria-hidden="true" />
+        <Button
+          variant="secondary"
+          size="sm"
+          pressScale={0.97}
+          disabled={busy}
+          onClick={openEdit}
+          aria-label={t("proposal.edit")}
+          className="gap-1.5"
+        >
+          <Pencil className="size-3.5" aria-hidden="true" />
           {t("proposal.edit")}
+          <Kbd>e</Kbd>
         </Button>
-        <Button onClick={() => approve.mutate()} disabled={busy}>
-          <Check aria-hidden="true" />
+        <Button
+          variant="primary"
+          size="sm"
+          pressScale={0.97}
+          disabled={busy}
+          onClick={() => approve.mutate()}
+          aria-label={t("proposal.approve")}
+          className="gap-1.5"
+        >
+          <Check className="size-3.5" aria-hidden="true" />
           {t("proposal.approve")}
+          <Kbd>a</Kbd>
         </Button>
-      </footer>
+      </div>
 
-      <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[900px]">
-          <DialogHeader>
-            <DialogTitle>{t("proposal.edit.title")}</DialogTitle>
-            <DialogDescription className="font-mono">{proposal.id}</DialogDescription>
-          </DialogHeader>
+      <CenterMorphModal open={editOpen} onOpenChange={setEditOpen}>
+        <CenterMorphModalContent
+          ariaLabel={t("proposal.edit.title")}
+          closeButtonLabel={t("proposal.cancel")}
+          className="max-h-[86dvh] max-w-[900px] overflow-y-auto p-6"
+        >
+          <h2 className="text-base font-semibold tracking-tight">{t("proposal.edit.title")}</h2>
+          <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">{proposal.id}</p>
 
-          {editData && (
-            <div className="flex flex-col gap-3">
+          {editData ? (
+            <div className="mt-4 flex flex-col gap-3">
               <NoteForm type={editData.type} data={editData} errors={errors} onChange={setEditData} />
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="proposal-body" className="text-xs text-muted-foreground">
+                <label htmlFor="proposal-body" className="text-xs text-muted-foreground">
                   {t("editor.body")}
-                </Label>
+                </label>
                 <Textarea
                   id="proposal-body"
                   value={editBody}
                   aria-invalid={Boolean(errors.body)}
                   aria-describedby={errors.body ? "proposal-body-error" : undefined}
-                  className="min-h-40 font-mono text-[13px]"
+                  className="min-h-40 rounded-xl font-mono text-[13px]"
                   onChange={(event) => setEditBody(event.target.value)}
                 />
-                {errors.body && (
+                {errors.body ? (
                   <p id="proposal-body-error" className="text-xs text-destructive">
                     {errors.body}
                   </p>
-                )}
+                ) : null}
               </div>
             </div>
-          )}
+          ) : null}
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditOpen(false)}>
+          <div className="mt-5 flex items-center justify-end gap-2">
+            <Button variant="ghost" size="sm" pressScale={0.97} onClick={() => setEditOpen(false)}>
               {t("proposal.cancel")}
             </Button>
             <Button
+              variant="primary"
+              size="sm"
+              pressScale={0.97}
+              disabled={editApprove.isPending || !editData}
               onClick={() => {
                 if (editData) editApprove.mutate({ data: editData, body: editBody });
               }}
-              disabled={editApprove.isPending || !editData}
             >
               {t("proposal.approve")}
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={rejectOpen} onOpenChange={setRejectOpen}>
-        <DialogContent showCloseButton={false}>
-          <DialogHeader>
-            <DialogTitle>{t("proposal.reject.title")}</DialogTitle>
-            <DialogDescription>{t("proposal.reject.description", { id: proposal.id })}</DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setRejectOpen(false)}>
-              {t("proposal.cancel")}
-            </Button>
-            <Button variant="destructive" onClick={() => reject.mutate()} disabled={reject.isPending}>
-              {t("proposal.reject")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </div>
+        </CenterMorphModalContent>
+      </CenterMorphModal>
     </div>
   );
 }

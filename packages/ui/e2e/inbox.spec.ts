@@ -3,10 +3,10 @@ import path from "node:path";
 import { expect, test } from "@playwright/test";
 import { vaultPath } from "./helpers";
 
-test("lists and approves a proposal from the inbox", async ({ page }) => {
+function writeProposal(id: string, title: string, body: string) {
   const vault = vaultPath();
-  const inboxFile = path.join(vault, "inbox", "django.md");
-  fs.rmSync(path.join(vault, "tech", "django.md"), { force: true });
+  const inboxFile = path.join(vault, "inbox", `${id}.md`);
+  fs.rmSync(path.join(vault, "tech", `${id}.md`), { force: true });
   fs.mkdirSync(path.dirname(inboxFile), { recursive: true });
   fs.writeFileSync(
     inboxFile,
@@ -14,7 +14,7 @@ test("lists and approves a proposal from the inbox", async ({ page }) => {
       "---",
       "type: tech",
       "kind: framework",
-      "title: Django",
+      `title: ${title}`,
       "layer: backend",
       "tags: []",
       "source: agent:e2e",
@@ -24,12 +24,16 @@ test("lists and approves a proposal from the inbox", async ({ page }) => {
       "  reason: test",
       `  created: "${new Date().toISOString()}"`,
       "---",
-      "# Django",
+      `# ${title}`,
       "",
-      "Web framework for the e2e proposal flow.",
+      body,
       "",
     ].join("\n"),
   );
+}
+
+test("lists and approves a proposal from the inbox", async ({ page }) => {
+  writeProposal("django", "Django", "Web framework for the e2e proposal flow.");
 
   await page.goto("/explore");
   await page.keyboard.press("g");
@@ -40,11 +44,24 @@ test("lists and approves a proposal from the inbox", async ({ page }) => {
 
   await page.getByRole("button", { name: /django/i }).click();
   await expect(page).toHaveURL(/\/inbox\/django$/);
-  await expect(page.getByText("New note", { exact: true })).toBeVisible();
+  await expect(page.getByText("Web framework for the e2e proposal flow.")).toBeVisible();
 
   await page.getByRole("button", { name: "Approve", exact: true }).click();
   await expect(page).toHaveURL(/\/notes\/django$/);
 
-  await page.getByRole("link", { name: "Inbox", exact: true }).click();
-  await expect(page.getByText(/Inbox is empty/)).toBeVisible();
+  await page.locator('nav a[href="/inbox"]').click();
+  await expect(page.getByText(/Inbox zero/)).toBeVisible();
+});
+
+test("approves a proposal directly from the list card", async ({ page }) => {
+  writeProposal("svelte", "Svelte", "Compiler-first UI framework for the list approval flow.");
+
+  await page.goto("/inbox");
+  await expect(page.getByRole("button", { name: /svelte/i })).toBeVisible();
+
+  await page.locator('[data-proposal-id="svelte"]').getByRole("button", { name: "Approve", exact: true }).click();
+
+  await expect(page).toHaveURL(/\/inbox$/);
+  await expect(page.getByText(/Inbox zero/)).toBeVisible();
+  await expect(page.getByText("Approved", { exact: true })).toBeVisible();
 });

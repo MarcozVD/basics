@@ -27,6 +27,39 @@ function pushUnchanged(rows: DiffRow[], lines: string[], left: { value: number }
   }
 }
 
+export type DiffSegment = { kind: "rows"; rows: DiffRow[] } | { kind: "fold"; count: number; key: number; rows: DiffRow[] };
+
+/**
+ * Fold unchanged runs longer than `threshold` lines into one segment.
+ * Only equal rows are folded; changed rows always stay visible.
+ */
+export function foldDiff(rows: DiffRow[], threshold = 6): DiffSegment[] {
+  const segments: DiffSegment[] = [];
+  let run: DiffRow[] = [];
+
+  const flush = () => {
+    if (run.length > threshold) {
+      const first = run[0];
+      segments.push({ kind: "fold", count: run.length, key: first?.left?.lineNumber ?? first?.right?.lineNumber ?? 0, rows: run });
+    } else if (run.length > 0) {
+      segments.push({ kind: "rows", rows: run });
+    }
+    run = [];
+  };
+
+  for (const row of rows) {
+    if (row.kind === "equal") {
+      run.push(row);
+      continue;
+    }
+    flush();
+    segments.push({ kind: "rows", rows: [row] });
+  }
+  flush();
+
+  return segments;
+}
+
 export function alignDiff(before: string | null, after: string): DiffRow[] {
   const rows: DiffRow[] = [];
   const changes = diffLines(before ?? "", after);
