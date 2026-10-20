@@ -1,5 +1,7 @@
-import type { Note, NoteData, TechData } from "./schema.js";
-import { toId, type Vault } from "./vault.js";
+import path from "node:path";
+import type { NoteDetail, NoteSummary, ProposalDetail } from "./api.js";
+import type { Note, NoteData, NoteType, Proposal, TechData } from "./schema.js";
+import { serializeNote, toId, type Vault } from "./vault.js";
 
 // Small ES/EN stopword list; the vault mixes both languages.
 const STOPWORDS = new Set("a al and con de del el en es for in is la las los o of on or para por que the to un una uno with y".split(" "));
@@ -47,6 +49,67 @@ export function search(vault: Vault, query: string, opts: { type?: string; layer
 
 export function title(n: Note): string {
   return n.data.title ?? n.id;
+}
+
+/** Compact list entries sorted by type then title. */
+export function listNotes(vault: Vault, opts: { type?: NoteType; layer?: string } = {}): NoteSummary[] {
+  const layerId = opts.layer ? toId(opts.layer) : undefined;
+  return [...vault.notes.values()]
+    .filter((n) => !opts.type || n.data.type === opts.type)
+    .map((n) => {
+      const tech = n.data.type === "tech" ? (n.data as TechData) : undefined;
+      return {
+        id: n.id,
+        type: n.data.type,
+        title: title(n),
+        layers: tech ? [tech.layer].flat().map(toId) : [],
+        kind: tech?.kind,
+        source: n.data.source,
+        updated: n.data.updated,
+      };
+    })
+    .filter((n) => !layerId || n.layers.includes(layerId))
+    .sort((a, b) => a.type.localeCompare(b.type) || a.title.localeCompare(b.title));
+}
+
+/** Full note payload with a path relative to the vault root. */
+export function toDetail(vault: Vault, note: Note): NoteDetail {
+  return {
+    id: note.id,
+    type: note.data.type,
+    data: note.data,
+    body: note.body,
+    links: note.links,
+    backlinks: vault.getBacklinks(note.id),
+    hash: note.hash,
+    path: path.relative(vault.root, note.path).replace(/\\/g, "/"),
+  };
+}
+
+function withoutUpdated(data: NoteData): NoteData {
+  const copy: Record<string, unknown> = { ...data };
+  delete copy.updated;
+  return copy as NoteData;
+}
+
+/** Proposal plus the current note and both serialized texts for diffing (no `updated` line). */
+export function proposalDetail(vault: Vault, p: Proposal): ProposalDetail {
+  const current = vault.get(p.id);
+  return {
+    id: p.id,
+    meta: p.meta,
+    data: p.data,
+    body: p.body,
+    proposedText: serializeNote(withoutUpdated(p.data), p.body),
+    current: current
+      ? {
+          data: current.data,
+          body: current.body,
+          hash: current.hash,
+          text: serializeNote(withoutUpdated(current.data), current.body),
+        }
+      : null,
+  };
 }
 
 export interface Candidate {

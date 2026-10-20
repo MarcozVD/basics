@@ -1,3 +1,4 @@
+export * from "./api.js";
 export * from "./config.js";
 export * from "./fsutil.js";
 export * from "./query.js";

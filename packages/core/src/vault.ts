@@ -98,6 +98,14 @@ export class ConflictError extends Error {
   }
 }
 
+/** Thrown when a note does not exist. */
+export class NotFoundError extends Error {
+  constructor(readonly id: string) {
+    super(`note "${id}" not found`);
+    this.name = "NotFoundError";
+  }
+}
+
 /** Thrown when the vault directory does not exist. */
 export class VaultNotFoundError extends Error {
   constructor(readonly root: string) {
@@ -184,20 +192,32 @@ export class Vault {
     return [...(this.backlinks.get(toId(id)) ?? [])];
   }
 
+  private assertHash(file: string, expectedHash?: string): void {
+    if (!expectedHash || !fs.existsSync(file)) return;
+    const actualHash = sha256(fs.readFileSync(file, "utf8"));
+    if (actualHash !== expectedHash) throw new ConflictError(file, expectedHash, actualHash);
+  }
+
   /** Writes a note directly into the vault (used by humans / approvals). */
   writeNote(id: string, data: NoteData, body: string, opts: { expectedHash?: string } = {}): string {
     const parsed = noteSchema.parse(data);
     const existing = this.get(id);
     const file = existing?.path ?? path.join(this.root, TYPE_DIRS[parsed.type], `${slugify(id)}.md`);
-    if (opts.expectedHash && fs.existsSync(file)) {
-      const actualHash = sha256(fs.readFileSync(file, "utf8"));
-      if (actualHash !== opts.expectedHash) throw new ConflictError(file, opts.expectedHash, actualHash);
-    }
+    this.assertHash(file, opts.expectedHash);
     fs.mkdirSync(path.dirname(file), { recursive: true });
     const stamped = { ...parsed, updated: new Date().toISOString().slice(0, 10) };
-    atomicWrite(file, matter.stringify(`${body.trim()}\n`, stripEmpty(stamped)));
+    atomicWrite(file, serializeNote(stamped, body));
     this.reload();
     return file;
+  }
+
+  /** Deletes a note after confirming it has not changed on disk. */
+  deleteNote(id: string, opts: { expectedHash?: string } = {}): void {
+    const note = this.get(id);
+    if (!note) throw new NotFoundError(toId(id));
+    this.assertHash(note.path, opts.expectedHash);
+    fs.rmSync(note.path);
+    this.reload();
   }
 
   // ---- Inbox: agent proposals awaiting human review ----
@@ -209,7 +229,7 @@ export class Vault {
     const proposal: ProposalMeta = { ...meta, action, created: new Date().toISOString() };
     const file = path.join(this.root, INBOX_DIR, `${slug}.md`);
     fs.mkdirSync(path.dirname(file), { recursive: true });
-    atomicWrite(file, matter.stringify(`${body.trim()}\n`, { ...stripEmpty(parsed), proposal }));
+    atomicWrite(file, serializeNote({ ...parsed, proposal }, body));
     return { id: slug, path: file, meta: proposal, data: parsed, body };
   }
 
@@ -224,19 +244,30 @@ export class Vault {
     });
   }
 
-  approve(id: string): string {
-    const p = this.listProposals().find((x) => x.id === slugify(id));
+  getProposal(id: string): Proposal | undefined {
+    const slug = slugify(id);
+    return this.listProposals().find((x) => x.id === slug);
+  }
+
+  approve(id: string, override: { data?: NoteData; body?: string } = {}): string {
+    const p = this.getProposal(id);
     if (!p) throw new Error(`no proposal "${id}" in inbox`);
-    const file = this.writeNote(p.id, { ...p.data, source: `agent:${p.meta.proposed_by}` }, p.body);
+    const data = { ...(override.data ?? p.data), source: `agent:${p.meta.proposed_by}` };
+    const file = this.writeNote(p.id, data, override.body ?? p.body);
     fs.rmSync(p.path);
     return file;
   }
 
   reject(id: string): void {
-    const p = this.listProposals().find((x) => x.id === slugify(id));
+    const p = this.getProposal(id);
     if (!p) throw new Error(`no proposal "${id}" in inbox`);
     fs.rmSync(p.path);
   }
+}
+
+/** Serialize a note to Markdown with frontmatter, dropping empty fields. */
+export function serializeNote(data: Record<string, unknown>, body: string): string {
+  return matter.stringify(`${body.trim()}\n`, stripEmpty(data));
 }
 
 function stripEmpty(obj: Record<string, unknown>): Record<string, unknown> {
