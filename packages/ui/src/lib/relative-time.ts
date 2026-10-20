@@ -20,3 +20,32 @@ export function formatRelativeTime(value: string, language: string): string {
   }
   return formatter.format(Math.round(delta / 1000), "second");
 }
+
+const MINUTE = 60 * 1000;
+const HOUR = 60 * MINUTE;
+const DAY = 24 * HOUR;
+const WEEK = 7 * DAY;
+const MONTH = 30 * DAY;
+const YEAR = 365 * DAY;
+
+/** Language-neutral age for dense lists: "now", "16m", "3h", "2d" — never wraps. */
+export function formatCompactRelativeTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+
+  const elapsed = Date.now() - date.getTime();
+  if (elapsed < MINUTE) return "now";
+  if (elapsed < HOUR) return `${Math.floor(elapsed / MINUTE)}m`;
+  if (elapsed < DAY) return `${Math.floor(elapsed / HOUR)}h`;
+  if (elapsed < WEEK) return `${Math.floor(elapsed / DAY)}d`;
+  if (elapsed < MONTH) return `${Math.floor(elapsed / WEEK)}w`;
+  if (elapsed < YEAR) return `${Math.floor(elapsed / MONTH)}mo`;
+  return `${Math.floor(elapsed / YEAR)}y`;
+}
+
+/** Full local date and time for tooltips. */
+export function formatFullDateTime(value: string, language: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString(language, { dateStyle: "medium", timeStyle: "short" });
+}

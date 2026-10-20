@@ -14,6 +14,7 @@ import type {
   RecommendRequest,
   SaveNoteRequest,
   SearchHit,
+  VaultStats,
 } from "@marcozvd/basics-core";
 
 export type Language = "en" | "es";
@@ -140,6 +141,10 @@ export function rejectProposal(id: string): Promise<void> {
 
 export function getConfig(): Promise<AppConfig> {
   return request<AppConfig>("/api/config");
+}
+
+export function getStats(): Promise<VaultStats> {
+  return request<VaultStats>("/api/stats");
 }
 
 export function getActivity(filter: ActivityFilter = {}): Promise<ActivityEvent[]> {

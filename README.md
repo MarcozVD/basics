@@ -55,6 +55,7 @@ basics ui --no-open                  # sin abrir el navegador
 
 Pantallas:
 
+- **Home**: la sala de control del ciclo con agentes — propuestas pendientes aprobables inline, timeline de actividad de los agentes, salud y forma del vault (notas por tipo, links rotos, huérfanas, recientes).
 - **Explorar**: filtros por capa y tipo con conteos, búsqueda, navegación por teclado y diálogo para crear notas.
 - **Editor**: formulario de frontmatter generado por cada tipo de nota, cuerpo markdown, panel de links/backlinks; guarda con `Ctrl+S`;
   si la nota cambió en disco aparece un banner de conflicto (Recargar / Sobrescribir).
@@ -64,7 +65,8 @@ Pantallas:
 
 La UI se actualiza en vivo cuando cambian los archivos del vault (SSE) y trae selector de idioma EN/ES y tema claro/oscuro.
 
-Navegación: dock flotante en la parte inferior (Home, Explore, Graph, Inbox, Recommend) y atajos de teclado `g` + `h`/`e`/`g`/`i`/`r`; `Ctrl`/`⌘+K` abre la paleta de comandos.
+Navegación: dock flotante en la parte inferior (Home, Explore, Graph, Inbox, Recommend) y atajos de teclado `g` + `h`/`e`/`g`/`i`/`r`.
+La paleta de comandos (`Ctrl`/`⌘+K`) busca notas y propuestas, salta a cualquier pantalla y ejecuta acciones (incluido copiar el comando MCP); disponible en toda la app.
 
 MCP sobre HTTP mientras corre `basics ui` (stateless streamable HTTP en `http://127.0.0.1:4747/mcp`):
 

@@ -2,6 +2,8 @@ import { Command, House, Inbox, LayoutList, Sparkles, Waypoints } from "lucide-r
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useRef, useState } from "react";
 import { Link, useLocation, useOutlet } from "react-router";
+import { AppCommandPalette } from "@/components/app/command-palette";
+import { NewNoteDialog } from "@/components/app/new-note-dialog";
 import { AnimatedNumber } from "@/components/motion/animated-number";
 import { AnimatedToastStack } from "@/components/motion/animated-toast-stack";
 import { Dock, DockItem, DockSeparator } from "@/components/motion/dock";
@@ -205,6 +207,8 @@ export function Layout() {
       </nav>
 
       <AnimatedToastStack toasts={toasts} onDismiss={dismissToast} position="bottom-right" fixed />
+      <AppCommandPalette />
+      <NewNoteDialog />
     </div>
   );
 }

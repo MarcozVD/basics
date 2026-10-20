@@ -1,5 +1,4 @@
 import type { NoteType } from "@marcozvd/basics-core";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { cn } from "cn";
 import { Plus, Search } from "lucide-react";
 import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useMemo, useState } from "react";
@@ -16,15 +15,10 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/motion/tabs";
 import { Empty, ErrorState, Loading } from "@/components/state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { type TranslationKey, useT } from "@/i18n";
-import { ApiRequestError, createNote, type NoteFilter } from "@/lib/api";
-import { TEMPLATES } from "@/lib/fields";
+import type { NoteFilter } from "@/lib/api";
 import { useLayers, useNotes, useSearch } from "@/lib/queries";
-import { toast } from "@/lib/toast";
 
 const TYPE_ORDER: NoteType[] = ["tech", "practice", "check", "profile", "project", "layer"];
 const ALL_TYPES: NoteType[] = ["layer", "tech", "practice", "check", "profile", "project"];
@@ -37,12 +31,9 @@ interface Row {
   kind?: string;
 }
 
-const slugify = (value: string) => value.trim().toLowerCase().replace(/\s+/g, "-");
-
 export function ExplorePage() {
   const t = useT();
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
 
   const [searchParams, setSearchParams] = useSearchParams();
   const typeParam = searchParams.get("type");
@@ -51,12 +42,6 @@ export function ExplorePage() {
   const [searchText, setSearchText] = useState("");
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState(0);
-
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [newType, setNewType] = useState<NoteType>("tech");
-  const [newId, setNewId] = useState("");
-  const [newLayer, setNewLayer] = useState("backend");
-  const [newError, setNewError] = useState("");
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -142,44 +127,6 @@ export function ExplorePage() {
     }
   };
 
-  const create = useMutation({
-    mutationFn: (input: { id: string; type: NoteType; layer: string }) =>
-      createNote({
-        id: input.id,
-        data: TEMPLATES[input.type]({ title: input.id, layer: input.layer || undefined }),
-        body: `# ${input.id}\n`,
-      }),
-    onSuccess: (note) => {
-      void queryClient.invalidateQueries({ queryKey: ["notes"] });
-      setDialogOpen(false);
-      navigate(`/notes/${encodeURIComponent(note.id)}`);
-    },
-    onError: (error) => {
-      if (error instanceof ApiRequestError && error.body.error === "exists") {
-        setNewError(t("new.exists"));
-        return;
-      }
-      setNewError(error instanceof Error && error.message ? error.message : t("new.failed"));
-      toast.error(t("new.failed"));
-    },
-  });
-
-  const openDialog = () => {
-    setNewType("tech");
-    setNewId("");
-    setNewLayer(layers.data?.[0]?.id ?? "backend");
-    setNewError("");
-    create.reset();
-    setDialogOpen(true);
-  };
-
-  const submitNew = () => {
-    const id = slugify(newId);
-    if (!id) return;
-    setNewError("");
-    create.mutate({ id, type: newType, layer: newLayer });
-  };
-
   const typeLabel = (value: NoteType) => t(`type.${value}` as TranslationKey);
   const optionLabel = (value: string) => t(`option.${value}` as TranslationKey);
 
@@ -208,7 +155,7 @@ export function ExplorePage() {
                 className="h-8 w-56 rounded-full pl-8"
               />
             </div>
-            <Button className="rounded-full" onClick={openDialog}>
+            <Button className="rounded-full" onClick={() => window.dispatchEvent(new Event("basics:new-note"))}>
               <Plus aria-hidden="true" />
               {t("explore.newNote")}
             </Button>
@@ -302,90 +249,6 @@ export function ExplorePage() {
           </div>
         )}
       </div>
-
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t("new.title")}</DialogTitle>
-            <DialogDescription>{t("new.slug", { id: slugify(newId) || t("new.idPlaceholder") })}</DialogDescription>
-          </DialogHeader>
-
-          <div className="flex flex-col gap-3">
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="new-type" className="text-xs text-muted-foreground">
-                {t("new.type")}
-              </Label>
-              <Select value={newType} onValueChange={(value) => setNewType(value as NoteType)}>
-                <SelectTrigger id="new-type" className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {ALL_TYPES.map((item) => (
-                    <SelectItem key={item} value={item}>
-                      {typeLabel(item)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="new-id" className="text-xs text-muted-foreground">
-                {t("new.id")}
-              </Label>
-              <Input
-                id="new-id"
-                value={newId}
-                autoFocus
-                placeholder={t("new.idPlaceholder")}
-                aria-invalid={Boolean(newError)}
-                onChange={(event) => setNewId(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.preventDefault();
-                    submitNew();
-                  }
-                }}
-              />
-            </div>
-
-            {newType === "tech" && (
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="new-layer" className="text-xs text-muted-foreground">
-                  {t("new.layer")}
-                </Label>
-                <Select value={newLayer} onValueChange={setNewLayer}>
-                  <SelectTrigger id="new-layer" className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(layers.data ?? []).map((item) => (
-                      <SelectItem key={item.id} value={item.id}>
-                        {item.title || item.id}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-
-            {newError && (
-              <p className="text-xs text-destructive" role="alert">
-                {newError}
-              </p>
-            )}
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>
-              {t("new.cancel")}
-            </Button>
-            <Button onClick={submitNew} disabled={!slugify(newId) || create.isPending}>
-              {t("new.create")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

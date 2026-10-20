@@ -14,6 +14,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { type TranslationKey, useT } from "@/i18n";
 import { ApiRequestError, deleteNote as deleteNoteApi, saveNote } from "@/lib/api";
 import { queryKeys, useNote, useNotes } from "@/lib/queries";
+import { rememberRecentNote } from "@/lib/recent-notes";
 import { useTheme } from "@/lib/theme";
 import { toast } from "@/lib/toast";
 
@@ -47,6 +48,10 @@ export function EditorPage() {
   const [saving, setSaving] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const allowLeave = useRef(false);
+
+  useEffect(() => {
+    if (id) rememberRecentNote(id);
+  }, [id]);
 
   useEffect(() => {
     const note = noteQuery.data;

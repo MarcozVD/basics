@@ -1,6 +1,7 @@
+import fs from "node:fs";
 import path from "node:path";
-import type { NoteDetail, NoteSummary, ProposalDetail } from "./api.js";
-import type { Note, NoteData, NoteType, Proposal, TechData } from "./schema.js";
+import type { NoteDetail, NoteSummary, ProposalDetail, VaultStats } from "./api.js";
+import { NOTE_TYPES, type Note, type NoteData, type NoteType, type Proposal, type TechData } from "./schema.js";
 import { serializeNote, toId, type Vault } from "./vault.js";
 
 // Small ES/EN stopword list; the vault mixes both languages.
@@ -70,6 +71,37 @@ export function listNotes(vault: Vault, opts: { type?: NoteType; layer?: string 
     })
     .filter((n) => !layerId || n.layers.includes(layerId))
     .sort((a, b) => a.type.localeCompare(b.type) || a.title.localeCompare(b.title));
+}
+
+const RECENT_LIMIT = 6;
+
+/** Frontmatter `updated`, else the file's mtime, so notes written outside the UI still rank. */
+function updatedAt(note: Note): string {
+  if (note.data.updated) return note.data.updated;
+  try {
+    return fs.statSync(note.path).mtime.toISOString().slice(0, 10);
+  } catch {
+    return "";
+  }
+}
+
+/** Vault shape for the Home screen: type counts, inbox depth, broken links, orphans, latest edits. */
+export function vaultStats(vault: Vault): VaultStats {
+  const notes = [...vault.notes.values()];
+  const counts = Object.fromEntries(NOTE_TYPES.map((type) => [type, 0])) as Record<NoteType, number>;
+  for (const note of notes) counts[note.data.type] += 1;
+
+  const brokenLinks = notes.flatMap((note) => note.links.filter((target) => !vault.notes.has(target)).map((to) => ({ from: note.id, to })));
+  const orphans = notes.filter((note) => note.links.length === 0 && vault.getBacklinks(note.id).length === 0).map((n) => n.id);
+  const summaries = new Map(listNotes(vault).map((summary) => [summary.id, summary]));
+  const recent = notes
+    .map((note) => ({ summary: summaries.get(note.id), updated: updatedAt(note) }))
+    .filter((entry): entry is { summary: NoteSummary; updated: string } => Boolean(entry.summary))
+    .sort((a, b) => b.updated.localeCompare(a.updated))
+    .slice(0, RECENT_LIMIT)
+    .map((entry) => ({ ...entry.summary, updated: entry.updated }));
+
+  return { counts, total: notes.length, inbox: vault.listProposals().length, brokenLinks, orphans, recent };
 }
 
 /** Full note payload with a path relative to the vault root. */

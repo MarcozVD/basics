@@ -43,6 +43,21 @@ export interface ProposalDetail {
   current: { data: NoteData; body: string; hash: string; text: string } | null;
 }
 
+export interface BrokenLink {
+  from: string;
+  to: string;
+}
+
+export interface VaultStats {
+  counts: Record<NoteType, number>;
+  total: number;
+  inbox: number;
+  brokenLinks: BrokenLink[];
+  orphans: string[];
+  /** Six most recently updated notes. */
+  recent: NoteSummary[];
+}
+
 export interface SaveNoteRequest {
   data: NoteData;
   body: string;

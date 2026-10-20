@@ -3,6 +3,7 @@ import { Layout } from "@/components/layout";
 import { useVaultEvents } from "@/lib/events";
 import { EditorPage } from "@/pages/editor";
 import { ExplorePage } from "@/pages/explore";
+import { HomePage } from "@/pages/home";
 import { InboxPage } from "@/pages/inbox";
 import { NotFoundPage } from "@/pages/not-found";
 import { PlaceholderPage } from "@/pages/placeholder";
@@ -14,7 +15,7 @@ const router = createBrowserRouter([
     path: "/",
     element: <Layout />,
     children: [
-      { index: true, element: <PlaceholderPage titleKey="page.home.title" /> },
+      { index: true, element: <HomePage /> },
       { path: "explore", element: <ExplorePage /> },
       { path: "graph", element: <PlaceholderPage titleKey="page.graph.title" /> },
       { path: "notes/:id", element: <EditorPage /> },

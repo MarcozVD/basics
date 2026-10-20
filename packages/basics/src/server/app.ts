@@ -27,6 +27,7 @@ import {
   toDetail,
   Vault,
   VaultNotFoundError,
+  vaultStats,
 } from "@marcozvd/basics-core";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
@@ -242,6 +243,8 @@ export function createApp(opts: { root: string; uiDir?: string; events?: EventHu
     vault().reject(c.req.param("id"));
     return c.body(null, 204);
   });
+
+  app.get("/api/stats", (c) => c.json(vaultStats(vault())));
 
   app.get("/api/config", (c) => c.json({ language: loadConfig().language }));
 

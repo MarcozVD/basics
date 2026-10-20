@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import type { VaultStats } from "@marcozvd/basics-core";
 import { type NoteData, readActivity, Vault } from "@marcozvd/basics-core";
 import { test } from "vitest";
 import { createApp } from "../src/server/app.js";
@@ -50,6 +51,33 @@ test("GET /api/health returns ok", async () => {
   assert.equal(res.status, 200);
   const body = (await res.json()) as { ok: boolean };
   assert.equal(body.ok, true);
+});
+
+test("GET /api/stats returns vault shape", async () => {
+  const v = tempVault();
+  const app = createApp({ root: v.root });
+  const res = await app.request("/api/stats", { headers: HOST });
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as VaultStats;
+  assert.equal(body.total, 25);
+  assert.equal(body.counts.tech, 9);
+  assert.equal(body.counts.layer, 5);
+  assert.equal(body.inbox, 0);
+  assert.ok(body.recent.length > 0 && body.recent.length <= 6);
+});
+
+test("GET /api/stats reports proposals and broken links", async () => {
+  const v = tempVault();
+  const note = v.get("fastapi");
+  assert.ok(note);
+  v.writeNote("fastapi", { ...note.data, related: ["ghost-tech"] } as NoteData, note.body, { expectedHash: note.hash });
+  v.propose("fastapi", note.data as NoteData, "# Proposed", { proposed_by: "test", reason: "test" });
+  const app = createApp({ root: v.root });
+  const res = await app.request("/api/stats", { headers: HOST });
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as VaultStats;
+  assert.equal(body.inbox, 1);
+  assert.ok(body.brokenLinks.some((link) => link.from === "fastapi" && link.to === "ghost-tech"));
 });
 
 test("POST /api/context renders stack markdown", async () => {

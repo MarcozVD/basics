@@ -9,6 +9,7 @@ import {
   getNote,
   getNotes,
   getProposal,
+  getStats,
   type NoteFilter,
   search,
 } from "./api";
@@ -23,6 +24,7 @@ export const queryKeys = {
   proposal: (id: string) => ["proposal", id] as const,
   config: ["config"] as const,
   activity: (filter: ActivityFilter) => ["activity", filter] as const,
+  stats: ["stats"] as const,
 };
 
 export function useHealth() {
@@ -55,6 +57,10 @@ export function useProposal(id: string | undefined) {
 
 export function useConfig() {
   return useQuery({ queryKey: queryKeys.config, queryFn: getConfig });
+}
+
+export function useStats() {
+  return useQuery({ queryKey: queryKeys.stats, queryFn: getStats });
 }
 
 export function useActivity(filter: ActivityFilter = {}) {
