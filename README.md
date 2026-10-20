@@ -1,5 +1,7 @@
 # Basics
 
+[![CI](https://github.com/MarcozVD/basics/actions/workflows/ci.yml/badge.svg)](https://github.com/MarcozVD/basics/actions/workflows/ci.yml)
+
 Vault personal de tu stack tecnológico (estilo Obsidian: Markdown + frontmatter + `[[wikilinks]]`)
 que tus agentes de código consultan y amplían vía MCP.
 
@@ -35,7 +37,7 @@ los campos de frontmatter desconocidos se conservan al leer y reescribir notas.
 
 ## Instalación
 
-Paquete npm: [`@marcozvd/basics`](https://www.npmjs.com/package/@marcozvd/basics). Funciona con npm o pnpm.
+Paquete npm: [`@marcozvd/basics`](https://www.npmjs.com/package/@marcozvd/basics). Funciona con npm o pnpm. Requiere Node.js >= 20.11.
 
 ```bash
 npm install -g @marcozvd/basics     # o: pnpm add -g @marcozvd/basics
@@ -112,6 +114,10 @@ Otros clientes MCP (Cursor, etc.): comando `node packages/basics/dist/mcp/server
 | `list_proposals` | propuestas pendientes |
 
 Los agentes nunca escriben directo en el vault: todo pasa por `inbox/` hasta que lo apruebas.
+
+## Releases
+
+Los cambios se describen con [changesets](https://github.com/changesets/changesets): `npx changeset` al hacer un cambio relevante; `npm run version-packages` hace el bump de versión de los paquetes. El publicado en npm es manual (requiere 2FA del owner).
 
 ## Roadmap
 

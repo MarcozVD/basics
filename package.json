@@ -7,7 +7,7 @@
   ],
   "license": "MIT",
   "engines": {
-    "node": ">=20"
+    "node": ">=20.11"
   },
   "scripts": {
     "build": "tsc -b packages/core packages/basics",
@@ -16,11 +16,14 @@
     "test:watch": "vitest",
     "lint": "biome check .",
     "format": "biome check --write .",
+    "changeset": "changeset",
+    "version-packages": "changeset version",
     "cli": "tsx packages/basics/src/cli.ts",
     "dev:mcp": "tsx packages/basics/src/mcp/server.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.15",
+    "@changesets/cli": "^3.0.3",
     "@types/node": "^22.20.5",
     "tsx": "^4.23.15",
     "typescript": "^5.9.3",
