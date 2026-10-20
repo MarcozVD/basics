@@ -1,10 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
-import { getConfig, getHealth, getInbox, getLayers, getNote, getNotes, getProposal, type NoteFilter } from "./api";
+import { getConfig, getHealth, getInbox, getLayers, getNote, getNotes, getProposal, type NoteFilter, search } from "./api";
 
 export const queryKeys = {
   health: ["health"] as const,
   layers: ["layers"] as const,
   notes: (filter: NoteFilter) => ["notes", filter] as const,
+  search: (q: string, filter: NoteFilter) => ["search", q, filter] as const,
   note: (id: string) => ["note", id] as const,
   inbox: ["inbox"] as const,
   proposal: (id: string) => ["proposal", id] as const,
@@ -21,6 +22,10 @@ export function useLayers() {
 
 export function useNotes(filter: NoteFilter = {}) {
   return useQuery({ queryKey: queryKeys.notes(filter), queryFn: () => getNotes(filter) });
+}
+
+export function useSearch(q: string, filter: NoteFilter = {}) {
+  return useQuery({ queryKey: queryKeys.search(q, filter), queryFn: () => search(q, filter), enabled: q.length > 0 });
 }
 
 export function useNote(id: string | undefined) {
