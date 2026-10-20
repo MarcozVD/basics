@@ -33,6 +33,8 @@ const dockLinks: DockLink[] = [
 ];
 
 const DOCK_HEIGHT = 54;
+/** Bottom space content keeps clear of the floating Dock. */
+export const DOCK_SPACE = DOCK_HEIGHT + 24;
 
 /** Dock item is active for its own route and for routes that belong to it. */
 function isDockActive(pathname: string, to: string): boolean {
@@ -124,7 +126,7 @@ export function Layout() {
       <main
         ref={scrollRef}
         onScroll={(event) => setScrolled(event.currentTarget.scrollTop > 0)}
-        style={{ paddingBottom: DOCK_HEIGHT + 24 }}
+        style={{ paddingBottom: DOCK_SPACE }}
         className="min-h-0 flex-1 overflow-y-auto"
       >
         <AnimatePresence mode="popLayout" initial={false}>

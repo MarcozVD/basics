@@ -100,3 +100,25 @@ export interface ApiError {
 }
 
 export type VaultEvent = { type: "vault"; paths: string[] } | { type: "activity" };
+
+export type GraphNodeType = NoteType | "missing";
+
+export interface GraphNode {
+  id: string;
+  type: GraphNodeType;
+  title: string;
+  layers: string[];
+  /** Number of distinct neighbours among the returned edges. */
+  degree: number;
+}
+
+export interface GraphEdge {
+  source: string;
+  target: string;
+  kind: "link" | "broken";
+}
+
+export interface GraphData {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+}

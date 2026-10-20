@@ -4,6 +4,7 @@ import type {
   ApproveRequest,
   ContextResponse,
   CreateNoteRequest,
+  GraphData,
   LayerSummary,
   NoteDetail,
   NoteSummary,
@@ -82,6 +83,10 @@ function withQuery(path: string, params: Record<string, string | undefined>): st
 
 const notePath = (id: string) => `/api/notes/${encodeURIComponent(id)}`;
 const proposalPath = (id: string) => `/api/inbox/${encodeURIComponent(id)}`;
+
+export function getGraph(broken = false): Promise<GraphData> {
+  return request<GraphData>(withQuery("/api/graph", { broken: broken ? "1" : undefined }));
+}
 
 export function getHealth(): Promise<Health> {
   return request<Health>("/api/health");

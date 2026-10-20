@@ -6,6 +6,7 @@ import { Check, ChevronDown, MoreHorizontal, Trash2 } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useBlocker, useNavigate, useParams } from "react-router";
+import { LocalGraph } from "@/components/graph/local-graph";
 import { ActionSwapButton } from "@/components/motion/action-swap";
 import { Alert, AlertAction, AlertContent, AlertDescription, AlertIcon, AlertTitle } from "@/components/motion/alert";
 import {
@@ -39,6 +40,7 @@ type ViewMode = "edit" | "preview" | "split";
 
 const VIEW_KEY = "basics-editor-view";
 const CONNECTIONS_KEY = "basics-editor-connections-open";
+const LOCAL_GRAPH_KEY = "basics-editor-local-graph-open";
 
 function issuesToErrors(issues: unknown): Record<string, string> {
   const errors: Record<string, string> = {};
@@ -67,6 +69,15 @@ function readConnections(): boolean {
     return localStorage.getItem(CONNECTIONS_KEY) === "1";
   } catch {
     return false;
+  }
+}
+
+/** Open unless the user closed it once. */
+function readLocalGraph(): boolean {
+  try {
+    return localStorage.getItem(LOCAL_GRAPH_KEY) !== "0";
+  } catch {
+    return true;
   }
 }
 
@@ -136,6 +147,7 @@ export function EditorPage() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [view, setView] = useState<ViewMode>(readView);
   const [connectionsOpen, setConnectionsOpen] = useState(readConnections);
+  const [localGraphOpen, setLocalGraphOpen] = useState(readLocalGraph);
   const allowLeave = useRef(false);
   const savedTimer = useRef<number | undefined>(undefined);
 
@@ -285,6 +297,15 @@ export function EditorPage() {
     setConnectionsOpen(next);
     try {
       localStorage.setItem(CONNECTIONS_KEY, next ? "1" : "0");
+    } catch {
+      // Private mode: only the current session remembers it.
+    }
+  };
+
+  const setLocalGraph = (next: boolean) => {
+    setLocalGraphOpen(next);
+    try {
+      localStorage.setItem(LOCAL_GRAPH_KEY, next ? "1" : "0");
     } catch {
       // Private mode: only the current session remembers it.
     }
@@ -596,6 +617,18 @@ export function EditorPage() {
                 <ConnectionList ids={unresolved} empty={t("editor.noneUnresolved")} broken />
               </div>
             </div>
+          </CollapsibleContent>
+        </Collapsible>
+
+        <Collapsible open={localGraphOpen} onOpenChange={setLocalGraph}>
+          <CollapsibleTrigger className="min-h-8 w-full justify-start gap-1 rounded-lg px-1 text-[11px] font-semibold tracking-wider text-muted-foreground uppercase hover:bg-muted/40">
+            <span aria-hidden="true" className="inline-flex size-3.5 shrink-0 items-center justify-center text-muted-foreground">
+              <ChevronDown className={cn("size-3.5 transition-transform duration-200", !localGraphOpen && "-rotate-90")} />
+            </span>
+            {t("editor.localGraph")}
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <div className="mt-2 pb-2">{localGraphOpen && <LocalGraph id={note.id} />}</div>
           </CollapsibleContent>
         </Collapsible>
       </section>

@@ -1,8 +1,9 @@
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import {
   type ActivityFilter,
   getActivity,
   getConfig,
+  getGraph,
   getHealth,
   getInbox,
   getLayers,
@@ -25,6 +26,7 @@ export const queryKeys = {
   config: ["config"] as const,
   activity: (filter: ActivityFilter) => ["activity", filter] as const,
   stats: ["stats"] as const,
+  graph: (broken: boolean) => ["graph", broken] as const,
 };
 
 export function useHealth() {
@@ -65,4 +67,9 @@ export function useStats() {
 
 export function useActivity(filter: ActivityFilter = {}) {
   return useQuery({ queryKey: queryKeys.activity(filter), queryFn: () => getActivity(filter) });
+}
+
+/** Toggling broken links keeps the previous graph on screen while the other variant loads. */
+export function useGraph(broken = false) {
+  return useQuery({ queryKey: queryKeys.graph(broken), queryFn: () => getGraph(broken), placeholderData: keepPreviousData });
 }

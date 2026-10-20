@@ -6,6 +6,7 @@ import { serveStatic } from "@hono/node-server/serve-static";
 import {
   type ApiError,
   type ApproveRequest,
+  buildGraph,
   ConflictError,
   type ContextResponse,
   type CreateNoteRequest,
@@ -245,6 +246,8 @@ export function createApp(opts: { root: string; uiDir?: string; events?: EventHu
   });
 
   app.get("/api/stats", (c) => c.json(vaultStats(vault())));
+
+  app.get("/api/graph", (c) => c.json(buildGraph(vault(), { broken: c.req.query("broken") === "1" })));
 
   app.get("/api/config", (c) => c.json({ language: loadConfig().language }));
 

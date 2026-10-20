@@ -21,6 +21,8 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cn": "^0.5.0",
+    "cytoscape": "^3.34.4",
+    "cytoscape-fcose": "^2.2.0",
     "diff": "^9.0.0",
     "lucide-react": "^1.59.0",
     "motion": "^14.4.0",
@@ -38,6 +40,7 @@
   "devDependencies": {
     "@playwright/test": "^1.64.1",
     "@tailwindcss/vite": "^4.3.3",
+    "@types/cytoscape-fcose": "^2.2.5",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^6.1.2",

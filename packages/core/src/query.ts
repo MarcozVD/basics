@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import type { NoteDetail, NoteSummary, ProposalDetail, VaultStats } from "./api.js";
+import type { GraphData, GraphEdge, GraphNode, NoteDetail, NoteSummary, ProposalDetail, VaultStats } from "./api.js";
 import { NOTE_TYPES, type Note, type NoteData, type NoteType, type Proposal, type TechData } from "./schema.js";
 import { serializeNote, toId, type Vault } from "./vault.js";
 
@@ -103,6 +103,42 @@ export function listNotes(vault: Vault, opts: { type?: NoteType; layer?: string 
     })
     .filter((n) => !layerId || n.layers.includes(layerId))
     .sort((a, b) => a.type.localeCompare(b.type) || a.title.localeCompare(b.title));
+}
+
+/**
+ * Nodes and edges for the graph view. A link in both directions is one edge; links to
+ * missing notes are dropped unless `broken` is set, then the targets become `missing` nodes.
+ */
+export function buildGraph(vault: Vault, opts: { broken?: boolean } = {}): GraphData {
+  const edges: GraphEdge[] = [];
+  const seen = new Set<string>();
+  const missing = new Set<string>();
+  for (const note of vault.notes.values()) {
+    for (const target of note.links) {
+      if (target === note.id) continue;
+      const exists = vault.notes.has(target);
+      if (!exists && !opts.broken) continue;
+      const key = note.id < target ? `${note.id}|${target}` : `${target}|${note.id}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      if (!exists) missing.add(target);
+      edges.push({ source: note.id, target, kind: exists ? "link" : "broken" });
+    }
+  }
+  const degree = new Map<string, number>();
+  for (const edge of edges) {
+    degree.set(edge.source, (degree.get(edge.source) ?? 0) + 1);
+    degree.set(edge.target, (degree.get(edge.target) ?? 0) + 1);
+  }
+  const nodes: GraphNode[] = listNotes(vault).map((n) => ({
+    id: n.id,
+    type: n.type,
+    title: n.title,
+    layers: n.layers,
+    degree: degree.get(n.id) ?? 0,
+  }));
+  for (const id of [...missing].sort()) nodes.push({ id, type: "missing", title: id, layers: [], degree: degree.get(id) ?? 0 });
+  return { nodes, edges };
 }
 
 const RECENT_LIMIT = 6;

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import type { VaultStats } from "@marcozvd/basics-core";
+import type { GraphData, VaultStats } from "@marcozvd/basics-core";
 import { type NoteData, readActivity, Vault } from "@marcozvd/basics-core";
 import { test } from "vitest";
 import { createApp } from "../src/server/app.js";
@@ -218,4 +218,30 @@ test("MCP HTTP sessions keep the client name in activity", async () => {
     sessionId,
   );
   assert.equal(afterDelete.status, 404);
+});
+
+test("GET /api/graph returns nodes and edges, broken targets only on request", async () => {
+  const v = tempVault();
+  const note = v.get("fastapi");
+  assert.ok(note);
+  v.writeNote("fastapi", { ...note.data, related: ["ghost-tech"] } as NoteData, note.body, { expectedHash: note.hash });
+  const app = createApp({ root: v.root });
+
+  const res = await app.request("/api/graph", { headers: HOST });
+  assert.equal(res.status, 200);
+  const graph = (await res.json()) as GraphData;
+  assert.equal(graph.nodes.length, 25);
+  assert.ok(graph.nodes.every((node) => node.type !== "missing"));
+  assert.ok(graph.edges.length > 0 && graph.edges.every((edge) => edge.kind === "link"));
+  const ids = new Set(graph.nodes.map((node) => node.id));
+  assert.ok(graph.edges.every((edge) => ids.has(edge.source) && ids.has(edge.target)));
+  const fastapi = graph.nodes.find((node) => node.id === "fastapi");
+  assert.ok(fastapi && fastapi.type === "tech" && fastapi.degree > 0);
+  const pairs = graph.edges.map((edge) => [edge.source, edge.target].sort().join(" "));
+  assert.equal(new Set(pairs).size, pairs.length);
+
+  const withBroken = (await (await app.request("/api/graph?broken=1", { headers: HOST })).json()) as GraphData;
+  const ghost = withBroken.nodes.find((node) => node.id === "ghost-tech");
+  assert.ok(ghost && ghost.type === "missing" && ghost.degree === 1);
+  assert.ok(withBroken.edges.some((edge) => edge.source === "fastapi" && edge.target === "ghost-tech" && edge.kind === "broken"));
 });
