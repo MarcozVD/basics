@@ -16,6 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { type TranslationKey, useT } from "@/i18n";
 import type { Field } from "@/lib/fields";
 import { useLayers, useNotes } from "@/lib/queries";
+import { tintStyle } from "@/lib/type-color";
 import { cn } from "@/lib/utils";
 
 const FIELD_CLASS = "h-7 rounded-lg border-transparent bg-transparent hover:border-border";
@@ -51,10 +52,7 @@ function LinkField({ id, field, value, onChange }: { id: string; field: Field; v
             const missing = notes.data !== undefined && target === undefined;
             const color = missing ? "var(--destructive)" : typeColor(target?.type);
             return (
-              <span
-                className="flex h-5 items-center gap-1.5 rounded-md px-1.5 font-mono"
-                style={{ backgroundColor: `color-mix(in srgb, ${color} 12%, transparent)`, color }}
-              >
+              <span className="flex h-5 items-center gap-1.5 rounded-md px-1.5 font-mono" style={tintStyle(color)}>
                 <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-current" />
                 {item}
               </span>
@@ -267,10 +265,7 @@ function StackField({ value, onChange }: { value: unknown; onChange: (value: unk
                     const missing = techs.data !== undefined && tech === undefined;
                     const color = missing ? "var(--destructive)" : "var(--type-tech)";
                     return (
-                      <span
-                        className="flex h-5 items-center gap-1.5 rounded-md px-1.5 font-mono"
-                        style={{ backgroundColor: `color-mix(in srgb, ${color} 12%, transparent)`, color }}
-                      >
+                      <span className="flex h-5 items-center gap-1.5 rounded-md px-1.5 font-mono" style={tintStyle(color)}>
                         <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-current" />
                         {item}
                       </span>
@@ -403,7 +398,7 @@ export function FieldInput({
     <Fragment>
       {control}
       {error ? (
-        <p id={errorId} className="px-2 pb-1 text-[11px] text-destructive">
+        <p id={errorId} className="px-2 pb-1 text-[11px] text-destructive-text">
           {error}
         </p>
       ) : null}

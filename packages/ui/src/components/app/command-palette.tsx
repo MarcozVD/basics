@@ -27,8 +27,10 @@ import { useRowCursor } from "@/lib/hooks/use-row-cursor";
 import { PresenceGate } from "@/lib/presence-gate";
 import { useHealth, useInbox, useNotes } from "@/lib/queries";
 import { readRecentNotes } from "@/lib/recent-notes";
+import { useReturnFocus } from "@/lib/return-focus";
 import { useTheme } from "@/lib/theme";
 import { toast } from "@/lib/toast";
+import { tintStyle, typeColor } from "@/lib/type-color";
 import { cn } from "@/lib/utils";
 
 interface PaletteItem {
@@ -77,6 +79,7 @@ export function AppCommandPalette() {
   const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => setMounted(true), []);
+  useReturnFocus(open);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -131,10 +134,7 @@ export function AppCommandPalette() {
           badge: (
             <span
               className="inline-flex h-5 items-center gap-1 rounded-full px-2 text-[10px] font-medium"
-              style={{
-                backgroundColor: `color-mix(in srgb, var(--type-${note.type}) 12%, transparent)`,
-                color: `var(--type-${note.type})`,
-              }}
+              style={tintStyle(typeColor(note.type))}
             >
               {t(`type.${note.type}` as TranslationKey)}
             </span>
@@ -152,10 +152,7 @@ export function AppCommandPalette() {
           badge: (
             <span
               className="inline-flex h-5 items-center rounded-full px-2 text-[10px] font-medium"
-              style={{
-                backgroundColor: `color-mix(in srgb, var(--type-${proposal.type}) 12%, transparent)`,
-                color: `var(--type-${proposal.type})`,
-              }}
+              style={tintStyle(typeColor(proposal.type))}
             >
               {t(`type.${proposal.type}` as TranslationKey)}
             </span>
@@ -175,10 +172,7 @@ export function AppCommandPalette() {
           badge: (
             <span
               className="inline-flex h-5 items-center gap-1 rounded-full px-2 text-[10px] font-medium"
-              style={{
-                backgroundColor: `color-mix(in srgb, var(--type-${note.type}) 12%, transparent)`,
-                color: `var(--type-${note.type})`,
-              }}
+              style={tintStyle(typeColor(note.type))}
             >
               {t(`type.${note.type}` as TranslationKey)}
             </span>

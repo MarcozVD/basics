@@ -56,17 +56,33 @@ basics ui --no-open                  # sin abrir el navegador
 Pantallas:
 
 - **Home**: la sala de control del ciclo con agentes — propuestas pendientes aprobables inline, timeline de actividad de los agentes, salud y forma del vault (notas por tipo, links rotos, huérfanas, recientes).
-- **Explorar**: filtros por capa y tipo con conteos, búsqueda, navegación por teclado y diálogo para crear notas.
-- **Editor**: formulario de frontmatter generado por cada tipo de nota, cuerpo markdown, panel de links/backlinks; guarda con `Ctrl+S`;
+- **Explorar**: filtros por capa y tipo con conteos, búsqueda, vista lista o grid, navegación por teclado y diálogo para crear notas.
+- **Editor**: formulario de frontmatter generado por cada tipo de nota, cuerpo markdown (editar / vista previa / dividido) con
+  autocompletado de `[[wikilinks]]`, conexiones (links, backlinks, sin resolver) y grafo local; guarda con `Ctrl+S`;
   si la nota cambió en disco aparece un banner de conflicto (Recargar / Sobrescribir).
+- **Grafo**: todas las notas y sus links, filtros por tipo y capa en una barra flotante, búsqueda de nodos, links rotos y foco en el vecindario de un nodo.
 - **Inbox**: propuestas con diff lado a lado o unificado; Aprobar, Editar y aprobar o Rechazar con los atajos `a` / `e` / `r`.
 - **Recomendar**: descripción del proyecto y capas → perfiles y candidatos por capa (`use_when`, `performs_best`, `avoid_when`),
   selección de candidatos y generación de `STACK.md` (copiar o descargar).
 
 La UI se actualiza en vivo cuando cambian los archivos del vault (SSE) y trae selector de idioma EN/ES y tema claro/oscuro.
 
-Navegación: dock flotante en la parte inferior (Home, Explore, Graph, Inbox, Recommend) y atajos de teclado `g` + `h`/`e`/`g`/`i`/`r`.
-La paleta de comandos (`Ctrl`/`⌘+K`) busca notas y propuestas, salta a cualquier pantalla y ejecuta acciones (incluido copiar el comando MCP); disponible en toda la app.
+Navegación: dock flotante en la parte inferior (Home, Explore, Graph, Inbox, Recommend); sin barras laterales, los paneles secundarios son overlays que se cierran con `Esc`.
+
+Atajos de teclado:
+
+| Atajo | Acción |
+| --- | --- |
+| `Ctrl`/`⌘+K` | Paleta de comandos: busca notas y propuestas, salta a cualquier pantalla y ejecuta acciones (incluido copiar el comando MCP) |
+| `g` y luego `h` / `e` / `g` / `i` / `r` | Ir a Home / Explore / Graph / Inbox / Recommend |
+| `Ctrl`/`⌘+S` | Guardar la nota en el editor |
+| `Ctrl`/`⌘+F` | Enfocar la búsqueda en Explore y en el grafo |
+| `↑` / `↓`, `Enter` | Moverse por listas (Explore, Inbox, paleta) y abrir |
+| `a` / `r` | Aprobar / Rechazar la propuesta seleccionada en el Inbox |
+| `a` / `e` / `r` | Aprobar / Editar y aprobar / Rechazar en el detalle de una propuesta |
+| `Ctrl`/`⌘+Enter` | Ejecutar la recomendación |
+
+El sistema de diseño de la UI (tokens, layout, motion, componentes) está en [packages/ui/DESIGN.md](packages/ui/DESIGN.md).
 
 MCP sobre HTTP mientras corre `basics ui` (stateless streamable HTTP en `http://127.0.0.1:4747/mcp`):
 

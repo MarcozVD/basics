@@ -12,7 +12,8 @@
   --card-foreground: #111113;
   --popover: #ffffff;
   --popover-foreground: #111113;
-  --primary: #007aff;
+  /* Solid accent: #007aff deepened so white labels on it pass AA (5.3:1). */
+  --primary: #0068d6;
   --primary-foreground: #ffffff;
   --secondary: #f4f4f5;
   --secondary-foreground: #111113;
@@ -20,7 +21,7 @@
   --muted-foreground: #6b6b72;
   --accent: #f4f4f5;
   --accent-foreground: #111113;
-  --destructive: #ff375f;
+  --destructive: #d70f3d;
   --border: rgba(0, 0, 0, 0.08);
   --input: rgba(0, 0, 0, 0.08);
   --ring: #007aff;
@@ -37,6 +38,9 @@
   --type-profile: #a13bd6;
   --type-project: #e11d48;
   --type-layer: #6b6b72;
+
+  /* Text on tinted chips: the hue mixed toward the foreground (darker here, lighter in dark). */
+  --tint-text-mix: 68%;
 }
 
 .dark {
@@ -46,7 +50,8 @@
   --card-foreground: #f2f2f2;
   --popover: #232326;
   --popover-foreground: #f2f2f2;
-  --primary: #0a84ff;
+  /* Solid accent: #0a84ff deepened so white labels on it pass AA (4.9:1). */
+  --primary: #0a6fdb;
   --primary-foreground: #ffffff;
   --secondary: #232326;
   --secondary-foreground: #f2f2f2;
@@ -71,6 +76,14 @@
   --type-profile: #bf5af2;
   --type-project: #ff375f;
   --type-layer: #8e8e93;
+
+  --tint-text-mix: 85%;
+}
+
+:root {
+  /* Text-safe accent and destructive (links, chips, inline errors): AA on background and on 12% tints. */
+  --primary-text: color-mix(in srgb, var(--ring) var(--tint-text-mix), var(--foreground));
+  --destructive-text: color-mix(in srgb, var(--destructive) var(--tint-text-mix), var(--foreground));
 }
 
 @theme inline {
@@ -82,6 +95,7 @@
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-primary-text: var(--primary-text);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
@@ -89,6 +103,7 @@
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
+  --color-destructive-text: var(--destructive-text);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -120,6 +135,16 @@
 @layer base {
   * {
     @apply border-border outline-ring/50;
+  }
+
+  /* One visible focus ring for every control that does not draw its own. */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+
+  .cm-content:focus-visible {
+    outline: none;
   }
 
   html {

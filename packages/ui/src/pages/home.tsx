@@ -8,6 +8,7 @@ import { ApprovalCard } from "@/components/agents/approval-card";
 import { AnimatedNumber } from "@/components/motion/animated-number";
 import { MorphPopover, MorphPopoverContent, MorphPopoverTrigger } from "@/components/motion/popover-morph";
 import { TextReveal } from "@/components/motion/text-reveal";
+import { ErrorState, Loading } from "@/components/state";
 import { type TranslationKey, useI18n } from "@/i18n";
 import { agentColor, agentInitial } from "@/lib/agent-color";
 import { ApiRequestError, approveProposal, rejectProposal } from "@/lib/api";
@@ -15,6 +16,7 @@ import { SPRING_LAYOUT } from "@/lib/ease";
 import { useActivity, useInbox, useNotes, useStats } from "@/lib/queries";
 import { formatCompactRelativeTime, formatFullDateTime, formatRelativeTime } from "@/lib/relative-time";
 import { toast } from "@/lib/toast";
+import { tintStyle, typeColor } from "@/lib/type-color";
 
 const TYPE_ORDER: NoteType[] = ["tech", "practice", "check", "profile", "project", "layer"];
 const REVEAL_KEY = "basics-home-revealed";
@@ -103,13 +105,10 @@ function TypeChip({ id, type }: { id: string; type: NoteType | undefined }) {
     <button
       type="button"
       onClick={() => navigate(`/notes/${encodeURIComponent(id)}`)}
-      className="inline-flex h-5 max-w-48 items-center truncate rounded-full px-2 font-mono text-[10px] transition-opacity hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-      style={{
-        backgroundColor: `color-mix(in srgb, var(--type-${type ?? "layer"}) 12%, transparent)`,
-        color: `var(--type-${type ?? "layer"})`,
-      }}
+      className="inline-flex h-5 max-w-48 min-w-0 items-center rounded-full px-2 font-mono text-[10px] transition-opacity hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+      style={tintStyle(typeColor(type))}
     >
-      {id}
+      <span className="truncate">{id}</span>
     </button>
   );
 }
@@ -138,7 +137,7 @@ function StatTile({ label, value, stat, dot, alert, onClick, children }: TilePro
         value={value}
         startOnView={false}
         duration={0.5}
-        className={`text-sm font-semibold ${alert ? "text-destructive" : "text-foreground"}`}
+        className={`text-sm font-semibold ${alert ? "text-destructive-text" : "text-foreground"}`}
       />
     </>
   );
@@ -279,7 +278,7 @@ export function HomePage() {
   const pending = stats.data?.inbox ?? 0;
 
   return (
-    <div className="mx-auto w-full max-w-[1200px] px-5 pt-5 pb-8">
+    <div className="mx-auto w-full max-w-[1200px] px-5 pt-4 pb-8">
       <header>
         {reveal ? (
           <TextReveal
@@ -313,7 +312,9 @@ export function HomePage() {
 
           <div className="mt-2 flex flex-col gap-2">
             {inbox.isPending ? (
-              <p className="text-sm text-muted-foreground">{t("state.loading")}</p>
+              <Loading />
+            ) : inbox.error ? (
+              <ErrorState error={inbox.error} />
             ) : proposals.length === 0 ? (
               <p className="text-sm text-muted-foreground">{t("home.nothingToReview")}</p>
             ) : (
@@ -369,7 +370,13 @@ export function HomePage() {
           <SectionLabel>{t("home.activity")}</SectionLabel>
 
           {timeline.isPending ? (
-            <p className="mt-2 text-sm text-muted-foreground">{t("state.loading")}</p>
+            <div className="mt-2">
+              <Loading />
+            </div>
+          ) : timeline.error ? (
+            <div className="mt-2">
+              <ErrorState error={timeline.error} />
+            </div>
           ) : groups.length === 0 ? (
             <div className="mt-2">
               <p className="text-sm text-muted-foreground">{t("home.noAgents")}</p>
@@ -447,6 +454,11 @@ export function HomePage() {
 
       <section aria-label={t("home.health")} className="mt-7 min-w-0">
         <SectionLabel>{t("home.health")}</SectionLabel>
+        {stats.error ? (
+          <div className="mt-2">
+            <ErrorState error={stats.error} />
+          </div>
+        ) : null}
         <div className="mt-2 grid grid-cols-[repeat(auto-fit,minmax(120px,1fr))] gap-2">
           {TYPE_ORDER.map((type) => (
             <StatTile
@@ -481,7 +493,7 @@ export function HomePage() {
                   <button
                     type="button"
                     onClick={() => navigate(`/notes/${encodeURIComponent(id)}`)}
-                    className="w-full truncate rounded-md px-1.5 py-1 text-left font-mono text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                    className="w-full truncate rounded-md px-1.5 py-1 text-left font-mono text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
                   >
                     {id}
                   </button>
@@ -497,7 +509,7 @@ export function HomePage() {
                   <button
                     type="button"
                     onClick={() => navigate(`/notes/${encodeURIComponent(note.id)}`)}
-                    className="flex w-full items-baseline gap-2 rounded-md px-1.5 py-1 text-left transition-colors hover:bg-muted"
+                    className="flex w-full items-baseline gap-2 rounded-md px-1.5 py-1 text-left transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
                   >
                     <span className="min-w-0 flex-1 truncate text-xs">{note.title || note.id}</span>
                     <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{note.updated}</span>

@@ -15,6 +15,7 @@ import { agentColor, agentInitial } from "@/lib/agent-color";
 import { ApiRequestError, approveProposal, rejectProposal } from "@/lib/api";
 import { useProposal } from "@/lib/queries";
 import { formatRelativeTime } from "@/lib/relative-time";
+import { useReturnFocus } from "@/lib/return-focus";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 
@@ -46,7 +47,7 @@ function ActionBadge({ action }: { action: "create" | "update" }) {
       showIcon={false}
       className={cn(
         "border-transparent font-medium",
-        action === "create" ? "border-primary/30 bg-primary/10 text-primary" : "border-border bg-muted/60 text-muted-foreground",
+        action === "create" ? "border-primary/30 bg-primary/10 text-primary-text" : "border-border bg-muted/60 text-muted-foreground",
       )}
     >
       {t(action === "create" ? "proposal.action.create" : "proposal.action.update")}
@@ -96,7 +97,9 @@ function GoneState({ message, back }: { message: string; back: string }) {
 
 function Kbd({ children }: { children: string }) {
   return (
-    <kbd className="rounded-full border border-current/30 px-1.5 font-mono text-[10px] leading-4 text-current opacity-60">{children}</kbd>
+    <kbd className="hidden rounded-full border border-current/30 px-1.5 font-mono text-[10px] leading-4 text-current sm:inline-block">
+      {children}
+    </kbd>
   );
 }
 
@@ -115,8 +118,10 @@ export function ProposalPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [armed, setArmed] = useState(false);
   const armTimer = useRef<number | undefined>(undefined);
+  const editButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => () => window.clearTimeout(armTimer.current), []);
+  useReturnFocus(editOpen, editButtonRef);
 
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ["inbox"] });
@@ -228,7 +233,7 @@ export function ProposalPage() {
 
   if (proposalQuery.error) {
     return (
-      <div className="mx-auto w-full max-w-[1100px] px-4 py-6">
+      <div className="mx-auto w-full max-w-[1100px] px-5 py-6">
         <ErrorState error={proposalQuery.error} />
       </div>
     );
@@ -236,7 +241,7 @@ export function ProposalPage() {
 
   if (proposalQuery.isPending || !proposal) {
     return (
-      <div className="mx-auto w-full max-w-[1100px] px-4 py-6">
+      <div className="mx-auto w-full max-w-[1100px] px-5 py-6">
         <Loading />
       </div>
     );
@@ -246,7 +251,7 @@ export function ProposalPage() {
   const name = proposal.meta.proposed_by;
 
   return (
-    <div className="mx-auto w-full max-w-[1100px] px-4 pb-28 pt-4">
+    <div className="mx-auto w-full max-w-[1100px] px-5 pb-28 pt-4">
       <Link
         to="/inbox"
         className="inline-flex items-center gap-1 rounded-full text-xs text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
@@ -259,7 +264,7 @@ export function ProposalPage() {
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <ActionBadge action={proposal.meta.action} />
           <TypeChip type={proposal.data.type} />
-          <h1 className="min-w-0 truncate text-lg font-semibold tracking-tight">{title}</h1>
+          <h1 className="min-w-0 truncate text-xl font-semibold tracking-tight">{title}</h1>
           <span className="font-mono text-[11px] text-muted-foreground">{proposal.id}</span>
         </div>
 
@@ -278,7 +283,7 @@ export function ProposalPage() {
           </span>
         </div>
 
-        <blockquote className="mt-3 max-w-3xl border-l-2 border-primary/40 pl-3 text-sm italic whitespace-pre-wrap text-muted-foreground">
+        <blockquote className="mt-3 max-w-3xl border-l-2 border-foreground/15 pl-3 text-sm italic whitespace-pre-wrap text-muted-foreground">
           {proposal.meta.reason}
         </blockquote>
       </header>
@@ -299,10 +304,10 @@ export function ProposalPage() {
           disabled={busy}
           onClick={armReject}
           aria-label={armed ? t("proposal.rejectConfirm") : t("proposal.reject")}
-          className="gap-1.5"
+          className="gap-1.5 whitespace-nowrap"
         >
           <X className="size-3.5" aria-hidden="true" />
-          <span className={cn(armed && "text-destructive")}>{armed ? t("proposal.rejectConfirm") : t("proposal.reject")}</span>
+          <span className={cn(armed && "text-destructive-text")}>{armed ? t("proposal.rejectConfirm") : t("proposal.reject")}</span>
           <Kbd>r</Kbd>
         </Button>
         <Button
@@ -310,9 +315,10 @@ export function ProposalPage() {
           size="sm"
           pressScale={0.97}
           disabled={busy}
+          ref={editButtonRef}
           onClick={openEdit}
           aria-label={t("proposal.edit")}
-          className="gap-1.5"
+          className="gap-1.5 whitespace-nowrap"
         >
           <Pencil className="size-3.5" aria-hidden="true" />
           {t("proposal.edit")}
@@ -325,7 +331,7 @@ export function ProposalPage() {
           disabled={busy}
           onClick={() => approve.mutate()}
           aria-label={t("proposal.approve")}
-          className="gap-1.5"
+          className="gap-1.5 whitespace-nowrap"
         >
           <Check className="size-3.5" aria-hidden="true" />
           {t("proposal.approve")}
@@ -358,7 +364,7 @@ export function ProposalPage() {
                   onChange={(event) => setEditBody(event.target.value)}
                 />
                 {errors.body ? (
-                  <p id="proposal-body-error" className="text-xs text-destructive">
+                  <p id="proposal-body-error" className="text-xs text-destructive-text">
                     {errors.body}
                   </p>
                 ) : null}

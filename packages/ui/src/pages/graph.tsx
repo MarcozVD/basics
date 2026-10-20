@@ -223,7 +223,7 @@ export function GraphPage() {
                 className={cn(
                   "inline-flex h-8 items-center gap-1.5 rounded-full px-2.5 text-[12px] font-medium transition-colors",
                   "focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring",
-                  shown ? "text-foreground hover:bg-muted/70" : "text-muted-foreground/70 hover:bg-muted/50 hover:text-muted-foreground",
+                  shown ? "text-foreground hover:bg-muted/70" : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
                 )}
               >
                 <span
@@ -236,7 +236,7 @@ export function GraphPage() {
                   style={{ backgroundColor: typeColor(type) }}
                 />
                 <span className={cn(!shown && "line-through decoration-muted-foreground/50")}>{t(`type.${type}` as TranslationKey)}</span>
-                <span className="font-mono text-[10.5px] opacity-55">{counts.get(type) ?? 0}</span>
+                <span className="font-mono text-[10.5px]">{counts.get(type) ?? 0}</span>
               </motion.button>
             );
           })}
@@ -246,7 +246,7 @@ export function GraphPage() {
 
         <div data-testid="graph-layer">
           <Select value={layer} onValueChange={setLayer} className="w-40">
-            <SelectTrigger className="h-8 rounded-full border-border bg-card px-3 py-0 text-[12.5px]">
+            <SelectTrigger className="h-8 rounded-full border-border bg-card px-3 py-0 text-[12px]">
               <span className="flex min-w-0 items-center gap-2">
                 <Layers className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
                 <SelectValue className="truncate" />
@@ -279,7 +279,7 @@ export function GraphPage() {
             search ? (
               <span
                 title={t("graph.matches", { count: matches.length })}
-                className={cn("mr-2.5 font-mono text-[10.5px]", matches.length ? "text-muted-foreground" : "text-destructive")}
+                className={cn("mr-2.5 font-mono text-[10.5px]", matches.length ? "text-muted-foreground" : "text-destructive-text")}
               >
                 {matches.length}
               </span>
@@ -292,7 +292,7 @@ export function GraphPage() {
           className="w-48"
           classNames={{
             field: "h-8 rounded-full bg-card",
-            input: "text-[12.5px] [&::-webkit-search-cancel-button]:hidden",
+            input: "text-[12px] [&::-webkit-search-cancel-button]:hidden",
             leftIcon: "left-2.5",
           }}
         />
@@ -330,7 +330,7 @@ export function GraphPage() {
             initial={{ opacity: 0, x: reduce ? 0 : -4 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.16, ease: EASE_OUT }}
-            className="inline-flex h-8 items-center gap-1 rounded-full bg-primary/12 pr-1 pl-3 text-[12px] font-medium text-primary"
+            className="inline-flex h-8 items-center gap-1 rounded-full bg-primary/12 pr-1 pl-3 text-[12px] font-medium text-primary-text"
           >
             <Crosshair className="size-3.5" aria-hidden="true" />
             <span className="max-w-40 truncate">
@@ -369,7 +369,8 @@ export function GraphPage() {
 }
 
 function ToolbarDivider() {
-  return <span aria-hidden="true" className="mx-1 h-5 w-px bg-border" />;
+  // Dividers only make sense on one row; a wrapped phone toolbar drops them.
+  return <span aria-hidden="true" className="mx-1 hidden h-5 w-px bg-border sm:block" />;
 }
 
 function EmptyGraph() {
@@ -407,7 +408,7 @@ function NodeDetails({ node, data, onClose, onOpen, onFocus }: NodeDetailsProps)
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex items-center justify-between gap-2 px-4 pt-4">
         {missing ? (
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-destructive/12 px-2 py-0.5 text-[11px] font-medium text-destructive">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-destructive/12 px-2 py-0.5 text-[11px] font-medium text-destructive-text">
             <span aria-hidden="true" className="size-1.5 rounded-full border border-dashed border-destructive" />
             {t("type.missing")}
           </span>

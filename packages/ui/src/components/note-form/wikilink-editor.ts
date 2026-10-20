@@ -3,6 +3,7 @@ import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import type { Extension } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, MatchDecorator, ViewPlugin, type ViewUpdate } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
+import { tintText } from "@/lib/type-color";
 
 export interface WikilinkOption {
   id: string;
@@ -41,14 +42,14 @@ const highlightStyle = HighlightStyle.define([
   { tag: tags.strong, color: "var(--foreground)", fontWeight: "700" },
   { tag: tags.emphasis, fontStyle: "italic" },
   { tag: tags.strikethrough, textDecoration: "line-through" },
-  { tag: [tags.keyword, tags.operator, tags.atom, tags.bool], color: "var(--type-profile)" },
-  { tag: [tags.string, tags.special(tags.string)], color: "var(--type-practice)" },
+  { tag: [tags.keyword, tags.operator, tags.atom, tags.bool], color: tintText("var(--type-profile)") },
+  { tag: [tags.string, tags.special(tags.string)], color: tintText("var(--type-practice)") },
   { tag: tags.comment, color: "var(--muted-foreground)", fontStyle: "italic" },
-  { tag: [tags.link, tags.url], color: "var(--primary)" },
-  { tag: tags.monospace, color: "var(--type-check)" },
+  { tag: [tags.link, tags.url], color: "var(--primary-text)" },
+  { tag: tags.monospace, color: tintText("var(--type-check)") },
   { tag: [tags.list, tags.contentSeparator, tags.meta], color: "var(--muted-foreground)" },
   { tag: tags.quote, color: "var(--muted-foreground)", fontStyle: "italic" },
-  { tag: tags.invalid, color: "var(--destructive)" },
+  { tag: tags.invalid, color: "var(--destructive-text)" },
 ]);
 
 const theme = EditorView.theme({
@@ -62,12 +63,12 @@ const theme = EditorView.theme({
     backgroundColor: "color-mix(in srgb, var(--ring) 22%, transparent)",
   },
   ".cm-cursor": { borderLeftColor: "var(--foreground)" },
-  ".cm-wikilink": { color: "var(--primary)" },
+  ".cm-wikilink": { color: "var(--primary-text)" },
   ".cm-tooltip": {
     backgroundColor: "var(--popover)",
     color: "var(--popover-foreground)",
     border: "1px solid var(--border)",
-    borderRadius: "10px",
+    borderRadius: "12px",
     overflow: "hidden",
   },
   ".cm-tooltip-autocomplete > ul > li[aria-selected]": {

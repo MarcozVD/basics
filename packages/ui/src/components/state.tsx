@@ -23,7 +23,7 @@ export function ErrorState({ error }: { error: unknown }) {
       : t("state.error.unknown");
 
   return (
-    <div role="alert" className="rounded-md border border-destructive/30 bg-destructive/5 p-3">
+    <div role="alert" className="rounded-xl border border-destructive/30 bg-destructive/5 p-3">
       <div className="flex items-center gap-2 text-sm font-medium">
         <AlertTriangle className="size-4 text-destructive" aria-hidden="true" />
         {t("state.error.title")}
@@ -36,7 +36,7 @@ export function ErrorState({ error }: { error: unknown }) {
 export function Empty({ title, description }: { title?: string; description?: string }) {
   const t = useT();
   return (
-    <div className="flex flex-col items-center justify-center gap-1 rounded-md border border-dashed px-4 py-10 text-center">
+    <div className="flex flex-col items-center justify-center gap-1 rounded-2xl border border-dashed px-4 py-10 text-center">
       <InboxIcon className="mb-1 size-5 text-muted-foreground" aria-hidden="true" />
       <p className="text-sm font-medium">{title ?? t("state.empty.title")}</p>
       <p className="text-sm text-muted-foreground">{description ?? t("state.empty.description")}</p>

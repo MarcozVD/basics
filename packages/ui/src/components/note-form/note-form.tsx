@@ -54,7 +54,7 @@ export function NoteForm({
         {t("editor.properties")}
       </CollapsibleTrigger>
       <CollapsibleContent>
-        <div className="grid grid-cols-[132px_minmax(0,1fr)] items-start gap-x-3">
+        <div className="grid grid-cols-[96px_minmax(0,1fr)] items-start gap-x-2 sm:grid-cols-[132px_minmax(0,1fr)] sm:gap-x-3">
           {fields.map((field) => (
             <Fragment key={field.key}>
               <label htmlFor={`field-${field.key}`} className="truncate px-1 text-[12px] leading-7 text-muted-foreground">

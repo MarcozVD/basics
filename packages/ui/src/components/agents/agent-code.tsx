@@ -1,7 +1,7 @@
 "use client";
 
 import { type CSSProperties, Fragment, useEffect, useState } from "react";
-import type { Highlighter } from "shiki";
+import type { HighlighterCore, LanguageInput } from "shiki/core";
 import { cn } from "@/lib/utils";
 
 export type AgentCodeLanguage = "bash" | "diff" | "json" | "markdown" | "text" | "tsx" | "typescript";
@@ -29,15 +29,30 @@ export interface AgentCodeLineProps {
 
 const LIGHT_THEME = "github-light-high-contrast";
 const DARK_THEME = "github-dark-high-contrast";
-let agentCodeHighlighter: Promise<Highlighter> | null = null;
+let agentCodeHighlighter: Promise<HighlighterCore> | null = null;
+
+// Only the grammars Basics renders, with the JavaScript regex engine: no Oniguruma WASM and no full language bundle.
+const LANGUAGES: Record<Exclude<AgentCodeLanguage, "text">, () => Promise<LanguageInput>> = {
+  bash: () => import("shiki/langs/bash.mjs"),
+  diff: () => import("shiki/langs/diff.mjs"),
+  json: () => import("shiki/langs/json.mjs"),
+  markdown: () => import("shiki/langs/markdown.mjs"),
+  tsx: () => import("shiki/langs/tsx.mjs"),
+  typescript: () => import("shiki/langs/typescript.mjs"),
+};
 const tokenCache = new Map<string, AgentCodeTokenLines>();
 
 function getAgentCodeHighlighter() {
   if (!agentCodeHighlighter) {
     // Shiki is heavy; it loads with the first highlighted block, not with the app.
-    agentCodeHighlighter = import("shiki").then(({ createHighlighter }) =>
-      // Grammars load per language on first use (see useAgentCodeTokens).
-      createHighlighter({ themes: [LIGHT_THEME, DARK_THEME], langs: [] }),
+    agentCodeHighlighter = Promise.all([import("shiki/core"), import("shiki/engine/javascript")]).then(
+      ([{ createHighlighterCore }, { createJavaScriptRegexEngine }]) =>
+        // Grammars load per language on first use (see useAgentCodeTokens).
+        createHighlighterCore({
+          themes: [import("shiki/themes/github-light-high-contrast.mjs"), import("shiki/themes/github-dark-high-contrast.mjs")],
+          langs: [],
+          engine: createJavaScriptRegexEngine({ forgiving: true }),
+        }),
     );
   }
   return agentCodeHighlighter;
@@ -68,7 +83,9 @@ export function useAgentCodeTokens(code: string, language: AgentCodeLanguage) {
     getAgentCodeHighlighter()
       .then(async (highlighter) => {
         // Each grammar loads the first time a block uses it.
-        if (language !== "text" && !highlighter.getLoadedLanguages().includes(language)) await highlighter.loadLanguage(language);
+        if (language !== "text" && !highlighter.getLoadedLanguages().includes(language)) {
+          await highlighter.loadLanguage(await LANGUAGES[language]());
+        }
         return highlighter;
       })
       .then((highlighter) => {

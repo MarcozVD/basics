@@ -23,7 +23,9 @@ import { type TranslationKey, useT } from "@/i18n";
 import { getContext, recommend } from "@/lib/api";
 import { EASE_OUT, SPRING_PANEL } from "@/lib/ease";
 import { useLayers } from "@/lib/queries";
+import { useReturnFocus } from "@/lib/return-focus";
 import { toast } from "@/lib/toast";
+import { tintStyle } from "@/lib/type-color";
 import { cn } from "@/lib/utils";
 
 const EXAMPLES = ["recommend.example.api", "recommend.example.ml", "recommend.example.web"] as const;
@@ -48,7 +50,7 @@ function TechChip({ id }: { id: string }) {
   return (
     <span
       className="inline-flex h-5 items-center rounded-full px-2 font-mono text-[10.5px] font-medium"
-      style={{ backgroundColor: "color-mix(in srgb, var(--type-tech) 12%, transparent)", color: "var(--type-tech)" }}
+      style={tintStyle("var(--type-tech)")}
     >
       {id}
     </span>
@@ -101,8 +103,8 @@ function CandidateCard({ candidate, maxScore, selected, reduce, onToggle }: Cand
       size="compact"
       className={cn(
         "gap-2.5 bg-card py-3 hover:border-foreground/20",
-        avoid && "border-l-[3px] border-l-destructive hover:border-l-destructive",
-        candidate.score <= 0 && "opacity-55",
+        avoid && "border-destructive/35 hover:border-destructive/50",
+        candidate.score <= 0 && "border-dashed bg-transparent",
       )}
     >
       <CardHeader className="gap-2">
@@ -280,6 +282,8 @@ export function RecommendPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [markdown, setMarkdown] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const generateRef = useRef<HTMLButtonElement>(null);
+  useReturnFocus(dialogOpen, generateRef);
 
   const layerIds = useMemo(() => (layersQuery.data ?? []).map((layer) => layer.id), [layersQuery.data]);
   const layerTitles = useMemo(
@@ -379,7 +383,10 @@ export function RecommendPage() {
         />
 
         <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-          <fieldset aria-label={t("recommend.layers")} className="m-0 flex min-w-0 flex-1 flex-wrap items-center gap-1.5 border-0 p-0">
+          <fieldset
+            aria-label={t("recommend.layers")}
+            className="m-0 flex min-w-0 flex-1 basis-80 flex-wrap items-center gap-1.5 border-0 p-0"
+          >
             <span className="mr-1 text-xs text-muted-foreground">{t("recommend.layers")}</span>
             {(layersQuery.data ?? []).map((layer) => {
               const active = activeLayers.includes(layer.id);
@@ -391,7 +398,7 @@ export function RecommendPage() {
                   onClick={() => toggleLayer(layer.id)}
                   whileTap={reduce ? undefined : { scale: 0.97 }}
                   className={cn(
-                    "inline-flex h-7 items-center gap-1 rounded-full border px-3 text-[12px] font-medium transition-colors outline-none",
+                    "inline-flex h-7 items-center gap-1 rounded-full border px-3 text-[12px] font-medium transition-colors",
                     "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
                     active
                       ? "border-foreground/15 bg-foreground/[0.07] text-foreground"
@@ -455,11 +462,11 @@ export function RecommendPage() {
                     onClick={() => fillExample(t(key))}
                     whileTap={reduce ? undefined : { scale: 0.97 }}
                     className={cn(
-                      "inline-flex h-7 max-w-full items-center truncate rounded-full border border-border bg-card px-3 text-[12px] text-muted-foreground transition-colors outline-none",
+                      "inline-flex h-7 max-w-full min-w-0 items-center rounded-full border border-border bg-card px-3 text-[12px] text-muted-foreground transition-colors",
                       "hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
                     )}
                   >
-                    {t(key)}
+                    <span className="truncate">{t(key)}</span>
                   </motion.button>
                 ))}
               </div>
@@ -492,7 +499,14 @@ export function RecommendPage() {
             <span aria-hidden="true" className="text-muted-foreground/60">
               ·
             </span>
-            <Button size="sm" pressScale={0.97} className="ml-1" disabled={context.isPending} onClick={() => context.mutate([...selected])}>
+            <Button
+              ref={generateRef}
+              size="sm"
+              pressScale={0.97}
+              className="ml-1"
+              disabled={context.isPending}
+              onClick={() => context.mutate([...selected])}
+            >
               {context.isPending ? (
                 <Loader variant="spinner" size={14} label={t("state.loading")} />
               ) : (

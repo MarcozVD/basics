@@ -22,7 +22,7 @@ function SideCell({ line, tone }: { line: DiffLine | null; tone: Tone }) {
   return (
     <div
       className={cn(
-        "flex min-h-5 gap-2 border-b border-border/40 px-2 py-0.5 font-mono text-[12.5px] leading-5",
+        "flex min-h-5 gap-2 border-b border-border/40 px-2 py-0.5 font-mono text-[12px] leading-5",
         tone ? toneClass[tone] : line ? undefined : "bg-muted/30",
       )}
     >
@@ -37,7 +37,7 @@ function SideCell({ line, tone }: { line: DiffLine | null; tone: Tone }) {
 function UnifiedLine({ line, mark, tone }: { line: DiffLine | null; mark: " " | "+" | "−"; tone: Tone }) {
   return (
     <div
-      className={cn("flex min-h-5 gap-2 border-b border-border/40 px-2 py-0.5 font-mono text-[12.5px] leading-5", tone && toneClass[tone])}
+      className={cn("flex min-h-5 gap-2 border-b border-border/40 px-2 py-0.5 font-mono text-[12px] leading-5", tone && toneClass[tone])}
     >
       <span className={cn("w-3 shrink-0 select-none text-center", tone && gutterClass[tone])}>{mark}</span>
       <span className="w-9 shrink-0 select-none text-right text-[11px] tabular-nums text-muted-foreground">{line?.lineNumber ?? ""}</span>
@@ -159,7 +159,8 @@ function UnifiedRows({
 
 export function DiffView({ before, after, file }: { before: string | null; after: string; file?: string }) {
   const t = useT();
-  const [unified, setUnified] = useState(false);
+  // Side-by-side needs room; phones start on the unified view.
+  const [unified, setUnified] = useState(() => typeof window !== "undefined" && window.innerWidth < 640);
   const [expanded, setExpanded] = useState<ReadonlySet<number>>(new Set());
   const rows = useMemo(() => alignDiff(before, after), [before, after]);
   const segments = useMemo(() => foldDiff(rows), [rows]);
@@ -195,7 +196,7 @@ export function DiffView({ before, after, file }: { before: string | null; after
         </Tabs>
       </div>
 
-      <section aria-label={t("diff.proposed")} className="min-h-0 flex-1 overflow-auto font-mono text-[12.5px]">
+      <section aria-label={t("diff.proposed")} className="min-h-0 flex-1 overflow-auto font-mono text-[12px]">
         {unified ? (
           <UnifiedRows segments={segments} expanded={expanded} onToggle={toggle} />
         ) : (

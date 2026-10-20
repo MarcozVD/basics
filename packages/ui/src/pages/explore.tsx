@@ -240,7 +240,7 @@ export function ExplorePage() {
             </span>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
             <Input
               ref={searchRef}
               type="search"
@@ -259,7 +259,7 @@ export function ExplorePage() {
                   ⌘F
                 </kbd>
               }
-              className="w-64"
+              className="w-full sm:w-64"
               classNames={{
                 field: "h-8 bg-card",
                 input: "text-[13px] [&::-webkit-search-cancel-button]:hidden",
@@ -303,7 +303,7 @@ export function ExplorePage() {
             <TabsList aria-label={t("explore.typeFilter")} className="bg-transparent p-0">
               <TabsTrigger value="all" className="gap-1.5 px-3 py-1 text-[12px]">
                 {t("type.all")}
-                <span className="font-mono text-[11px] opacity-60">{allInLayer.data?.length ?? 0}</span>
+                <span className="font-mono text-[11px]">{allInLayer.data?.length ?? 0}</span>
               </TabsTrigger>
               {TYPE_ORDER.map((item) => (
                 <TabsTrigger key={item} value={item} className="gap-1.5 px-3 py-1 text-[12px]">
@@ -313,17 +313,17 @@ export function ExplorePage() {
                     style={{ backgroundColor: typeColor(item) }}
                   />
                   {typeLabel(item)}
-                  <span className="font-mono text-[11px] opacity-60">{counts.get(item) ?? 0}</span>
+                  <span className="font-mono text-[11px]">{counts.get(item) ?? 0}</span>
                 </TabsTrigger>
               ))}
             </TabsList>
           </Tabs>
 
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto flex w-full items-center gap-2 sm:w-auto">
             <Select
               value={layer ?? "all"}
               onValueChange={(value) => updateParams({ layer: value === "all" ? null : value })}
-              className="w-44"
+              className="min-w-0 flex-1 sm:w-44 sm:flex-none"
             >
               <SelectTrigger className="h-8 rounded-full border-border bg-card px-3 py-0 text-[13px]">
                 <span className="flex min-w-0 items-center gap-2">
@@ -341,7 +341,11 @@ export function ExplorePage() {
               </SelectContent>
             </Select>
 
-            <Select value={sort} onValueChange={(value) => updateParams({ sort: value === DEFAULT_SORT ? null : value })} className="w-48">
+            <Select
+              value={sort}
+              onValueChange={(value) => updateParams({ sort: value === DEFAULT_SORT ? null : value })}
+              className="min-w-0 flex-1 sm:w-48 sm:flex-none"
+            >
               <SelectTrigger className="h-8 rounded-full border-border bg-card px-3 py-0 text-[13px]">
                 <span className="flex min-w-0 items-center gap-2">
                   <ArrowDownUp className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
@@ -410,7 +414,7 @@ export function ExplorePage() {
                   >
                     <span aria-hidden="true" className="size-1.5 rounded-full" style={{ backgroundColor: typeColor(group.type) }} />
                     {typeLabel(group.type)}
-                    <span className="font-mono normal-case opacity-70">{group.rows.length}</span>
+                    <span className="font-mono normal-case">{group.rows.length}</span>
                   </h2>
                   {items}
                 </fieldset>
@@ -444,7 +448,7 @@ function LayerChip({ id, title }: { id: string; title?: string }) {
 function AgentBadge() {
   const t = useT();
   return (
-    <span className="inline-flex h-5 items-center rounded-full bg-primary/12 px-2 font-mono text-[10.5px] font-medium text-primary">
+    <span className="inline-flex h-5 items-center rounded-full bg-primary/12 px-2 font-mono text-[10.5px] font-medium text-primary-text">
       {t("explore.agentBadge")}
     </span>
   );

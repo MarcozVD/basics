@@ -101,7 +101,7 @@ function ConnectionRow({ id, broken }: { id: string; broken: boolean }) {
       }}
       className={cn(
         "flex w-full min-w-0 items-center gap-1.5 rounded-lg px-1.5 py-1 text-left transition-colors hover:bg-muted/60 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring",
-        broken && "text-destructive",
+        broken && "text-destructive-text",
       )}
     >
       <TypeDot type={summary?.type} />
@@ -453,7 +453,7 @@ export function EditorPage() {
                     type="button"
                     disabled={remove.isPending}
                     onClick={() => remove.mutate()}
-                    className="rounded-full bg-destructive px-3 py-1 text-xs font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                    className="rounded-full bg-destructive/15 px-3 py-1 text-xs font-medium text-destructive-text transition-colors hover:bg-destructive/25 disabled:opacity-50"
                   >
                     {t("editor.delete")}
                   </button>
@@ -464,7 +464,7 @@ export function EditorPage() {
                 type="button"
                 role="menuitem"
                 onClick={() => setConfirmDelete(true)}
-                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-sm text-destructive transition-colors hover:bg-destructive/10"
+                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-sm text-destructive-text transition-colors hover:bg-destructive/10"
               >
                 <Trash2 className="size-3.5" aria-hidden="true" />
                 {t("editor.delete")}
@@ -513,7 +513,7 @@ export function EditorPage() {
             setData({ ...data, title: event.target.value } as NoteData);
             markDirty();
           }}
-          className="-mx-1.5 w-full rounded-lg bg-transparent px-1.5 text-[28px] leading-tight font-semibold tracking-[-0.02em] outline-none transition-colors placeholder:text-muted-foreground/40 hover:bg-muted/40 focus-visible:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring/30"
+          className="-mx-1.5 w-full rounded-lg bg-transparent px-1.5 text-[28px] leading-tight font-semibold tracking-[-0.02em] outline-none transition-colors placeholder:text-muted-foreground hover:bg-muted/40 focus-visible:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring/30"
         />
         <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
           <TypeChip type={note.type} />

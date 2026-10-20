@@ -6,6 +6,7 @@ import { useNavigate } from "react-router";
 import { ApprovalCard } from "@/components/agents/approval-card";
 import { AnimatedNumber } from "@/components/motion/animated-number";
 import { Tabs, TabsList, TabsTrigger } from "@/components/motion/tabs";
+import { ErrorState, Loading } from "@/components/state";
 import { type TranslationKey, useI18n } from "@/i18n";
 import { agentColor, agentInitial } from "@/lib/agent-color";
 import { ApiRequestError, approveProposal, rejectProposal } from "@/lib/api";
@@ -165,11 +166,11 @@ export function InboxPage() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-[860px] px-4 py-5 min-[1400px]:max-w-[1200px]">
+    <div className="mx-auto w-full max-w-[860px] px-5 pt-4 pb-8 min-[1400px]:max-w-[1200px]">
       <span className="sr-only">{t("inbox.shortcuts")}</span>
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-baseline gap-2">
-          <h1 className="text-lg font-semibold tracking-tight">{t("page.inbox.title")}</h1>
+          <h1 className="text-xl font-semibold tracking-tight">{t("page.inbox.title")}</h1>
           <span className="inline-flex items-baseline gap-1.5 text-xs text-muted-foreground">
             <AnimatedNumber value={proposals.length} startOnView={false} duration={0.5} className="text-sm font-medium text-foreground" />
             {t("inbox.pending")}
@@ -187,7 +188,7 @@ export function InboxPage() {
             ).map(([value, label, count]) => (
               <TabsTrigger key={value} value={value} className="gap-1.5 px-3 py-1 text-xs">
                 {label}
-                <span className="font-mono text-[11px] opacity-60">{count}</span>
+                <span className="font-mono text-[11px]">{count}</span>
               </TabsTrigger>
             ))}
           </TabsList>
@@ -195,9 +196,13 @@ export function InboxPage() {
       </header>
 
       {inbox.isPending ? (
-        <div className="py-10 text-sm text-muted-foreground">{t("state.loading")}</div>
+        <div className="py-10">
+          <Loading />
+        </div>
       ) : inbox.error ? (
-        <div className="py-10 text-sm text-destructive">{inbox.error.message}</div>
+        <div className="py-10">
+          <ErrorState error={inbox.error} />
+        </div>
       ) : visible.length === 0 ? (
         proposals.length === 0 ? (
           <div className="flex min-h-[calc(100dvh-12rem)] flex-col items-center justify-center gap-2 px-4 text-center">

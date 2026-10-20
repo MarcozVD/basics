@@ -3,6 +3,7 @@ import { cloneElement, type ReactElement, useEffect, useRef, useState } from "re
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/motion/popover";
 import { type TranslationKey, useT } from "@/i18n";
 import { useNote, useNotes } from "@/lib/queries";
+import { tintStyle } from "@/lib/type-color";
 
 const TYPE_COLOR = (type: NoteType | undefined) => `var(--type-${type ?? "layer"})`;
 
@@ -19,13 +20,7 @@ export function TypeDot({ type, className }: { type: NoteType | undefined; class
 export function TypeChip({ type }: { type: NoteType | undefined }) {
   const t = useT();
   return (
-    <span
-      className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium"
-      style={{
-        backgroundColor: `color-mix(in srgb, ${TYPE_COLOR(type)} 12%, transparent)`,
-        color: TYPE_COLOR(type),
-      }}
-    >
+    <span className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium" style={tintStyle(TYPE_COLOR(type))}>
       <TypeDot type={type} />
       {t(`type.${type ?? "layer"}` as TranslationKey)}
     </span>

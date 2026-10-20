@@ -12,6 +12,7 @@ import { type TranslationKey, useT } from "@/i18n";
 import { ApiRequestError, createNote } from "@/lib/api";
 import { TEMPLATES } from "@/lib/fields";
 import { useLayers } from "@/lib/queries";
+import { useReturnFocus } from "@/lib/return-focus";
 import { toast } from "@/lib/toast";
 
 const TYPE_ORDER: NoteType[] = ["tech", "practice", "check", "profile", "project", "layer"];
@@ -37,6 +38,7 @@ export function NewNoteDialog() {
   const [id, setId] = useState("");
   const [layer, setLayer] = useState("backend");
   const [error, setError] = useState("");
+  useReturnFocus(open);
 
   const create = useMutation({
     mutationFn: (input: { id: string; type: NoteType; layer: string }) =>

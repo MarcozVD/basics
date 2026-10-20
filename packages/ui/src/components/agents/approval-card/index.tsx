@@ -114,7 +114,7 @@ export function ApprovalCard({
             showIcon={false}
             className={cn(
               "border-transparent font-medium",
-              action === "create" ? "border-primary/30 bg-primary/10 text-primary" : "border-border bg-muted/60 text-muted-foreground",
+              action === "create" ? "border-primary/30 bg-primary/10 text-primary-text" : "border-border bg-muted/60 text-muted-foreground",
             )}
           >
             {actionLabel}
