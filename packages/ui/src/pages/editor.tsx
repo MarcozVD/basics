@@ -6,7 +6,6 @@ import { cn } from "cn";
 import { AlertTriangle, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useBlocker, useNavigate, useParams } from "react-router";
-import { toast } from "sonner";
 import { NoteForm } from "@/components/note-form/note-form";
 import { ErrorState, Loading } from "@/components/state";
 import { Badge } from "@/components/ui/badge";
@@ -16,6 +15,7 @@ import { type TranslationKey, useT } from "@/i18n";
 import { ApiRequestError, deleteNote as deleteNoteApi, saveNote } from "@/lib/api";
 import { queryKeys, useNote, useNotes } from "@/lib/queries";
 import { useTheme } from "@/lib/theme";
+import { toast } from "@/lib/toast";
 
 function issuesToErrors(issues: unknown): Record<string, string> {
   const errors: Record<string, string> = {};
@@ -122,7 +122,7 @@ export function EditorPage() {
       queryClient.removeQueries({ queryKey: queryKeys.note(id ?? "") });
       toast.success(t("editor.deleted"));
       setDeleteOpen(false);
-      navigate("/");
+      navigate("/explore");
     },
     onError: (error) => {
       if (error instanceof ApiRequestError && error.status === 409) setConflict(true);

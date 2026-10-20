@@ -5,6 +5,7 @@ import { EditorPage } from "@/pages/editor";
 import { ExplorePage } from "@/pages/explore";
 import { InboxPage } from "@/pages/inbox";
 import { NotFoundPage } from "@/pages/not-found";
+import { PlaceholderPage } from "@/pages/placeholder";
 import { ProposalPage } from "@/pages/proposal";
 import { RecommendPage } from "@/pages/recommend";
 
@@ -13,7 +14,9 @@ const router = createBrowserRouter([
     path: "/",
     element: <Layout />,
     children: [
-      { index: true, element: <ExplorePage /> },
+      { index: true, element: <PlaceholderPage titleKey="page.home.title" /> },
+      { path: "explore", element: <ExplorePage /> },
+      { path: "graph", element: <PlaceholderPage titleKey="page.graph.title" /> },
       { path: "notes/:id", element: <EditorPage /> },
       { path: "inbox", element: <InboxPage /> },
       { path: "inbox/:id", element: <ProposalPage /> },

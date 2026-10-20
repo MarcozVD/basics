@@ -4,7 +4,6 @@ import { cn } from "cn";
 import { AlertTriangle, Check, Download, FileDown, Loader2, type LucideIcon, Star } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link } from "react-router";
-import { toast } from "sonner";
 import { Empty, ErrorState, Loading } from "@/components/state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,6 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { type TranslationKey, useT } from "@/i18n";
 import { getContext, recommend } from "@/lib/api";
 import { useLayers } from "@/lib/queries";
+import { toast } from "@/lib/toast";
 
 function PhraseList({ icon: Icon, className, phrases }: { icon: LucideIcon; className: string; phrases: string[] }) {
   if (phrases.length === 0) return null;

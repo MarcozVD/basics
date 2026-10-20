@@ -4,7 +4,6 @@ import { cn } from "cn";
 import { Plus, Search } from "lucide-react";
 import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
-import { toast } from "sonner";
 import { Empty, ErrorState, Loading } from "@/components/state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,6 +15,7 @@ import { type TranslationKey, useT } from "@/i18n";
 import { ApiRequestError, createNote, type NoteFilter } from "@/lib/api";
 import { TEMPLATES } from "@/lib/fields";
 import { useLayers, useNotes, useSearch } from "@/lib/queries";
+import { toast } from "@/lib/toast";
 
 const TYPE_ORDER: NoteType[] = ["tech", "practice", "check", "profile", "project", "layer"];
 const ALL_TYPES: NoteType[] = ["layer", "tech", "practice", "check", "profile", "project"];

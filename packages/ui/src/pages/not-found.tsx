@@ -9,7 +9,7 @@ export function NotFoundPage() {
       <h1 className="text-lg font-semibold tracking-tight">{t("page.notFound.title")}</h1>
       <p className="mt-1 text-sm text-muted-foreground">{t("page.notFound.description")}</p>
       <Button asChild variant="outline" size="sm" className="mt-4">
-        <Link to="/">{t("page.notFound.back")}</Link>
+        <Link to="/explore">{t("page.notFound.back")}</Link>
       </Button>
     </div>
   );

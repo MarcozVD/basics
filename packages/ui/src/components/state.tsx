@@ -1,4 +1,5 @@
-import { AlertTriangle, Inbox as InboxIcon, Loader2 } from "lucide-react";
+import { AlertTriangle, Inbox as InboxIcon } from "lucide-react";
+import { Loader } from "@/components/motion/loader";
 import { useT } from "@/i18n";
 import { ApiRequestError } from "@/lib/api";
 
@@ -6,7 +7,7 @@ export function Loading({ label }: { label?: string }) {
   const t = useT();
   return (
     <div role="status" className="flex items-center gap-2 text-sm text-muted-foreground">
-      <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+      <Loader variant="spinner" size={16} className="text-muted-foreground" label={label ?? t("state.loading")} />
       {label ?? t("state.loading")}
     </div>
   );

@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 test("creates a note and shows it in Explore", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/explore");
 
   await page.getByRole("button", { name: "New note", exact: true }).click();
   const dialog = page.getByRole("dialog");

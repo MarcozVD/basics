@@ -162,3 +162,7 @@ Los cambios se describen con [changesets](https://github.com/changesets/changese
 - [ ] Índice SQLite FTS cuando el vault crezca
 - [ ] Recomendación semántica (embeddings) además de keywords
 - [ ] Runner de checks: ejecutar `command` de cada check en el proyecto y reportar
+
+## Créditos
+
+Componentes de motion y UI adaptados de [beUI](https://beui.dev) (MIT, © 2026 Saurabh Chauhan). Detalle en [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

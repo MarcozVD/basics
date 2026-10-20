@@ -3,7 +3,6 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Check, Pencil, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
-import { toast } from "sonner";
 import { DiffView } from "@/components/diff-view";
 import { NoteForm } from "@/components/note-form/note-form";
 import { ErrorState, Loading } from "@/components/state";
@@ -16,6 +15,7 @@ import { type TranslationKey, useI18n } from "@/i18n";
 import { ApiRequestError, approveProposal, rejectProposal } from "@/lib/api";
 import { useProposal } from "@/lib/queries";
 import { formatRelativeTime } from "@/lib/relative-time";
+import { toast } from "@/lib/toast";
 
 function issuesToErrors(issues: unknown): Record<string, string> {
   const errors: Record<string, string> = {};

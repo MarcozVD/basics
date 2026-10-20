@@ -1,77 +1,68 @@
-import { cn } from "cn";
-import { Check, Compass, FolderClosed, Inbox, Monitor, Moon, Sparkles, Sun } from "lucide-react";
-import { Link, NavLink, Outlet } from "react-router";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Toaster } from "@/components/ui/sonner";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Compass, FolderClosed, House, Inbox, Network, Search, Sparkles } from "lucide-react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { useState } from "react";
+import { Link, NavLink, useLocation, useOutlet } from "react-router";
+import { AnimatedNumber } from "@/components/motion/animated-number";
+import { AnimatedToastStack } from "@/components/motion/animated-toast-stack";
+import { Tabs, TabsList, TabsTrigger } from "@/components/motion/tabs";
+import { ThemeToggle } from "@/components/motion/theme-toggle";
+import { Tooltip } from "@/components/motion/tooltip";
 import { useI18n } from "@/i18n";
+import { EASE_OUT, SPRING_LAYOUT } from "@/lib/ease";
 import { useHealth, useInbox } from "@/lib/queries";
-import { type Theme, useTheme } from "@/lib/theme";
+import { dismissToast, useToasts } from "@/lib/toast";
+import { cn } from "@/lib/utils";
 
 const navItems = [
-  { to: "/", labelKey: "nav.explore", icon: Compass, end: true },
+  { to: "/", labelKey: "nav.home", icon: House, end: true },
+  { to: "/explore", labelKey: "nav.explore", icon: Compass },
+  { to: "/graph", labelKey: "nav.graph", icon: Network },
   { to: "/inbox", labelKey: "nav.inbox", icon: Inbox },
   { to: "/recommend", labelKey: "nav.recommend", icon: Sparkles },
 ] as const;
 
-const themeOptions: { value: Theme; labelKey: "theme.light" | "theme.dark" | "theme.system"; icon: typeof Sun }[] = [
-  { value: "light", labelKey: "theme.light", icon: Sun },
-  { value: "dark", labelKey: "theme.dark", icon: Moon },
-  { value: "system", labelKey: "theme.system", icon: Monitor },
-];
-
-function ThemeToggle() {
-  const { t } = useI18n();
-  const { theme, setTheme } = useTheme();
-  const CurrentIcon = theme === "light" ? Sun : theme === "dark" ? Moon : Monitor;
-
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon-sm" aria-label={t("nav.theme")} title={t("nav.theme")}>
-          <CurrentIcon aria-hidden="true" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" side="top" className="w-36">
-        {themeOptions.map((option) => {
-          const Icon = option.icon;
-          return (
-            <DropdownMenuItem key={option.value} onSelect={() => setTheme(option.value)} className="gap-2">
-              <Icon aria-hidden="true" />
-              <span>{t(option.labelKey)}</span>
-              {theme === option.value && <Check className="ml-auto" aria-hidden="true" />}
-            </DropdownMenuItem>
-          );
-        })}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
 export function Layout() {
   const { t, language, setLanguage } = useI18n();
-  const { resolvedTheme } = useTheme();
+  const location = useLocation();
+  const outlet = useOutlet();
+  const reduce = useReducedMotion();
   const health = useHealth();
   const inbox = useInbox();
+  const toasts = useToasts();
   const pending = inbox.data?.length ?? 0;
   const vault = health.data?.vault;
+  const [hovered, setHovered] = useState<string | null>(null);
 
   return (
     <div className="flex h-screen overflow-hidden bg-background text-foreground">
-      <aside className="flex w-60 shrink-0 flex-col border-r border-sidebar-border bg-sidebar">
-        <div className="flex h-12 items-center gap-2 border-b border-sidebar-border px-4">
+      <aside className="flex w-[232px] shrink-0 flex-col p-2">
+        <div className="flex h-10 items-center gap-2 px-1">
+          <div
+            aria-hidden="true"
+            className="grid size-7 shrink-0 place-items-center rounded-lg bg-primary font-mono text-[13px] font-semibold text-primary-foreground"
+          >
+            b
+          </div>
           <Link
             to="/"
-            className="rounded-sm text-[15px] font-semibold tracking-tight focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            className="rounded-full text-[15px] font-semibold tracking-tight focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
           >
             {t("app.name")}
           </Link>
           {health.data && <span className="ml-auto font-mono text-[11px] text-muted-foreground">v{health.data.version}</span>}
         </div>
 
-        <nav aria-label={t("nav.primary")} className="flex flex-col gap-0.5 p-2">
+        <button
+          type="button"
+          onClick={() => window.dispatchEvent(new Event("basics:open-palette"))}
+          className="mt-3 flex h-9 w-full items-center gap-2 rounded-full bg-muted/60 px-3 text-[13px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
+        >
+          <Search className="size-3.5 shrink-0" aria-hidden="true" />
+          <span className="truncate">{t("search.placeholder")}</span>
+          <kbd className="ml-auto rounded-full border border-border px-1.5 py-px font-mono text-[10px] text-muted-foreground">⌘K</kbd>
+        </button>
+
+        <nav aria-label={t("nav.primary")} className="mt-2 flex flex-col gap-0.5" onMouseLeave={() => setHovered(null)}>
           {navItems.map((item) => {
             const Icon = item.icon;
             return (
@@ -79,76 +70,100 @@ export function Layout() {
                 key={item.to}
                 to={item.to}
                 end={"end" in item ? item.end : false}
+                onMouseEnter={() => setHovered(item.to)}
                 className={({ isActive }) =>
                   cn(
-                    "flex h-8 items-center gap-2 rounded-md px-2 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                    "relative flex h-9 items-center gap-2.5 rounded-full px-3 text-[13px] font-medium text-muted-foreground transition-colors",
                     "focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring",
-                    isActive && "bg-primary/10 text-primary hover:bg-primary/10 hover:text-primary",
+                    isActive && "text-primary",
                   )
                 }
               >
-                <Icon className="size-4 shrink-0" aria-hidden="true" />
-                <span>{t(item.labelKey)}</span>
-                {item.to === "/inbox" && pending > 0 && (
-                  <Badge variant="secondary" className="ml-auto h-5 min-w-5 rounded px-1 font-mono text-[10px] tabular-nums">
-                    {pending}
-                  </Badge>
+                {({ isActive }) => (
+                  <>
+                    {isActive ? (
+                      <motion.span
+                        layoutId="nav-active"
+                        transition={reduce ? { duration: 0 } : SPRING_LAYOUT}
+                        className="absolute inset-0 rounded-full bg-primary/12"
+                      />
+                    ) : hovered === item.to ? (
+                      <motion.span
+                        layoutId="nav-hover"
+                        transition={reduce ? { duration: 0 } : SPRING_LAYOUT}
+                        className="absolute inset-0 rounded-full bg-muted/70"
+                      />
+                    ) : null}
+                    <Icon className="relative size-4 shrink-0" aria-hidden="true" />
+                    <span className="relative truncate">{t(item.labelKey)}</span>
+                    {item.to === "/inbox" && pending > 0 && (
+                      <span className="relative ml-auto grid h-5 min-w-5 place-items-center rounded-full bg-primary px-1.5 text-[10px] font-semibold text-primary-foreground">
+                        <AnimatedNumber value={pending} startOnView={false} duration={0.5} />
+                      </span>
+                    )}
+                  </>
                 )}
               </NavLink>
             );
           })}
         </nav>
 
-        <div className="mt-auto border-t border-sidebar-border p-2">
-          <TooltipProvider delayDuration={200}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  aria-label={`${t("nav.vault")}: ${vault ?? t("nav.vaultUnavailable")}`}
-                  className="flex w-full min-w-0 items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
-                >
-                  <FolderClosed className="size-3.5 shrink-0" aria-hidden="true" />
-                  <span className="min-w-0 flex-1 truncate font-mono text-[11px]">{vault ?? t("nav.vaultUnavailable")}</span>
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="top" align="start" className="max-w-80 font-mono text-[11px] break-all">
-                {vault ?? t("nav.vaultUnavailable")}
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-
-          <div className="mt-1 flex items-center justify-between px-1">
-            <fieldset
-              aria-label={t("nav.language")}
-              className="m-0 flex min-w-0 items-center gap-0.5 rounded-md border border-sidebar-border p-0.5"
+        <div className="mt-auto flex flex-col gap-2 px-1">
+          <Tooltip
+            content={vault ?? t("nav.vaultUnavailable")}
+            side="top"
+            align="start"
+            className="max-w-80 font-mono text-[11px] break-all"
+          >
+            <button
+              type="button"
+              aria-label={`${t("nav.vault")}: ${vault ?? t("nav.vaultUnavailable")}`}
+              className="flex w-full min-w-0 items-center gap-1.5 rounded-full px-2 py-1.5 text-left text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
             >
-              {(["en", "es"] as const).map((option) => (
-                <button
-                  key={option}
-                  type="button"
-                  onClick={() => setLanguage(option)}
-                  aria-pressed={language === option}
-                  className={cn(
-                    "h-6 rounded px-1.5 text-[11px] font-medium text-muted-foreground uppercase transition-colors hover:text-foreground",
-                    "focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring",
-                    language === option && "bg-sidebar-accent text-foreground",
-                  )}
-                >
-                  {option}
-                </button>
-              ))}
+              <FolderClosed className="size-3.5 shrink-0" aria-hidden="true" />
+              <span className="min-w-0 flex-1 truncate font-mono text-[11px]">{vault ?? t("nav.vaultUnavailable")}</span>
+            </button>
+          </Tooltip>
+
+          <div className="flex items-center justify-between">
+            <fieldset className="m-0 min-w-0 border-0 p-0" aria-label={t("nav.language")}>
+              <Tabs value={language} onValueChange={(value) => setLanguage(value as "en" | "es")} variant="segment">
+                <TabsList>
+                  {(["en", "es"] as const).map((option) => (
+                    <TabsTrigger key={option} value={option} className="px-2.5 py-1 text-[11px] font-medium uppercase">
+                      {option}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </Tabs>
             </fieldset>
-            <ThemeToggle />
+            <ThemeToggle
+              aria-label={t("nav.theme")}
+              title={t("nav.theme")}
+              className="size-8 rounded-full text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
+              iconClassName="size-4"
+            />
           </div>
         </div>
       </aside>
 
-      <main className="min-w-0 flex-1 overflow-y-auto">
-        <Outlet />
-      </main>
+      <div className="min-w-0 flex-1 p-2 pl-0">
+        <main className="h-full overflow-y-auto rounded-2xl border border-border bg-card">
+          <AnimatePresence mode="popLayout" initial={false}>
+            <motion.div
+              key={location.pathname}
+              initial={{ opacity: 0, y: reduce ? 0 : 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.18, ease: EASE_OUT }}
+              className="min-h-full"
+            >
+              {outlet}
+            </motion.div>
+          </AnimatePresence>
+        </main>
+      </div>
 
-      <Toaster theme={resolvedTheme} position="bottom-right" />
+      <AnimatedToastStack toasts={toasts} onDismiss={dismissToast} position="bottom-right" fixed />
     </div>
   );
 }
