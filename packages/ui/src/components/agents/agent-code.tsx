@@ -1,10 +1,10 @@
 "use client";
 
 import { type CSSProperties, Fragment, useEffect, useState } from "react";
-import { createHighlighter, type Highlighter } from "shiki";
+import type { Highlighter } from "shiki";
 import { cn } from "@/lib/utils";
 
-export type AgentCodeLanguage = "bash" | "diff" | "json" | "text" | "tsx" | "typescript";
+export type AgentCodeLanguage = "bash" | "diff" | "json" | "markdown" | "text" | "tsx" | "typescript";
 
 export interface AgentCodeToken {
   content: string;
@@ -34,10 +34,11 @@ const tokenCache = new Map<string, AgentCodeTokenLines>();
 
 function getAgentCodeHighlighter() {
   if (!agentCodeHighlighter) {
-    agentCodeHighlighter = createHighlighter({
-      themes: [LIGHT_THEME, DARK_THEME],
-      langs: ["bash", "diff", "json", "tsx", "typescript"],
-    });
+    // Shiki is heavy; it loads with the first highlighted block, not with the app.
+    agentCodeHighlighter = import("shiki").then(({ createHighlighter }) =>
+      // Grammars load per language on first use (see useAgentCodeTokens).
+      createHighlighter({ themes: [LIGHT_THEME, DARK_THEME], langs: [] }),
+    );
   }
   return agentCodeHighlighter;
 }
@@ -64,27 +65,33 @@ export function useAgentCodeTokens(code: string, language: AgentCodeLanguage) {
     }
 
     let cancelled = false;
-    getAgentCodeHighlighter().then((highlighter) => {
-      if (cancelled) return;
-      const lines = highlighter
-        .codeToTokensWithThemes(code, {
-          lang: language,
-          themes: {
-            light: LIGHT_THEME,
-            dark: DARK_THEME,
-          },
-        })
-        .map((line) =>
-          line.map((token) => ({
-            content: token.content,
-            offset: token.offset,
-            light: token.variants.light?.color,
-            dark: token.variants.dark?.color,
-          })),
-        );
-      tokenCache.set(key, lines);
-      setResult({ key, code, language, lines });
-    });
+    getAgentCodeHighlighter()
+      .then(async (highlighter) => {
+        // Each grammar loads the first time a block uses it.
+        if (language !== "text" && !highlighter.getLoadedLanguages().includes(language)) await highlighter.loadLanguage(language);
+        return highlighter;
+      })
+      .then((highlighter) => {
+        if (cancelled) return;
+        const lines = highlighter
+          .codeToTokensWithThemes(code, {
+            lang: language,
+            themes: {
+              light: LIGHT_THEME,
+              dark: DARK_THEME,
+            },
+          })
+          .map((line) =>
+            line.map((token) => ({
+              content: token.content,
+              offset: token.offset,
+              light: token.variants.light?.color,
+              dark: token.variants.dark?.color,
+            })),
+          );
+        tokenCache.set(key, lines);
+        setResult({ key, code, language, lines });
+      });
     return () => {
       cancelled = true;
     };

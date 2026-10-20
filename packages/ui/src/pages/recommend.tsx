@@ -1,29 +1,67 @@
 import type { Candidate, Recommendation } from "@marcozvd/basics-core";
 import { useMutation } from "@tanstack/react-query";
-import { cn } from "cn";
-import { AlertTriangle, Check, Download, FileDown, Loader2, type LucideIcon, Star } from "lucide-react";
-import { useMemo, useState } from "react";
+import { AlertTriangle, Check, Download, FileDown, type LucideIcon, Star, X } from "lucide-react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
-import { Empty, ErrorState, Loading } from "@/components/state";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { CodeBlock } from "@/components/agents/code-block";
+import { PromptInput } from "@/components/agents/prompt-input";
+import { DOCK_SPACE } from "@/components/layout";
+import {
+  AdaptiveStepper,
+  AdaptiveStepperDecrement,
+  AdaptiveStepperIncrement,
+  AdaptiveStepperValue,
+} from "@/components/motion/adaptive-stepper";
+import { Button } from "@/components/motion/button/base";
+import { CARD_TARGET_CLASS, Card, CardContent, CardHeader } from "@/components/motion/card";
+import { CenterMorphModal, CenterMorphModalContent } from "@/components/motion/center-morph-modal";
+import { Checkbox } from "@/components/motion/checkbox";
+import { Loader } from "@/components/motion/loader";
+import { ErrorState } from "@/components/state";
 import { type TranslationKey, useT } from "@/i18n";
 import { getContext, recommend } from "@/lib/api";
+import { EASE_OUT, SPRING_PANEL } from "@/lib/ease";
 import { useLayers } from "@/lib/queries";
 import { toast } from "@/lib/toast";
+import { cn } from "@/lib/utils";
 
-function PhraseList({ icon: Icon, className, phrases }: { icon: LucideIcon; className: string; phrases: string[] }) {
+const EXAMPLES = ["recommend.example.api", "recommend.example.ml", "recommend.example.web"] as const;
+const COLUMNS = "grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(280px,1fr))]";
+/** Profiles keep their column width even when only one matches. */
+const PROFILE_COLUMNS = "grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(280px,1fr))]";
+/** Only the first cards of a column stagger in; the rest appear with them. */
+const STAGGER_LIMIT = 10;
+const STAGGER_STEP = 0.02;
+/** The Dock floats 16px off the bottom edge and is 54px tall; the selection pill sits 12px above it. */
+const DOCK_BOTTOM = 16;
+const DOCK_HEIGHT = DOCK_SPACE - 24;
+const BAR_GAP = 12;
+
+const enter = (index: number, reduce: boolean) => ({
+  initial: index < STAGGER_LIMIT ? { opacity: 0, y: reduce ? 0 : 6 } : false,
+  animate: { opacity: 1, y: 0 },
+  transition: { duration: 0.18, ease: EASE_OUT, delay: Math.min(index, STAGGER_LIMIT) * STAGGER_STEP },
+});
+
+function TechChip({ id }: { id: string }) {
+  return (
+    <span
+      className="inline-flex h-5 items-center rounded-full px-2 font-mono text-[10.5px] font-medium"
+      style={{ backgroundColor: "color-mix(in srgb, var(--type-tech) 12%, transparent)", color: "var(--type-tech)" }}
+    >
+      {id}
+    </span>
+  );
+}
+
+function PhraseList({ icon: Icon, label, className, phrases }: { icon: LucideIcon; label: string; className: string; phrases: string[] }) {
   if (phrases.length === 0) return null;
   return (
-    <ul className="flex flex-col gap-0.5">
+    <ul aria-label={label} className="flex flex-col gap-1">
       {phrases.map((phrase) => (
-        <li key={phrase} className="flex items-start gap-1 text-[11px] text-muted-foreground">
-          <Icon className={cn("mt-0.5 size-3 shrink-0", className)} aria-hidden="true" />
+        <li key={phrase} className="flex items-start gap-1.5 text-[12px] leading-4 text-muted-foreground">
+          <Icon className={cn("mt-px size-3 shrink-0", className)} aria-hidden="true" />
           <span>{phrase}</span>
         </li>
       ))}
@@ -31,37 +69,73 @@ function PhraseList({ icon: Icon, className, phrases }: { icon: LucideIcon; clas
   );
 }
 
-function CandidateCard({ candidate, selected, onToggle }: { candidate: Candidate; selected: boolean; onToggle: () => void }) {
+function ScoreBar({ value, max, reduce }: { value: number; max: number; reduce: boolean }) {
+  const ratio = max > 0 ? Math.max(0, value) / max : 0;
+  return (
+    <div aria-hidden="true" className="h-1 w-full overflow-hidden rounded-full bg-muted">
+      <motion.div
+        className="h-full origin-left rounded-full bg-primary"
+        initial={{ scaleX: reduce ? ratio : 0 }}
+        animate={{ scaleX: ratio }}
+        transition={reduce ? { duration: 0 } : { duration: 0.4, ease: EASE_OUT }}
+      />
+    </div>
+  );
+}
+
+interface CandidateCardProps {
+  candidate: Candidate;
+  maxScore: number;
+  selected: boolean;
+  reduce: boolean;
+  onToggle: () => void;
+}
+
+function CandidateCard({ candidate, maxScore, selected, reduce, onToggle }: CandidateCardProps) {
   const t = useT();
-  const hasAvoid = candidate.matched_avoid_when.length > 0;
+  const avoid = candidate.matched_avoid_when.length > 0;
   return (
     <Card
-      size="sm"
-      className={cn("border-l-2 border-l-transparent", hasAvoid && "border-l-destructive", candidate.score <= 0 && "opacity-50")}
+      interactive
+      selected={selected}
+      size="compact"
+      className={cn(
+        "gap-2.5 bg-card py-3 hover:border-foreground/20",
+        avoid && "border-l-[3px] border-l-destructive hover:border-l-destructive",
+        candidate.score <= 0 && "opacity-55",
+      )}
     >
-      <CardContent className="flex flex-col gap-2">
-        <div className="flex items-start gap-2">
-          <input
-            type="checkbox"
-            className="mt-1 size-3.5 shrink-0 accent-primary"
-            checked={selected}
-            onChange={onToggle}
-            aria-label={t("recommend.select", { id: candidate.id })}
-          />
-          <div className="min-w-0 flex-1">
-            <Link to={`/notes/${encodeURIComponent(candidate.id)}`} className="text-sm font-medium hover:underline">
-              {candidate.id}
-            </Link>
-            <p className="text-[11px] text-muted-foreground">
-              {t(`option.${candidate.kind}` as TranslationKey)} · {t("recommend.score")}{" "}
-              <span className="font-mono tabular-nums">{candidate.score}</span>
-            </p>
-          </div>
+      <CardHeader className="gap-2">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span className="relative z-10 flex">
+            <Checkbox checked={selected} onCheckedChange={onToggle} aria-label={t("recommend.select", { id: candidate.id })} />
+          </span>
+          <Link
+            to={`/notes/${encodeURIComponent(candidate.id)}`}
+            aria-label={t("recommend.open", { id: candidate.id })}
+            className={cn("min-w-0 truncate text-sm font-semibold tracking-tight outline-none", CARD_TARGET_CLASS)}
+          >
+            {candidate.id}
+          </Link>
+          <span className="truncate text-[11px] text-muted-foreground">{t(`option.${candidate.kind}` as TranslationKey)}</span>
+          <span className="ml-auto font-mono text-[11px] text-muted-foreground tabular-nums" title={t("recommend.score")}>
+            {candidate.score}
+          </span>
         </div>
-        <PhraseList icon={Check} className="text-emerald-600 dark:text-emerald-400" phrases={candidate.matched_use_when} />
-        <PhraseList icon={Star} className="text-sky-600 dark:text-sky-400" phrases={candidate.matched_performs_best} />
-        <PhraseList icon={AlertTriangle} className="text-destructive" phrases={candidate.matched_avoid_when} />
-      </CardContent>
+        <ScoreBar value={candidate.score} max={maxScore} reduce={reduce} />
+      </CardHeader>
+      {candidate.matched_use_when.length + candidate.matched_performs_best.length + candidate.matched_avoid_when.length > 0 && (
+        <CardContent className="flex flex-col gap-1.5">
+          <PhraseList icon={Check} label={t("recommend.useWhen")} className="text-type-practice" phrases={candidate.matched_use_when} />
+          <PhraseList icon={Star} label={t("recommend.performsBest")} className="text-primary" phrases={candidate.matched_performs_best} />
+          <PhraseList
+            icon={AlertTriangle}
+            label={t("recommend.avoidWhen")}
+            className="text-destructive"
+            phrases={candidate.matched_avoid_when}
+          />
+        </CardContent>
+      )}
     </Card>
   );
 }
@@ -70,66 +144,87 @@ interface ResultsProps {
   recommendation: Recommendation;
   layerTitle: (id: string) => string;
   selected: Set<string>;
+  reduce: boolean;
   onToggle: (id: string) => void;
   onUseProfile: (stack: Record<string, string[]>) => void;
 }
 
-function RecommendationResults({ recommendation, layerTitle, selected, onToggle, onUseProfile }: ResultsProps) {
+function RecommendationResults({ recommendation, layerTitle, selected, reduce, onToggle, onUseProfile }: ResultsProps) {
   const t = useT();
   const layers = Object.entries(recommendation.layers);
   const hasCandidates = layers.some(([, candidates]) => candidates.length > 0);
+  const maxScore = Math.max(1, ...layers.flatMap(([, candidates]) => candidates.map((candidate) => candidate.score)));
 
   return (
     <div className="flex flex-col gap-6">
       {recommendation.profiles.length > 0 && (
-        <section className="flex flex-col gap-2">
-          <h2 className="text-sm font-medium">{t("recommend.profiles")}</h2>
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {recommendation.profiles.map((profile) => (
-              <Card key={profile.id} size="sm">
-                <CardContent className="flex flex-col gap-2">
-                  <div className="flex items-center gap-2">
-                    <Link to={`/notes/${encodeURIComponent(profile.id)}`} className="min-w-0 truncate text-sm font-medium hover:underline">
-                      {profile.id}
-                    </Link>
-                    <Badge variant="outline" className="font-mono text-[10px] tabular-nums" title={t("recommend.score")}>
-                      {profile.score}
-                    </Badge>
-                    <Button variant="outline" size="xs" className="ml-auto" onClick={() => onUseProfile(profile.stack)}>
-                      {t("recommend.useProfile")}
-                    </Button>
-                  </div>
-                  <div className="flex flex-wrap gap-1">
+        <section className="flex flex-col gap-2.5">
+          <h2 className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">{t("recommend.profiles")}</h2>
+          <div className={PROFILE_COLUMNS}>
+            {recommendation.profiles.map((profile, index) => (
+              <motion.div key={profile.id} {...enter(index, reduce)} className="min-w-0">
+                <Card size="compact" className="h-full gap-3 bg-card py-3.5">
+                  <CardHeader>
+                    <div className="flex min-w-0 items-center gap-2">
+                      <Link
+                        to={`/notes/${encodeURIComponent(profile.id)}`}
+                        className="min-w-0 truncate text-[15px] font-semibold tracking-tight hover:underline"
+                      >
+                        {profile.id}
+                      </Link>
+                      <span className="font-mono text-[11px] text-muted-foreground tabular-nums" title={t("recommend.score")}>
+                        {profile.score}
+                      </span>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        pressScale={0.97}
+                        className="ml-auto h-7 shrink-0"
+                        onClick={() => onUseProfile(profile.stack)}
+                      >
+                        {t("recommend.useProfile")}
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="flex flex-col gap-1.5">
                     {Object.entries(profile.stack).map(([layer, techs]) => (
-                      <Badge key={layer} variant="secondary" className="font-normal">
-                        {layer}: {techs.join(", ")}
-                      </Badge>
+                      <div key={layer} className="flex min-w-0 items-center gap-2">
+                        <span className="w-20 shrink-0 truncate text-[11px] text-muted-foreground">{layerTitle(layer)}</span>
+                        <span className="flex min-w-0 flex-wrap gap-1">
+                          {techs.map((tech) => (
+                            <TechChip key={tech} id={tech} />
+                          ))}
+                        </span>
+                      </div>
                     ))}
-                  </div>
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
+              </motion.div>
             ))}
           </div>
         </section>
       )}
 
-      <section className="flex flex-col gap-2">
-        <h2 className="text-sm font-medium">{t("recommend.perLayer")}</h2>
+      <section className="flex flex-col gap-2.5">
+        <h2 className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">{t("recommend.perLayer")}</h2>
         {hasCandidates ? (
-          <div className="grid items-start gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <div className={cn(COLUMNS, "items-start gap-4")}>
             {layers.map(([layer, candidates]) => (
-              <div key={layer} className="flex flex-col gap-2">
-                <h3 className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">{layerTitle(layer)}</h3>
+              <div key={layer} className="flex min-w-0 flex-col gap-2">
+                <h3 className="px-1 text-sm font-semibold tracking-tight">{layerTitle(layer)}</h3>
                 {candidates.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">{t("recommend.noCandidates")}</p>
+                  <p className="px-1 text-xs text-muted-foreground">{t("recommend.noCandidates")}</p>
                 ) : (
-                  candidates.map((candidate) => (
-                    <CandidateCard
-                      key={candidate.id}
-                      candidate={candidate}
-                      selected={selected.has(candidate.id)}
-                      onToggle={() => onToggle(candidate.id)}
-                    />
+                  candidates.map((candidate, index) => (
+                    <motion.div key={candidate.id} {...enter(index, reduce)}>
+                      <CandidateCard
+                        candidate={candidate}
+                        maxScore={maxScore}
+                        selected={selected.has(candidate.id)}
+                        reduce={reduce}
+                        onToggle={() => onToggle(candidate.id)}
+                      />
+                    </motion.div>
                   ))
                 )}
               </div>
@@ -145,9 +240,40 @@ function RecommendationResults({ recommendation, layerTitle, selected, onToggle,
   );
 }
 
+function ResultsSkeleton({ layers, perLayer, label }: { layers: string[]; perLayer: number; label: string }) {
+  const block = "rounded-2xl border bg-card motion-safe:animate-pulse";
+  return (
+    <div role="status" aria-label={label} className="flex flex-col gap-6">
+      <span className="sr-only">{label}</span>
+      <div className="flex flex-col gap-2.5">
+        <div className="h-3 w-16 rounded-full bg-muted" />
+        <div className={PROFILE_COLUMNS}>
+          <div className={cn(block, "h-[122px]")} />
+        </div>
+      </div>
+      <div className="flex flex-col gap-2.5">
+        <div className="h-3 w-16 rounded-full bg-muted" />
+        <div className={cn(COLUMNS, "items-start gap-4")}>
+          {layers.map((layer) => (
+            <div key={layer} className="flex flex-col gap-2">
+              <div className="mx-1 h-4 w-24 rounded-full bg-muted" />
+              {Array.from({ length: perLayer }, (_, index) => (
+                // biome-ignore lint/suspicious/noArrayIndexKey: placeholders have no identity.
+                <div key={index} className={cn(block, "h-[92px]")} />
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function RecommendPage() {
   const t = useT();
+  const reduce = useReducedMotion() ?? false;
   const layersQuery = useLayers();
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const [description, setDescription] = useState("");
   const [selectedLayers, setSelectedLayers] = useState<string[] | null>(null);
   const [perLayer, setPerLayer] = useState(3);
@@ -193,10 +319,14 @@ export function RecommendPage() {
     setSelected(new Set(Object.values(stack).flat()));
   };
 
-  const canSubmit = description.trim().length > 0 && activeLayers.length > 0 && !run.isPending;
-  const submit = () => {
-    if (!canSubmit) return;
-    run.mutate({ description: description.trim(), layers: activeLayers, perLayer });
+  const submit = (value: string) => {
+    if (!value.trim() || activeLayers.length === 0 || run.isPending) return;
+    run.mutate({ description: value.trim(), layers: activeLayers, perLayer });
+  };
+
+  const fillExample = (text: string) => {
+    setDescription(text);
+    inputRef.current?.focus();
   };
 
   const copy = async () => {
@@ -221,133 +351,189 @@ export function RecommendPage() {
 
   return (
     <div className="flex min-h-full flex-col">
-      <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 p-4">
-        <h1 className="text-lg font-semibold">{t("page.recommend.title")}</h1>
+      <div className={cn("mx-auto flex w-full max-w-[1200px] flex-col gap-4 px-5 pt-4", selected.size > 0 && "pb-16")}>
+        <h1 className="text-xl font-semibold tracking-tight">{t("page.recommend.title")}</h1>
 
-        <form
-          className="flex flex-col gap-4 rounded-xl border p-4"
-          onSubmit={(event) => {
-            event.preventDefault();
-            submit();
-          }}
-        >
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="recommend-description" className="text-xs text-muted-foreground">
-              {t("recommend.description")}
-            </Label>
-            <Textarea
-              id="recommend-description"
-              rows={3}
-              value={description}
-              placeholder={t("recommend.placeholder")}
-              onChange={(event) => setDescription(event.target.value)}
-              onKeyDown={(event) => {
-                if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
-                  event.preventDefault();
-                  submit();
-                }
-              }}
-            />
-          </div>
+        <PromptInput
+          ref={inputRef}
+          value={description}
+          onValueChange={setDescription}
+          onSubmit={submit}
+          submitOn="mod-enter"
+          keepValueOnSubmit
+          loading={run.isPending}
+          loadingIndicator={<Loader variant="spinner" size={14} label={t("recommend.loading")} />}
+          submitLabel={t("recommend.submit")}
+          showSubmitLabel
+          aria-label={t("recommend.description")}
+          aria-keyshortcuts="Meta+Enter Control+Enter"
+          placeholder={t("recommend.placeholder")}
+          minRows={2}
+          maxRows={8}
+          className="bg-card"
+          leadingAction={
+            <kbd className="ml-2 rounded-full border border-border px-1.5 font-mono text-[10px] leading-4 text-muted-foreground">
+              {t("recommend.shortcut")}
+            </kbd>
+          }
+        />
 
-          <div className="flex flex-wrap items-end gap-x-6 gap-y-3">
-            <fieldset className="flex min-w-0 flex-1 flex-col">
-              <legend className="mb-1.5 text-xs text-muted-foreground">{t("recommend.layers")}</legend>
-              <div className="flex flex-wrap gap-1.5">
-                {(layersQuery.data ?? []).map((layer) => {
-                  const active = activeLayers.includes(layer.id);
-                  return (
-                    <button
-                      key={layer.id}
-                      type="button"
-                      aria-pressed={active}
-                      onClick={() => toggleLayer(layer.id)}
-                      className={cn(
-                        "h-7 rounded-full border px-2.5 text-xs font-medium transition-colors",
-                        active ? "border-primary/30 bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted",
-                      )}
-                    >
-                      {layer.title || layer.id}
-                    </button>
-                  );
-                })}
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+          <fieldset aria-label={t("recommend.layers")} className="m-0 flex min-w-0 flex-1 flex-wrap items-center gap-1.5 border-0 p-0">
+            <span className="mr-1 text-xs text-muted-foreground">{t("recommend.layers")}</span>
+            {(layersQuery.data ?? []).map((layer) => {
+              const active = activeLayers.includes(layer.id);
+              return (
+                <motion.button
+                  key={layer.id}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => toggleLayer(layer.id)}
+                  whileTap={reduce ? undefined : { scale: 0.97 }}
+                  className={cn(
+                    "inline-flex h-7 items-center gap-1 rounded-full border px-3 text-[12px] font-medium transition-colors outline-none",
+                    "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+                    active
+                      ? "border-foreground/15 bg-foreground/[0.07] text-foreground"
+                      : "border-border text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {active && <Check className="size-3" aria-hidden="true" />}
+                  {layer.title || layer.id}
+                </motion.button>
+              );
+            })}
+          </fieldset>
+
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground" aria-hidden="true">
+              {t("recommend.perLayer")}
+            </span>
+            {/* The stepper's liquid geometry is drawn at 48px; scaled to the 32px filter row. */}
+            <div className="h-8 w-36">
+              <div className="w-[13.5rem] origin-top-left scale-[0.6667]">
+                <AdaptiveStepper
+                  value={perLayer}
+                  onValueChange={setPerLayer}
+                  min={1}
+                  max={10}
+                  fill="var(--muted)"
+                  aria-label={t("recommend.perLayer")}
+                >
+                  <AdaptiveStepperDecrement />
+                  <AdaptiveStepperValue />
+                  <AdaptiveStepperIncrement />
+                </AdaptiveStepper>
               </div>
-            </fieldset>
-
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="recommend-per-layer" className="text-xs text-muted-foreground">
-                {t("recommend.perLayer")}
-              </Label>
-              <Input
-                id="recommend-per-layer"
-                type="number"
-                min={1}
-                max={10}
-                value={perLayer}
-                className="w-20"
-                onChange={(event) => {
-                  const value = event.target.valueAsNumber;
-                  if (Number.isFinite(value)) setPerLayer(Math.min(10, Math.max(1, Math.trunc(value))));
-                }}
-              />
             </div>
-
-            <Button type="submit" disabled={!canSubmit}>
-              {run.isPending && <Loader2 className="animate-spin" aria-hidden="true" />}
-              {t("recommend.submit")}
-            </Button>
-          </div>
-        </form>
-
-        {run.isPending ? (
-          <Loading />
-        ) : run.error ? (
-          <ErrorState error={run.error} />
-        ) : run.data ? (
-          <RecommendationResults
-            recommendation={run.data}
-            layerTitle={layerTitle}
-            selected={selected}
-            onToggle={toggleTech}
-            onUseProfile={useProfile}
-          />
-        ) : (
-          <Empty title={t("recommend.empty.title")} description={t("recommend.empty.description")} />
-        )}
-      </div>
-
-      {selected.size > 0 && (
-        <div className="sticky bottom-0 z-10 border-t bg-background/95 backdrop-blur">
-          <div className="mx-auto flex w-full max-w-6xl items-center gap-3 px-4 py-2">
-            <span className="text-sm font-medium">{t("recommend.selected", { count: selected.size })}</span>
-            <Button className="ml-auto" disabled={context.isPending} onClick={() => context.mutate([...selected])}>
-              <FileDown aria-hidden="true" />
-              {t("recommend.generate")}
-            </Button>
           </div>
         </div>
-      )}
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>{t("recommend.dialog.title")}</DialogTitle>
-            <DialogDescription>{t("recommend.dialog.description")}</DialogDescription>
-          </DialogHeader>
-          <pre className="max-h-[60vh] overflow-auto rounded-lg border bg-muted/40 p-3 font-mono text-xs whitespace-pre-wrap">
-            {markdown}
-          </pre>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => void copy()}>
+        <div className="mt-2">
+          {run.isPending ? (
+            <ResultsSkeleton layers={activeLayers} perLayer={Math.min(perLayer, 4)} label={t("recommend.loading")} />
+          ) : run.error ? (
+            <ErrorState error={run.error} />
+          ) : run.data ? (
+            <RecommendationResults
+              recommendation={run.data}
+              layerTitle={layerTitle}
+              selected={selected}
+              reduce={reduce}
+              onToggle={toggleTech}
+              onUseProfile={useProfile}
+            />
+          ) : (
+            <div className="flex flex-col gap-3 pt-2">
+              <p className="max-w-2xl text-sm text-muted-foreground">{t("recommend.empty.description")}</p>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="mr-1 text-xs text-muted-foreground">{t("recommend.examples")}</span>
+                {EXAMPLES.map((key) => (
+                  <motion.button
+                    key={key}
+                    type="button"
+                    onClick={() => fillExample(t(key))}
+                    whileTap={reduce ? undefined : { scale: 0.97 }}
+                    className={cn(
+                      "inline-flex h-7 max-w-full items-center truncate rounded-full border border-border bg-card px-3 text-[12px] text-muted-foreground transition-colors outline-none",
+                      "hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+                    )}
+                  >
+                    {t(key)}
+                  </motion.button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <AnimatePresence>
+        {selected.size > 0 && (
+          <motion.div
+            role="region"
+            aria-label={t("recommend.selectedBar")}
+            initial={{ opacity: 0, y: reduce ? 0 : 8, x: "-50%" }}
+            animate={{ opacity: 1, y: 0, x: "-50%" }}
+            exit={{ opacity: 0, y: reduce ? 0 : 8, x: "-50%", transition: { duration: 0.12, ease: EASE_OUT } }}
+            transition={reduce ? { duration: 0.12 } : SPRING_PANEL}
+            style={{ bottom: DOCK_BOTTOM + DOCK_HEIGHT + BAR_GAP }}
+            className="fixed left-1/2 z-40 flex items-center gap-1 rounded-full border bg-background/70 py-1 pr-1 pl-1 shadow-[0_8px_30px_rgba(0,0,0,0.25)] backdrop-blur-xl"
+          >
+            <button
+              type="button"
+              aria-label={t("recommend.clear")}
+              onClick={() => setSelected(new Set())}
+              className="grid size-7 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+            >
+              <X className="size-3.5" aria-hidden="true" />
+            </button>
+            <span className="pr-2 text-[13px] font-medium tabular-nums">{t("recommend.selected", { count: selected.size })}</span>
+            <span aria-hidden="true" className="text-muted-foreground/60">
+              ·
+            </span>
+            <Button size="sm" pressScale={0.97} className="ml-1" disabled={context.isPending} onClick={() => context.mutate([...selected])}>
+              {context.isPending ? (
+                <Loader variant="spinner" size={14} label={t("state.loading")} />
+              ) : (
+                <FileDown className="size-3.5" aria-hidden="true" />
+              )}
+              {t("recommend.generate")}
+            </Button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <CenterMorphModal open={dialogOpen} onOpenChange={setDialogOpen}>
+        <CenterMorphModalContent
+          ariaLabel={t("recommend.dialog.title")}
+          closeButtonLabel={t("recommend.close")}
+          className="max-h-[86dvh] max-w-[860px] overflow-y-auto p-5"
+        >
+          <h2 className="font-mono text-base font-semibold tracking-tight">{t("recommend.dialog.title")}</h2>
+          <p className="mt-0.5 pr-10 text-[13px] text-muted-foreground">{t("recommend.dialog.description")}</p>
+          <CodeBlock
+            code={markdown}
+            language="markdown"
+            filename="STACK.md"
+            showStatus={false}
+            copyable={false}
+            showLineNumbers
+            wrap
+            maxHeight="58dvh"
+            className="mt-4"
+          />
+          <div className="mt-4 flex justify-end gap-2">
+            <Button variant="secondary" size="sm" pressScale={0.97} onClick={() => void copy()}>
               {t("recommend.copy")}
             </Button>
-            <Button onClick={download}>
-              <Download aria-hidden="true" />
+            <Button size="sm" pressScale={0.97} onClick={download}>
+              <Download className="size-3.5" aria-hidden="true" />
               {t("recommend.download")}
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </div>
+        </CenterMorphModalContent>
+      </CenterMorphModal>
     </div>
   );
 }
