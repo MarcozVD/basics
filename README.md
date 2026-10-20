@@ -5,10 +5,20 @@ que tus agentes de código consultan y amplían vía MCP.
 
 > **Estado: experimental (0.0.x).** API, schema y CLI pueden cambiar sin aviso.
 
+## Estructura del repo
+
+Monorepo con npm/pnpm workspaces:
+
+```
+packages/core/     @marcozvd/basics-core: schema, vault y query (librería + tests)
+packages/basics/   @marcozvd/basics: CLI (cli.ts) y servidor MCP (mcp/server.ts)
+examples/vault/    vault semilla de ejemplo
+```
+
 ## Estructura del vault
 
 ```
-vault/
+examples/vault/
   layers/     capas: backend, frontend, testing, data, infra
   tech/       lenguajes, frameworks, librerías (use_when, avoid_when, performs_best, practices, checks)
   practices/  buenas prácticas (applies_to: [tech])
@@ -33,6 +43,14 @@ basics --help
 ```bash
 npm install && npm run build        # o: pnpm install && pnpm build
 npm test                            # o: pnpm test
+npm run typecheck                   # chequeo de tipos sin emitir
+```
+
+Desde el repo, contra el vault de ejemplo:
+
+```bash
+npm run cli -- --vault examples/vault list
+npm run dev:mcp -- examples/vault    # servidor MCP en desarrollo
 ```
 
 ## Uso
@@ -47,7 +65,7 @@ basics inbox approve django
 basics init-project ../mi-app -s fastapi,postgresql,pytest
 ```
 
-Desde el repo sin instalar: `npm run cli -- <comando>` o `pnpm cli <comando>`.
+Desde el repo sin instalar: `npm run cli -- --vault examples/vault <comando>` o `pnpm cli ...`.
 
 `init-project` escribe `STACK.md` (prácticas + checks del stack elegido) y añade un puntero en `AGENTS.md`.
 
@@ -56,10 +74,10 @@ Desde el repo sin instalar: `npm run cli -- <comando>` o `pnpm cli <comando>`.
 Claude Code:
 
 ```bash
-claude mcp add basics --scope user -- node /ruta/a/basics/dist/mcp/server.js /ruta/a/tu-vault
+claude mcp add basics --scope user -- node /ruta/a/basics/packages/basics/dist/mcp/server.js /ruta/a/tu-vault
 ```
 
-Otros clientes MCP (Cursor, etc.): comando `node dist/mcp/server.js <ruta-vault>` por stdio.
+Otros clientes MCP (Cursor, etc.): comando `node packages/basics/dist/mcp/server.js <ruta-vault>` por stdio.
 
 | Tool | Uso |
 |---|---|

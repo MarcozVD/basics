@@ -2,9 +2,16 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { NOTE_TYPES, noteSchema } from "../core/schema.js";
-import { Vault, resolveVaultDir } from "../core/vault.js";
-import { recommend, renderContext, search, title } from "../core/query.js";
+import {
+  NOTE_TYPES,
+  Vault,
+  noteSchema,
+  recommend,
+  renderContext,
+  resolveVaultDir,
+  search,
+  title,
+} from "@marcozvd/basics-core";
 
 const root = resolveVaultDir(process.argv[2]);
 // Reload on every call so manual edits in the vault show up immediately.

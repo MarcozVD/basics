@@ -2,7 +2,6 @@ import fs from "node:fs";
 import path from "node:path";
 import matter from "gray-matter";
 import {
-  NOTE_TYPES,
   TYPE_DIRS,
   noteSchema,
   proposalMetaSchema,
@@ -215,5 +214,3 @@ function stripEmpty(obj: Record<string, unknown>): Record<string, unknown> {
     Object.entries(obj).filter(([, v]) => v !== undefined && !(Array.isArray(v) && v.length === 0)),
   );
 }
-
-export { NOTE_TYPES, TYPE_DIRS };

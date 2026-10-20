@@ -2,9 +2,17 @@
 import fs from "node:fs";
 import path from "node:path";
 import { Command } from "commander";
-import { NOTE_TYPES, type NoteData, type NoteType } from "./core/schema.js";
-import { Vault, resolveVaultDir } from "./core/vault.js";
-import { recommend, renderContext, search, title } from "./core/query.js";
+import {
+  NOTE_TYPES,
+  Vault,
+  recommend,
+  renderContext,
+  resolveVaultDir,
+  search,
+  title,
+  type NoteData,
+  type NoteType,
+} from "@marcozvd/basics-core";
 
 const program = new Command("basics")
   .description("Personal tech-stack vault shared with coding agents")

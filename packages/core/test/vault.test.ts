@@ -3,30 +3,31 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { Vault } from "../src/core/vault.js";
-import { recommend, stackContext } from "../src/core/query.js";
+import { Vault, recommend, stackContext } from "../src/index.js";
+
+const SEED = path.resolve(import.meta.dirname, "../../../examples/vault");
 
 function tempVault(): Vault {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "basics-"));
-  fs.cpSync("vault", dir, { recursive: true });
+  fs.cpSync(SEED, dir, { recursive: true });
   return Vault.load(dir);
 }
 
 test("seed vault loads without issues", () => {
-  const v = Vault.load("vault");
+  const v = Vault.load(SEED);
   assert.deepEqual(v.issues, []);
   assert.ok(v.get("fastapi"));
   assert.ok(v.getBacklinks("python").includes("fastapi"));
 });
 
 test("recommend ranks API frameworks for an API description", () => {
-  const r = recommend(Vault.load("vault"), "API REST async para servir modelos de machine learning");
+  const r = recommend(Vault.load(SEED), "API REST async para servir modelos de machine learning");
   assert.equal(r.layers.backend[0].id, "fastapi");
   assert.equal(r.profiles[0].id, "ml-api");
 });
 
 test("stack context pulls language practices and checks", () => {
-  const ctx = stackContext(Vault.load("vault"), ["fastapi"]);
+  const ctx = stackContext(Vault.load(SEED), ["fastapi"]);
   assert.deepEqual(ctx.techs.map((t) => t.id).sort(), ["fastapi", "python"]);
   assert.ok(ctx.practices.some((p) => p.id === "python-typing"));
   assert.ok(ctx.checks.some((c) => c.id === "fastapi-endpoint-tests"));

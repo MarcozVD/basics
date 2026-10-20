@@ -3,3 +3,4 @@ dist/
 *.log
 docs/
 pnpm-lock.yaml
+*.tsbuildinfo
