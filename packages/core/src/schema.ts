@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const NOTE_TYPES = ["layer", "tech", "practice", "check", "profile"] as const;
+export const NOTE_TYPES = ["layer", "tech", "practice", "check", "profile", "project"] as const;
 export type NoteType = (typeof NOTE_TYPES)[number];
 
 // Folder each note type lives in, relative to the vault root.
@@ -10,17 +10,21 @@ export const TYPE_DIRS: Record<NoteType, string> = {
   practice: "practices",
   check: "checks",
   profile: "profiles",
+  project: "projects",
 };
 
 const list = z.array(z.string()).default([]);
 
-const base = z.object({
-  title: z.string().optional(),
-  tags: list,
-  // "manual" for human-written notes, "agent:<name>" for notes approved from the inbox.
-  source: z.string().default("manual"),
-  updated: z.string().optional(),
-});
+// Loose so unknown frontmatter fields survive a parse/round-trip; `.extend()` keeps the mode.
+const base = z
+  .object({
+    title: z.string().optional(),
+    tags: list,
+    // "manual" for human-written notes, "agent:<name>" for notes approved from the inbox.
+    source: z.string().default("manual"),
+    updated: z.string().optional(),
+  })
+  .loose();
 
 export const layerSchema = base.extend({
   type: z.literal("layer"),
@@ -32,6 +36,8 @@ export const techSchema = base.extend({
   kind: z.enum(["language", "framework", "library", "tool", "service", "database"]),
   layer: z.union([z.string(), z.array(z.string())]),
   language: z.string().optional(),
+  // Version of the tech the user's notes target, e.g. "19" or "2.7".
+  version: z.string().optional(),
   use_when: list,
   avoid_when: list,
   performs_best: list,
@@ -43,6 +49,9 @@ export const techSchema = base.extend({
 export const practiceSchema = base.extend({
   type: z.literal("practice"),
   applies_to: list,
+  // Version range the note is valid for: since inclusive, until exclusive.
+  since: z.string().optional(),
+  until: z.string().optional(),
 });
 
 export const checkSchema = base.extend({
@@ -51,6 +60,8 @@ export const checkSchema = base.extend({
   kind: z.enum(["test", "lint", "review", "build"]).default("test"),
   // Optional shell command an agent can run to perform the check.
   command: z.string().optional(),
+  since: z.string().optional(),
+  until: z.string().optional(),
 });
 
 export const profileSchema = base.extend({
@@ -61,7 +72,29 @@ export const profileSchema = base.extend({
   stack: z.record(z.string(), z.array(z.string())).default({}),
 });
 
-export const noteSchema = z.discriminatedUnion("type", [layerSchema, techSchema, practiceSchema, checkSchema, profileSchema]);
+export const projectSchema = base.extend({
+  type: z.literal("project"),
+  description: z.string().optional(),
+  // Absolute path of the project on disk.
+  path: z.string().optional(),
+  status: z.enum(["active", "paused", "archived"]).default("active"),
+  // Profile id it started from.
+  profile: z.string().optional(),
+  // layer id -> tech ids
+  stack: z.record(z.string(), z.array(z.string())).default({}),
+  reason: z.string().optional(),
+  // Short learnings for the vault.
+  lessons: list,
+});
+
+export const noteSchema = z.discriminatedUnion("type", [
+  layerSchema,
+  techSchema,
+  practiceSchema,
+  checkSchema,
+  profileSchema,
+  projectSchema,
+]);
 
 export type NoteData = z.infer<typeof noteSchema>;
 export type TechData = z.infer<typeof techSchema>;

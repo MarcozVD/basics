@@ -24,10 +24,14 @@ examples/vault/
   practices/  buenas prácticas (applies_to: [tech])
   checks/     validaciones que el código generado debe pasar (kind, command)
   profiles/   combinaciones de stack para tipos de proyecto
+  projects/   proyectos (description, path, status active|paused|archived, profile, stack, reason, lessons)
   inbox/      propuestas de agentes pendientes de aprobación
 ```
 
 El vault es una carpeta normal: se puede abrir también con Obsidian y versionar con git.
+
+Schema v2: `tech` admite `version`; `practices` y `checks` admiten `since`/`until` (rango de versiones, el filtrado llega en M4);
+los campos de frontmatter desconocidos se conservan al leer y reescribir notas.
 
 ## Instalación
 

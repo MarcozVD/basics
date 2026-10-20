@@ -67,6 +67,13 @@ function frontmatterRefs(data: NoteData): string[] {
         push(techs);
       });
       break;
+    case "project":
+      push(data.profile);
+      Object.entries(data.stack).forEach(([layer, techs]) => {
+        push(layer);
+        push(techs);
+      });
+      break;
   }
   return refs;
 }

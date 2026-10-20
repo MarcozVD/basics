@@ -96,6 +96,7 @@ program
       practice: { type: "practice", applies_to: ["TODO"], tags: [], source: "manual" },
       check: { type: "check", kind: "test", applies_to: ["TODO"], tags: [], source: "manual" },
       profile: { type: "profile", use_when: ["TODO"], stack: {}, tags: [], source: "manual" },
+      project: { type: "project", status: "active", stack: {}, lessons: [], tags: [], source: "manual" },
     };
     console.log(v.writeNote(id, { ...templates[type], title: id }, `# ${id}\n\nTODO`));
   });
