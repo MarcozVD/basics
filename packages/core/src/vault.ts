@@ -31,10 +31,6 @@ export function slugify(s: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
-export function resolveVaultDir(explicit?: string): string {
-  return path.resolve(explicit ?? process.env.BASICS_DIR ?? "vault");
-}
-
 function walk(dir: string): string[] {
   if (!fs.existsSync(dir)) return [];
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
@@ -102,6 +98,14 @@ export class ConflictError extends Error {
   }
 }
 
+/** Thrown when the vault directory does not exist. */
+export class VaultNotFoundError extends Error {
+  constructor(readonly root: string) {
+    super(`Vault not found at ${root}. Pass --vault <dir>, set BASICS_DIR, or run: basics config set vault <dir>`);
+    this.name = "VaultNotFoundError";
+  }
+}
+
 export class Vault {
   readonly notes = new Map<string, Note>();
   readonly backlinks = new Map<string, Set<string>>();
@@ -110,6 +114,7 @@ export class Vault {
   constructor(readonly root: string) {}
 
   static load(root: string): Vault {
+    if (!fs.existsSync(root) || !fs.statSync(root).isDirectory()) throw new VaultNotFoundError(root);
     const v = new Vault(root);
     v.reload();
     return v;

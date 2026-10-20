@@ -1,5 +1,15 @@
 #!/usr/bin/env node
-import { NOTE_TYPES, noteSchema, recommend, renderContext, resolveVaultDir, search, title, Vault } from "@marcozvd/basics-core";
+import {
+  NOTE_TYPES,
+  noteSchema,
+  recommend,
+  renderContext,
+  resolveVaultDir,
+  search,
+  title,
+  Vault,
+  VaultNotFoundError,
+} from "@marcozvd/basics-core";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
@@ -12,6 +22,16 @@ const json = (value: unknown) => ({ content: [{ type: "text" as const, text: JSO
 const text = (value: string) => ({ content: [{ type: "text" as const, text: value }] });
 const fail = (message: string) => ({ content: [{ type: "text" as const, text: message }], isError: true });
 
+// Report a missing vault as a tool error instead of crashing the whole server.
+const withVault = <T>(fn: () => T) => {
+  try {
+    return fn();
+  } catch (err) {
+    if (err instanceof VaultNotFoundError) return fail(err.message);
+    throw err;
+  }
+};
+
 const server = new McpServer({ name: "basics", version: "0.0.1" });
 
 server.registerTool(
@@ -20,16 +40,17 @@ server.registerTool(
     description: "List the stack layers (backend, frontend, testing, ...) and the technologies stored under each.",
     inputSchema: {},
   },
-  async () => {
-    const v = vault();
-    return json(
-      v.byType("layer").map((l) => ({
-        id: l.id,
-        title: title(l),
-        techs: v.techInLayer(l.id).map((t) => t.id),
-      })),
-    );
-  },
+  async () =>
+    withVault(() => {
+      const v = vault();
+      return json(
+        v.byType("layer").map((l) => ({
+          id: l.id,
+          title: title(l),
+          techs: v.techInLayer(l.id).map((t) => t.id),
+        })),
+      );
+    }),
 );
 
 server.registerTool(
@@ -43,7 +64,7 @@ server.registerTool(
       limit: z.number().int().positive().max(50).optional(),
     },
   },
-  async ({ query, type, layer, limit }) => json(search(vault(), query, { type, layer, limit })),
+  async ({ query, type, layer, limit }) => withVault(() => json(search(vault(), query, { type, layer, limit }))),
 );
 
 server.registerTool(
@@ -52,12 +73,13 @@ server.registerTool(
     description: "Read a vault note (frontmatter + markdown body) plus which notes link to it.",
     inputSchema: { id: z.string() },
   },
-  async ({ id }) => {
-    const v = vault();
-    const n = v.get(id);
-    if (!n) return fail(`note "${id}" not found`);
-    return json({ id: n.id, data: n.data, body: n.body, links: n.links, backlinks: v.getBacklinks(n.id), hash: n.hash });
-  },
+  async ({ id }) =>
+    withVault(() => {
+      const v = vault();
+      const n = v.get(id);
+      if (!n) return fail(`note "${id}" not found`);
+      return json({ id: n.id, data: n.data, body: n.body, links: n.links, backlinks: v.getBacklinks(n.id), hash: n.hash });
+    }),
 );
 
 server.registerTool(
@@ -72,7 +94,7 @@ server.registerTool(
       per_layer: z.number().int().positive().max(10).optional(),
     },
   },
-  async ({ description, layers, per_layer }) => json(recommend(vault(), description, { layers, perLayer: per_layer })),
+  async ({ description, layers, per_layer }) => withVault(() => json(recommend(vault(), description, { layers, perLayer: per_layer }))),
 );
 
 server.registerTool(
@@ -83,7 +105,7 @@ server.registerTool(
       "Call once the stack is chosen and follow it while writing code; run the listed checks before declaring work done.",
     inputSchema: { tech_ids: z.array(z.string()).min(1) },
   },
-  async ({ tech_ids }) => text(renderContext(vault(), tech_ids)),
+  async ({ tech_ids }) => withVault(() => text(renderContext(vault(), tech_ids))),
 );
 
 server.registerTool(
@@ -105,8 +127,10 @@ server.registerTool(
   async ({ id, type, frontmatter, body, reason, agent }) => {
     const parsed = noteSchema.safeParse({ ...frontmatter, type });
     if (!parsed.success) return fail(`invalid frontmatter: ${parsed.error.message}`);
-    const p = vault().propose(id, parsed.data, body, { proposed_by: agent, reason });
-    return json({ status: "pending_review", id: p.id, action: p.meta.action, path: p.path });
+    return withVault(() => {
+      const p = vault().propose(id, parsed.data, body, { proposed_by: agent, reason });
+      return json({ status: "pending_review", id: p.id, action: p.meta.action, path: p.path });
+    });
   },
 );
 
@@ -117,10 +141,12 @@ server.registerTool(
     inputSchema: {},
   },
   async () =>
-    json(
-      vault()
-        .listProposals()
-        .map(({ id, meta, data }) => ({ id, type: data.type, ...meta })),
+    withVault(() =>
+      json(
+        vault()
+          .listProposals()
+          .map(({ id, meta, data }) => ({ id, type: data.type, ...meta })),
+      ),
     ),
 );
 

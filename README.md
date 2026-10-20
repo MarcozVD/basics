@@ -42,6 +42,21 @@ npm install -g @marcozvd/basics     # o: pnpm add -g @marcozvd/basics
 basics --help
 ```
 
+## Configuración
+
+Config global en `~/.config/basics/config.json` (ruta alternativa con `BASICS_CONFIG`). Claves: `vault`, `language` (`en`|`es`), `embeddings` (`true`|`false`).
+
+```bash
+basics config path                    # ruta del archivo de config
+basics config get                     # config actual + vault resuelto
+basics config set vault ~/mi-vault    # vault (guardado como ruta absoluta)
+basics config set language es
+basics config set embeddings true
+```
+
+El vault se resuelve en este orden de prioridad: flag `--vault` > variable `BASICS_DIR` > `vault` en config > `~/basics-vault` (por defecto).
+Si no existe, la CLI avisa con `Vault not found` (sin stack trace) y las tools MCP devuelven el error en vez de fallar.
+
 ## Desarrollo
 
 ```bash
@@ -84,7 +99,7 @@ Claude Code:
 claude mcp add basics --scope user -- node /ruta/a/basics/packages/basics/dist/mcp/server.js /ruta/a/tu-vault
 ```
 
-Otros clientes MCP (Cursor, etc.): comando `node packages/basics/dist/mcp/server.js <ruta-vault>` por stdio.
+Otros clientes MCP (Cursor, etc.): comando `node packages/basics/dist/mcp/server.js [ruta-vault]` por stdio (si se omite, se resuelve con la config global).
 
 | Tool | Uso |
 |---|---|

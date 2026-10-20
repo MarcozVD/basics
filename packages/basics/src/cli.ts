@@ -2,12 +2,17 @@
 import fs from "node:fs";
 import path from "node:path";
 import {
+  configPath,
+  configSchema,
+  expandHome,
+  loadConfig,
   NOTE_TYPES,
   type NoteData,
   type NoteType,
   recommend,
   renderContext,
   resolveVaultDir,
+  saveConfig,
   search,
   title,
   Vault,
@@ -16,9 +21,39 @@ import { Command } from "commander";
 
 const program = new Command("basics")
   .description("Personal tech-stack vault shared with coding agents")
-  .option("-v, --vault <dir>", "vault directory (default: $BASICS_DIR or ./vault)");
+  .option("-v, --vault <dir>", 'vault directory (default: $BASICS_DIR, config "vault", or ~/basics-vault)');
 
 const load = () => Vault.load(resolveVaultDir(program.opts().vault));
+
+const config = program.command("config").description("read or change the global basics config");
+config
+  .command("path")
+  .description("print the config file path")
+  .action(() => console.log(configPath()));
+config
+  .command("get")
+  .description("print the config and the resolved vault directory")
+  .action(() => {
+    console.log(JSON.stringify(loadConfig(), null, 2));
+    console.log(`vault (resolved): ${resolveVaultDir(program.opts().vault)}`);
+  });
+config
+  .command("set <key> <value>")
+  .description("set vault <dir>, language <en|es> or embeddings <true|false>")
+  .action((key: string, value: string) => {
+    const next: Record<string, unknown> = { ...loadConfig() };
+    if (key === "vault") next.vault = path.resolve(expandHome(value));
+    else if (key === "language") {
+      if (value !== "en" && value !== "es") throw new Error("language must be en or es");
+      next.language = value;
+    } else if (key === "embeddings") {
+      if (value !== "true" && value !== "false") throw new Error("embeddings must be true or false");
+      next.embeddings = value === "true";
+    } else throw new Error(`unknown config key "${key}" (expected vault, language or embeddings)`);
+    const parsed = configSchema.parse(next);
+    saveConfig(parsed);
+    console.log(JSON.stringify(parsed, null, 2));
+  });
 
 program
   .command("list")
