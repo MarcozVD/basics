@@ -1,0 +1,40 @@
+import { useQuery } from "@tanstack/react-query";
+import { getConfig, getHealth, getInbox, getLayers, getNote, getNotes, getProposal, type NoteFilter } from "./api";
+
+export const queryKeys = {
+  health: ["health"] as const,
+  layers: ["layers"] as const,
+  notes: (filter: NoteFilter) => ["notes", filter] as const,
+  note: (id: string) => ["note", id] as const,
+  inbox: ["inbox"] as const,
+  proposal: (id: string) => ["proposal", id] as const,
+  config: ["config"] as const,
+};
+
+export function useHealth() {
+  return useQuery({ queryKey: queryKeys.health, queryFn: getHealth });
+}
+
+export function useLayers() {
+  return useQuery({ queryKey: queryKeys.layers, queryFn: getLayers });
+}
+
+export function useNotes(filter: NoteFilter = {}) {
+  return useQuery({ queryKey: queryKeys.notes(filter), queryFn: () => getNotes(filter) });
+}
+
+export function useNote(id: string | undefined) {
+  return useQuery({ queryKey: queryKeys.note(id ?? ""), queryFn: () => getNote(id ?? ""), enabled: Boolean(id) });
+}
+
+export function useInbox() {
+  return useQuery({ queryKey: queryKeys.inbox, queryFn: getInbox });
+}
+
+export function useProposal(id: string | undefined) {
+  return useQuery({ queryKey: queryKeys.proposal(id ?? ""), queryFn: () => getProposal(id ?? ""), enabled: Boolean(id) });
+}
+
+export function useConfig() {
+  return useQuery({ queryKey: queryKeys.config, queryFn: getConfig });
+}

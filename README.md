@@ -13,7 +13,8 @@ Monorepo con npm/pnpm workspaces:
 
 ```
 packages/core/     @marcozvd/basics-core: schema, vault y query (librería + tests)
-packages/basics/   @marcozvd/basics: CLI (cli.ts) y servidor MCP (mcp/server.ts)
+packages/basics/   @marcozvd/basics: CLI (cli.ts), servidor HTTP/MCP (server/, mcp/)
+packages/ui/       @marcozvd/basics-ui: UI web (React + Vite; se sirve desde basics ui)
 examples/vault/    vault semilla de ejemplo
 ```
 
@@ -66,7 +67,10 @@ npm install && npm run build        # o: pnpm install && pnpm build
 npm test                            # Vitest (una vez); npm run test:watch en watch mode
 npm run typecheck                   # chequeo de tipos sin emitir
 npm run lint                        # Biome: lint (npm run format para aplicar fixes)
+npm run dev:ui                      # Vite en desarrollo, proxy hacia la API de `basics ui`
 ```
+
+`npm run build` compila core, basics y la UI, y la copia a `packages/basics/dist/ui` (la sirve `basics ui`).
 
 El repo usa Biome para lint/format (2 espacios, línea máx. 140) y fuerza fin de línea LF con `.gitattributes`.
 
