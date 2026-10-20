@@ -5,7 +5,7 @@
 Vault personal de tu stack tecnológico (estilo Obsidian: Markdown + frontmatter + `[[wikilinks]]`)
 que tus agentes de código consultan y amplían vía MCP.
 
-> **Estado: experimental (0.0.x).** API, schema y CLI pueden cambiar sin aviso.
+> **Estado: experimental (0.x).** API, schema y CLI pueden cambiar sin aviso.
 
 ## Estructura del repo
 
@@ -44,6 +44,35 @@ Paquete npm: [`@marcozvd/basics`](https://www.npmjs.com/package/@marcozvd/basics
 npm install -g @marcozvd/basics     # o: pnpm add -g @marcozvd/basics
 basics --help
 ```
+
+## Interfaz web
+
+```bash
+basics ui                            # sirve y abre http://127.0.0.1:4747
+basics ui --port 5000                # otro puerto
+basics ui --no-open                  # sin abrir el navegador
+```
+
+Pantallas:
+
+- **Explorar**: filtros por capa y tipo con conteos, búsqueda, navegación por teclado y diálogo para crear notas.
+- **Editor**: formulario de frontmatter generado por cada tipo de nota, cuerpo markdown, panel de links/backlinks; guarda con `Ctrl+S`;
+  si la nota cambió en disco aparece un banner de conflicto (Recargar / Sobrescribir).
+- **Inbox**: propuestas con diff lado a lado o unificado; Aprobar, Editar y aprobar o Rechazar con los atajos `a` / `e` / `r`.
+- **Recomendar**: descripción del proyecto y capas → perfiles y candidatos por capa (`use_when`, `performs_best`, `avoid_when`),
+  selección de candidatos y generación de `STACK.md` (copiar o descargar).
+
+La UI se actualiza en vivo cuando cambian los archivos del vault (SSE) y trae selector de idioma EN/ES y tema claro/oscuro.
+
+MCP sobre HTTP mientras corre `basics ui` (stateless streamable HTTP en `http://127.0.0.1:4747/mcp`):
+
+```bash
+claude mcp add --transport http basics http://127.0.0.1:4747/mcp
+```
+
+Seguridad: el servidor solo escucha en `127.0.0.1` y rechaza peticiones con `Host`/`Origin` que no sean de localhost.
+
+En desarrollo: `basics ui --no-open` (API local) junto a `npm run dev:ui` (Vite con proxy); E2E con `npm run e2e` (requiere build antes).
 
 ## Configuración
 
@@ -107,11 +136,7 @@ Claude Code:
 claude mcp add basics --scope user -- node /ruta/a/basics/packages/basics/dist/mcp/server.js /ruta/a/tu-vault
 ```
 
-Con `basics ui` corriendo, también por HTTP (stateless streamable HTTP en el mismo proceso local):
-
-```bash
-claude mcp add --transport http basics http://127.0.0.1:4747/mcp
-```
+Con `basics ui` corriendo, el mismo servidor también expone MCP por HTTP (ver *Interfaz web*).
 
 Otros clientes MCP (Cursor, etc.): comando `node packages/basics/dist/mcp/server.js [ruta-vault]` por stdio (si se omite, se resuelve con la config global).
 

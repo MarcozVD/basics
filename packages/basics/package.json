@@ -1,6 +1,6 @@
 {
   "name": "@marcozvd/basics",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Personal tech-stack knowledge vault shared with your coding agents via MCP",
   "type": "module",
   "license": "MIT",
@@ -24,7 +24,7 @@
   ],
   "dependencies": {
     "@hono/node-server": "^2.1.5",
-    "@marcozvd/basics-core": "0.0.1",
+    "@marcozvd/basics-core": "0.1.0",
     "@modelcontextprotocol/sdk": "^1.32.1",
     "chokidar": "^5.0.0",
     "commander": "^15.0.0",
