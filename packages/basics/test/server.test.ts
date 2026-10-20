@@ -33,6 +33,15 @@ test("GET /api/health returns ok", async () => {
   assert.equal(body.ok, true);
 });
 
+test("POST /api/context renders stack markdown", async () => {
+  const v = tempVault();
+  const app = createApp({ root: v.root });
+  const res = await app.request("/api/context", jsonInit({ techIds: ["fastapi"] }));
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as { markdown: string };
+  assert.match(body.markdown, /FastAPI/);
+});
+
 test("GET /api/notes filters tech notes by layer", async () => {
   const v = tempVault();
   const app = createApp({ root: v.root });

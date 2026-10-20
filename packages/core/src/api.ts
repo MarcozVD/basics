@@ -66,6 +66,14 @@ export interface RecommendRequest {
   perLayer?: number;
 }
 
+export interface ContextRequest {
+  techIds: string[];
+}
+
+export interface ContextResponse {
+  markdown: string;
+}
+
 export interface ApiError {
   error: "conflict" | "invalid" | "not_found" | "vault_not_found" | "exists" | "forbidden" | "internal";
   message: string;

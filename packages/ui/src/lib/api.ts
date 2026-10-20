@@ -1,6 +1,7 @@
 import type {
   ApiError,
   ApproveRequest,
+  ContextResponse,
   CreateNoteRequest,
   LayerSummary,
   NoteDetail,
@@ -108,6 +109,10 @@ export function search(q: string, filter: NoteFilter = {}): Promise<SearchHit[]>
 
 export function recommend(body: RecommendRequest): Promise<Recommendation> {
   return request<Recommendation>("/api/recommend", { method: "POST", body: JSON.stringify(body) });
+}
+
+export function getContext(techIds: string[]): Promise<ContextResponse> {
+  return request<ContextResponse>("/api/context", { method: "POST", body: JSON.stringify({ techIds }) });
 }
 
 export function getInbox(): Promise<ProposalSummary[]> {

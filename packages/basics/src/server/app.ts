@@ -6,6 +6,7 @@ import {
   type ApiError,
   type ApproveRequest,
   ConflictError,
+  type ContextResponse,
   type CreateNoteRequest,
   configSchema,
   type LayerSummary,
@@ -16,6 +17,7 @@ import {
   proposalDetail,
   type RecommendRequest,
   recommend,
+  renderContext,
   type SaveNoteRequest,
   saveConfig,
   search,
@@ -27,13 +29,15 @@ import {
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
-import { ZodError } from "zod";
+import { ZodError, z } from "zod";
 import { createMcpServer } from "../mcp/tools.js";
 import type { EventHub } from "./events.js";
 
 const { version } = createRequire(import.meta.url)("../../package.json") as { version: string };
 
 const ALLOWED_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
+const contextRequestSchema = z.object({ techIds: z.array(z.string()).min(1) });
 
 function hostnameOf(value: string): string | undefined {
   try {
@@ -152,6 +156,11 @@ export function createApp(opts: { root: string; uiDir?: string; events?: EventHu
   app.post("/api/recommend", async (c) => {
     const body = await c.req.json<RecommendRequest>();
     return c.json(recommend(vault(), body.description, { layers: body.layers, perLayer: body.perLayer }));
+  });
+
+  app.post("/api/context", async (c) => {
+    const body = contextRequestSchema.parse(await c.req.json());
+    return c.json({ markdown: renderContext(vault(), body.techIds) } satisfies ContextResponse);
   });
 
   app.get("/api/inbox", (c) => {
