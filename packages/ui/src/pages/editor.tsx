@@ -334,7 +334,7 @@ export function EditorPage() {
 
   return (
     <div className="mx-auto w-full px-5 pt-4 pb-32" style={{ maxWidth: view === "split" ? 1200 : 760 }}>
-      <header className="sticky top-0 z-30 -mx-5 flex items-center gap-2 border-b border-border/60 bg-background px-5 py-2">
+      <header className="sticky top-0 z-30 flex items-center gap-2 border-b border-border/60 bg-background py-2">
         <Breadcrumb className="min-w-0 flex-1">
           <BreadcrumbList maxItems={Number.POSITIVE_INFINITY} className="flex-nowrap gap-x-0.5 text-xs">
             <BreadcrumbItem key="explore">
@@ -483,7 +483,7 @@ export function EditorPage() {
         </AlertContent>
       </Alert>
 
-      <div className="mt-5 max-w-[720px]">
+      <div className="mt-5">
         <input
           aria-label={t("field.title")}
           value={data.title ?? ""}
@@ -521,7 +521,7 @@ export function EditorPage() {
         </div>
       </div>
 
-      <div className="mt-4">
+      <div className="mt-3">
         <NoteForm
           type={note.type}
           data={data}

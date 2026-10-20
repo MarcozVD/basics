@@ -47,17 +47,17 @@ export function NoteForm({
 
   return (
     <Collapsible open={open} onOpenChange={updateOpen}>
-      <CollapsibleTrigger className="min-h-8 w-full justify-start gap-1 rounded-lg px-1 text-[11px] font-semibold tracking-wider text-muted-foreground uppercase hover:bg-muted/40">
+      <CollapsibleTrigger className="min-h-6 py-0.5 w-full justify-start gap-1 rounded-lg px-1 text-[11px] font-semibold tracking-wider text-muted-foreground uppercase hover:bg-muted/40">
         <span aria-hidden="true" className="inline-flex size-3.5 shrink-0 items-center justify-center text-muted-foreground">
           <ChevronDown className={cn("size-3.5 transition-transform duration-200", !open && "-rotate-90")} />
         </span>
         {t("editor.properties")}
       </CollapsibleTrigger>
       <CollapsibleContent>
-        <div className="mt-1.5 grid max-w-[720px] grid-cols-[132px_minmax(0,1fr)] items-start gap-x-3 gap-y-1 pb-2">
+        <div className="grid grid-cols-[132px_minmax(0,1fr)] items-start gap-x-3">
           {fields.map((field) => (
             <Fragment key={field.key}>
-              <label htmlFor={`field-${field.key}`} className="truncate px-2 pt-1.5 text-[12px] leading-5 text-muted-foreground">
+              <label htmlFor={`field-${field.key}`} className="truncate px-1 text-[12px] leading-7 text-muted-foreground">
                 {t(`field.${field.key}` as TranslationKey)}
               </label>
               <div className="min-w-0">
