@@ -64,6 +64,7 @@ Si no existe, la CLI avisa con `Vault not found` (sin stack trace) y las tools M
 
 ```bash
 npm install && npm run build        # o: pnpm install && pnpm build
+npm run e2e                         # Playwright E2E (requiere npm run build antes)
 npm test                            # Vitest (una vez); npm run test:watch en watch mode
 npm run typecheck                   # chequeo de tipos sin emitir
 npm run lint                        # Biome: lint (npm run format para aplicar fixes)

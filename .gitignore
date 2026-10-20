@@ -4,3 +4,6 @@ dist/
 docs/
 pnpm-lock.yaml
 *.tsbuildinfo
+packages/ui/test-results/
+packages/ui/playwright-report/
+packages/ui/e2e/.vault-path
