@@ -90,7 +90,7 @@ Otros clientes MCP (Cursor, etc.): comando `node packages/basics/dist/mcp/server
 |---|---|
 | `list_layers` | capas y tecnologías |
 | `search_vault` | búsqueda full-text |
-| `get_note` | nota + backlinks |
+| `get_note` | nota + backlinks + `hash` (para detectar conflictos al escribir) |
 | `recommend_stack` | shortlist por capa a partir de una descripción del proyecto |
 | `get_stack_context` | prácticas + checks del stack elegido, en markdown |
 | `propose_note` | agente propone nota nueva o cambio, va a `inbox/` |

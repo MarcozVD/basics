@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import matter from "gray-matter";
+import { atomicWrite, sha256 } from "./fsutil.js";
 import {
   type Note,
   type NoteData,
@@ -89,6 +90,18 @@ export interface LoadIssue {
   message: string;
 }
 
+/** Thrown when a note changed on disk since it was read (its hash no longer matches). */
+export class ConflictError extends Error {
+  constructor(
+    readonly path: string,
+    readonly expectedHash: string,
+    readonly actualHash: string,
+  ) {
+    super(`note changed on disk since it was read: ${path}`);
+    this.name = "ConflictError";
+  }
+}
+
 export class Vault {
   readonly notes = new Map<string, Note>();
   readonly backlinks = new Map<string, Set<string>>();
@@ -131,14 +144,15 @@ export class Vault {
 
   private parseFile(file: string): Note | undefined {
     try {
-      const { data, content } = matter(fs.readFileSync(file, "utf8"));
+      const raw = fs.readFileSync(file, "utf8");
+      const { data, content } = matter(raw);
       const parsed = noteSchema.safeParse(data);
       if (!parsed.success) {
         this.issues.push({ path: file, message: parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ") });
         return;
       }
       const id = slugify(path.basename(file, ".md"));
-      return { id, path: file, data: parsed.data, body: content.trim(), links: extractLinks(parsed.data, content) };
+      return { id, path: file, data: parsed.data, body: content.trim(), links: extractLinks(parsed.data, content), hash: sha256(raw) };
     } catch (err) {
       this.issues.push({ path: file, message: String(err) });
     }
@@ -166,13 +180,17 @@ export class Vault {
   }
 
   /** Writes a note directly into the vault (used by humans / approvals). */
-  writeNote(id: string, data: NoteData, body: string): string {
+  writeNote(id: string, data: NoteData, body: string, opts: { expectedHash?: string } = {}): string {
     const parsed = noteSchema.parse(data);
     const existing = this.get(id);
     const file = existing?.path ?? path.join(this.root, TYPE_DIRS[parsed.type], `${slugify(id)}.md`);
+    if (opts.expectedHash && fs.existsSync(file)) {
+      const actualHash = sha256(fs.readFileSync(file, "utf8"));
+      if (actualHash !== opts.expectedHash) throw new ConflictError(file, opts.expectedHash, actualHash);
+    }
     fs.mkdirSync(path.dirname(file), { recursive: true });
     const stamped = { ...parsed, updated: new Date().toISOString().slice(0, 10) };
-    fs.writeFileSync(file, matter.stringify(`${body.trim()}\n`, stripEmpty(stamped)));
+    atomicWrite(file, matter.stringify(`${body.trim()}\n`, stripEmpty(stamped)));
     this.reload();
     return file;
   }
@@ -186,7 +204,7 @@ export class Vault {
     const proposal: ProposalMeta = { ...meta, action, created: new Date().toISOString() };
     const file = path.join(this.root, INBOX_DIR, `${slug}.md`);
     fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.writeFileSync(file, matter.stringify(`${body.trim()}\n`, { ...stripEmpty(parsed), proposal }));
+    atomicWrite(file, matter.stringify(`${body.trim()}\n`, { ...stripEmpty(parsed), proposal }));
     return { id: slug, path: file, meta: proposal, data: parsed, body };
   }
 

@@ -56,7 +56,7 @@ server.registerTool(
     const v = vault();
     const n = v.get(id);
     if (!n) return fail(`note "${id}" not found`);
-    return json({ id: n.id, data: n.data, body: n.body, links: n.links, backlinks: v.getBacklinks(n.id) });
+    return json({ id: n.id, data: n.data, body: n.body, links: n.links, backlinks: v.getBacklinks(n.id), hash: n.hash });
   },
 );
 

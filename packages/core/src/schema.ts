@@ -114,6 +114,8 @@ export interface Note {
   body: string;
   // Outgoing link targets (frontmatter references + [[wikilinks]] in body).
   links: string[];
+  // sha256 hex of the raw file content, for conflict detection on write.
+  hash: string;
 }
 
 export interface Proposal {
