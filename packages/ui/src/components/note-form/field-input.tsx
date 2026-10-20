@@ -117,12 +117,16 @@ function ListField({ id, field, value, onChange }: { id: string; field: Field; v
           </button>
         </div>
       ))}
-      {/* The add row collapses until the field is hovered or holds focus; it stays in the tab order. */}
+      {/* The add row always reserves its height so hovering never shifts the form; it only fades in on
+          hover or focus (or while it holds a draft) and stays in the tab order. */}
       <div
         className={cn(
-          "flex items-center gap-1 overflow-hidden",
+          "flex items-center gap-1",
           items.length > 0
-            ? "h-0 opacity-0 group-focus-within/list:h-[26px] group-focus-within/list:opacity-100 group-hover/list:h-[26px] group-hover/list:opacity-100"
+            ? cn(
+                "h-[26px] transition-opacity duration-150 group-focus-within/list:opacity-100 group-hover/list:opacity-100",
+                draft ? "opacity-100" : "opacity-0",
+              )
             : "h-7",
         )}
       >

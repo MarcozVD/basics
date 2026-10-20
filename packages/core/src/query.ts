@@ -52,6 +52,36 @@ export function title(n: Note): string {
   return n.data.title ?? n.id;
 }
 
+const EXCERPT_MAX = 120;
+
+function clip(text: string): string {
+  const clean = text
+    .replace(/\[\[([^\]|]+)\|([^\]]+)\]\]/g, "$2")
+    .replace(/\[\[([^\]]+)\]\]/g, "$1")
+    .replace(/[*_`]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return clean.length > EXCERPT_MAX ? `${clean.slice(0, EXCERPT_MAX - 1).trimEnd()}…` : clean;
+}
+
+/** One-line teaser: a tech note's first `use_when`, else the first body line that is not a heading. */
+export function excerpt(n: Note): string | undefined {
+  const useWhen = n.data.type === "tech" ? (n.data as TechData).use_when?.[0] : undefined;
+  if (useWhen?.trim()) return clip(useWhen);
+  let fenced = false;
+  for (const raw of n.body.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (line.startsWith("```")) {
+      fenced = !fenced;
+      continue;
+    }
+    if (fenced || !line || line.startsWith("#") || /^(-{3,}|\*{3,})$/.test(line)) continue;
+    const text = clip(line.replace(/^([-*+]|\d+\.)\s+/, "").replace(/^>\s*/, ""));
+    if (text) return text;
+  }
+  return undefined;
+}
+
 /** Compact list entries sorted by type then title. */
 export function listNotes(vault: Vault, opts: { type?: NoteType; layer?: string } = {}): NoteSummary[] {
   const layerId = opts.layer ? toId(opts.layer) : undefined;
@@ -67,6 +97,8 @@ export function listNotes(vault: Vault, opts: { type?: NoteType; layer?: string 
         kind: tech?.kind,
         source: n.data.source,
         updated: n.data.updated,
+        tags: n.data.tags ?? [],
+        excerpt: excerpt(n),
       };
     })
     .filter((n) => !layerId || n.layers.includes(layerId))

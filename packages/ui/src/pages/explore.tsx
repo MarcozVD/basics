@@ -1,27 +1,33 @@
 import type { NoteType } from "@marcozvd/basics-core";
-import { cn } from "cn";
-import { Plus, Search } from "lucide-react";
-import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useMemo, useState } from "react";
+import { ArrowDownUp, Layers, LayoutGrid, LayoutList, Plus, Search, SearchX } from "lucide-react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { AnimatedNumber } from "@/components/motion/animated-number";
-import {
-  Select as MotionSelect,
-  SelectContent as MotionSelectContent,
-  SelectItem as MotionSelectItem,
-  SelectTrigger as MotionSelectTrigger,
-  SelectValue as MotionSelectValue,
-} from "@/components/motion/select";
+import { Button } from "@/components/motion/button/base";
+import { CARD_TARGET_CLASS, Card, CardContent, CardFooter, CardHeader } from "@/components/motion/card";
+import { Input } from "@/components/motion/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/motion/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/motion/tabs";
-import { Empty, ErrorState, Loading } from "@/components/state";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { TypeChip } from "@/components/note-form/note-preview";
+import { ErrorState, Loading } from "@/components/state";
 import { type TranslationKey, useT } from "@/i18n";
-import type { NoteFilter } from "@/lib/api";
+import { EASE_OUT, SPRING_LAYOUT, SPRING_PRESS } from "@/lib/ease";
 import { useLayers, useNotes, useSearch } from "@/lib/queries";
+import { cn } from "@/lib/utils";
 
 const TYPE_ORDER: NoteType[] = ["tech", "practice", "check", "profile", "project", "layer"];
-const ALL_TYPES: NoteType[] = ["layer", "tech", "practice", "check", "profile", "project"];
+const SORTS = ["title", "updated", "type"] as const;
+const VIEWS = ["list", "grid"] as const;
+type Sort = (typeof SORTS)[number];
+type View = (typeof VIEWS)[number];
+const DEFAULT_SORT: Sort = "type";
+const DEFAULT_VIEW: View = "list";
+
+/** Only the first items of a list stagger in; the rest appear with them. */
+const STAGGER_LIMIT = 10;
+const STAGGER_STEP = 0.02;
+const MAX_TAGS = 3;
 
 interface Row {
   id: string;
@@ -29,16 +35,44 @@ interface Row {
   title: string;
   source: string;
   kind?: string;
+  layers: string[];
+  tags: string[];
+  excerpt?: string;
+  updated?: string;
+}
+
+interface Group {
+  type: NoteType | null;
+  start: number;
+  rows: Row[];
+}
+
+const typeColor = (type: NoteType) => `var(--type-${type})`;
+
+function pick<T extends string>(value: string | null, options: readonly T[], fallback: T): T {
+  return value && (options as readonly string[]).includes(value) ? (value as T) : fallback;
+}
+
+function sortRows(rows: Row[], sort: Sort): Row[] {
+  const byTitle = (a: Row, b: Row) => a.title.localeCompare(b.title);
+  const sorted = [...rows];
+  if (sort === "title") return sorted.sort(byTitle);
+  if (sort === "updated") return sorted.sort((a, b) => (b.updated ?? "").localeCompare(a.updated ?? "") || byTitle(a, b));
+  return sorted.sort((a, b) => TYPE_ORDER.indexOf(a.type) - TYPE_ORDER.indexOf(b.type) || byTitle(a, b));
 }
 
 export function ExplorePage() {
   const t = useT();
   const navigate = useNavigate();
+  const reduce = useReducedMotion() ?? false;
+  const searchRef = useRef<HTMLInputElement>(null);
 
   const [searchParams, setSearchParams] = useSearchParams();
   const typeParam = searchParams.get("type");
-  const type = typeParam && ALL_TYPES.includes(typeParam as NoteType) ? (typeParam as NoteType) : undefined;
+  const type = typeParam && TYPE_ORDER.includes(typeParam as NoteType) ? (typeParam as NoteType) : undefined;
   const layer = searchParams.get("layer") ?? undefined;
+  const sort = pick(searchParams.get("sort"), SORTS, DEFAULT_SORT);
+  const view = pick(searchParams.get("view"), VIEWS, DEFAULT_VIEW);
   const [searchText, setSearchText] = useState("");
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState(0);
@@ -51,7 +85,19 @@ export function ExplorePage() {
     return () => clearTimeout(timer);
   }, [searchText]);
 
-  const filter: NoteFilter = { type, layer };
+  // ⌘F / Ctrl+F jumps to the search field instead of the browser's find bar.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || event.altKey || event.key.toLowerCase() !== "f") return;
+      event.preventDefault();
+      searchRef.current?.focus();
+      searchRef.current?.select();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  const filter = { type, layer };
   const layers = useLayers();
   const notes = useNotes(filter);
   const allInLayer = useNotes(layer ? { layer } : {});
@@ -65,27 +111,39 @@ export function ExplorePage() {
   }, [allInLayer.data]);
 
   const rows: Row[] = useMemo(() => {
-    if (!query) {
-      return (notes.data ?? []).map((note) => ({
-        id: note.id,
-        type: note.type,
-        title: note.title || note.id,
-        source: note.source,
-        kind: note.kind,
-      }));
-    }
+    const toRow = (note: NonNullable<typeof notes.data>[number]): Row => ({
+      id: note.id,
+      type: note.type,
+      title: note.title || note.id,
+      source: note.source,
+      kind: note.kind,
+      layers: note.layers,
+      tags: note.tags ?? [],
+      excerpt: note.excerpt,
+      updated: note.updated,
+    });
+    if (!query) return sortRows((notes.data ?? []).map(toRow), sort);
+    // Search keeps its relevance order; summaries fill in what hits do not carry.
     const summaries = new Map((notes.data ?? []).map((note) => [note.id, note]));
     return (hits.data ?? []).map((hit) => {
       const summary = summaries.get(hit.id);
-      return {
-        id: hit.id,
-        type: hit.type,
-        title: hit.title || hit.id,
-        source: summary?.source ?? "",
-        kind: summary?.kind,
-      };
+      return summary ? toRow(summary) : { id: hit.id, type: hit.type, title: hit.title || hit.id, source: "", layers: [], tags: [] };
     });
-  }, [query, notes.data, hits.data]);
+  }, [query, notes.data, hits.data, sort]);
+
+  const grouped = !query && !type && sort === "type";
+  const groups: Group[] = useMemo(() => {
+    if (!grouped) return [{ type: null, start: 0, rows }];
+    const result: Group[] = [];
+    let start = 0;
+    for (const item of TYPE_ORDER) {
+      const members = rows.filter((row) => row.type === item);
+      if (!members.length) continue;
+      result.push({ type: item, start, rows: members });
+      start += members.length;
+    }
+    return result;
+  }, [grouped, rows]);
 
   useEffect(() => {
     if (selected >= rows.length) setSelected(Math.max(0, rows.length - 1));
@@ -95,9 +153,11 @@ export function ExplorePage() {
     document.getElementById(`note-row-${selected}`)?.scrollIntoView({ block: "nearest" });
   }, [selected]);
 
+  const layerTitles = useMemo(() => new Map((layers.data ?? []).map((item) => [item.id, item.title || item.id])), [layers.data]);
+
   const openNote = (id: string) => navigate(`/notes/${encodeURIComponent(id)}`);
 
-  const updateFilter = (patch: { type?: NoteType | null; layer?: string | null }) => {
+  const updateParams = (patch: Record<string, string | null>) => {
     const next = new URLSearchParams(searchParams);
     for (const [key, value] of Object.entries(patch)) {
       if (value) next.set(key, value);
@@ -107,16 +167,26 @@ export function ExplorePage() {
     setSelected(0);
   };
 
-  const selectType = (value: NoteType | undefined) => updateFilter({ type: value ?? null });
-
-  const selectLayer = (value: string | undefined) => updateFilter({ layer: value ?? null });
+  const hasFilters = Boolean(type || layer || query || searchText);
+  const clearFilters = () => {
+    setSearchText("");
+    setQuery("");
+    updateParams({ type: null, layer: null });
+  };
 
   const handleKeyDown = (event: ReactKeyboardEvent) => {
+    if (event.key === "Escape" && event.target === searchRef.current && searchText) {
+      event.preventDefault();
+      setSearchText("");
+      return;
+    }
     if (!rows.length) return;
-    if (event.key === "ArrowDown") {
+    const next = event.key === "ArrowDown" || (view === "grid" && event.key === "ArrowRight");
+    const previous = event.key === "ArrowUp" || (view === "grid" && event.key === "ArrowLeft");
+    if (next) {
       event.preventDefault();
       setSelected((index) => Math.min(index + 1, rows.length - 1));
-    } else if (event.key === "ArrowUp") {
+    } else if (previous) {
       event.preventDefault();
       setSelected((index) => Math.max(index - 1, 0));
     } else if (event.key === "Enter") {
@@ -128,47 +198,109 @@ export function ExplorePage() {
   };
 
   const typeLabel = (value: NoteType) => t(`type.${value}` as TranslationKey);
-  const optionLabel = (value: string) => t(`option.${value}` as TranslationKey);
+
+  const itemMotion = (index: number) => ({
+    layout: reduce ? false : ("position" as const),
+    initial: index < STAGGER_LIMIT ? { opacity: 0, y: reduce ? 0 : 6 } : false,
+    animate: { opacity: 1, y: 0 },
+    exit: { opacity: 0, transition: { duration: 0.1, ease: EASE_OUT } },
+    transition: {
+      duration: 0.18,
+      ease: EASE_OUT,
+      delay: Math.min(index, STAGGER_LIMIT) * STAGGER_STEP,
+      layout: SPRING_LAYOUT,
+    },
+  });
+
+  const renderItem = (row: Row, index: number) => {
+    const props = {
+      row,
+      index,
+      selected: index === selected,
+      reduce,
+      layerTitles,
+      onHover: () => setSelected(index),
+      onOpen: () => openNote(row.id),
+    };
+    return (
+      <motion.div key={row.id} {...itemMotion(index)} className={view === "grid" ? "min-w-0" : undefined}>
+        {view === "grid" ? <GridCard {...props} /> : <ListRow {...props} />}
+      </motion.div>
+    );
+  };
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <div className="shrink-0 px-5 pt-4">
-        <div className="flex flex-wrap items-end justify-between gap-3">
+    <div className="flex flex-col">
+      <div className="sticky top-0 z-20 bg-background px-5 pt-4 pb-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-baseline gap-2">
             <h1 className="text-xl font-semibold tracking-tight">{t("page.explore.title")}</h1>
-            <span className="text-sm text-muted-foreground">
-              <AnimatedNumber value={allInLayer.data?.length ?? 0} startOnView={false} duration={0.8} />
+            <span className="font-mono text-sm text-muted-foreground">
+              <AnimatedNumber value={rows.length} startOnView={false} duration={0.6} />
             </span>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="relative">
-              <Search
-                className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
-                aria-hidden="true"
-              />
-              <Input
-                value={searchText}
-                onChange={(event) => setSearchText(event.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder={t("explore.searchPlaceholder")}
-                aria-label={t("explore.searchPlaceholder")}
-                className="h-8 w-56 rounded-full pl-8"
-              />
-            </div>
-            <Button className="rounded-full" onClick={() => window.dispatchEvent(new Event("basics:new-note"))}>
-              <Plus aria-hidden="true" />
+
+          <div className="flex flex-wrap items-center gap-2">
+            <Input
+              ref={searchRef}
+              type="search"
+              value={searchText}
+              onChange={setSearchText}
+              onKeyDown={handleKeyDown}
+              placeholder={t("explore.searchPlaceholder")}
+              aria-label={t("explore.searchPlaceholder")}
+              aria-keyshortcuts="Meta+F Control+F"
+              leftIcon={<Search />}
+              rightIcon={
+                <kbd
+                  title={t("explore.searchShortcut", { key: "⌘F" })}
+                  className="mr-2.5 rounded-full border border-border px-1.5 font-mono text-[10px] leading-4 text-muted-foreground"
+                >
+                  ⌘F
+                </kbd>
+              }
+              className="w-64"
+              classNames={{
+                field: "h-8 bg-card",
+                input: "text-[13px] [&::-webkit-search-cancel-button]:hidden",
+                leftIcon: "left-2.5",
+              }}
+            />
+
+            <Tabs value={view} onValueChange={(value) => updateParams({ view: value === DEFAULT_VIEW ? null : value })} variant="segment">
+              <TabsList aria-label={t("explore.view")}>
+                <TabsTrigger
+                  value="list"
+                  icon={<LayoutList className="size-3.5" aria-hidden="true" />}
+                  className="gap-1.5 px-2.5 py-1 text-[12px]"
+                >
+                  {t("explore.view.list")}
+                </TabsTrigger>
+                <TabsTrigger
+                  value="grid"
+                  icon={<LayoutGrid className="size-3.5" aria-hidden="true" />}
+                  className="gap-1.5 px-2.5 py-1 text-[12px]"
+                >
+                  {t("explore.view.grid")}
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+
+            <Button size="sm" onClick={() => window.dispatchEvent(new Event("basics:new-note"))} pressScale={0.97}>
+              <Plus className="size-3.5" aria-hidden="true" />
               {t("explore.newNote")}
             </Button>
           </div>
         </div>
 
-        <div className="mt-3 flex flex-wrap items-center gap-2">
+        <fieldset aria-label={t("explore.filters")} className="m-0 mt-3 min-w-0 border-0 p-0 flex flex-wrap items-center gap-2">
           <Tabs
             value={type ?? "all"}
-            onValueChange={(value) => selectType(value === "all" ? undefined : (value as NoteType))}
+            onValueChange={(value) => updateParams({ type: value === "all" ? null : value })}
+            className="min-w-0 flex-auto"
             variant="pill"
           >
-            <TabsList className="bg-transparent p-0">
+            <TabsList aria-label={t("explore.typeFilter")} className="bg-transparent p-0">
               <TabsTrigger value="all" className="gap-1.5 px-3 py-1 text-[12px]">
                 {t("type.all")}
                 <span className="font-mono text-[11px] opacity-60">{allInLayer.data?.length ?? 0}</span>
@@ -178,7 +310,7 @@ export function ExplorePage() {
                   <span
                     aria-hidden="true"
                     className="size-1.5 shrink-0 rounded-full ring-1 ring-black/10 dark:ring-white/20"
-                    style={{ backgroundColor: `var(--type-${item})` }}
+                    style={{ backgroundColor: typeColor(item) }}
                   />
                   {typeLabel(item)}
                   <span className="font-mono text-[11px] opacity-60">{counts.get(item) ?? 0}</span>
@@ -187,68 +319,233 @@ export function ExplorePage() {
             </TabsList>
           </Tabs>
 
-          <MotionSelect value={layer ?? "all"} onValueChange={(value) => selectLayer(value === "all" ? undefined : value)} className="w-44">
-            <MotionSelectTrigger className="h-8 rounded-full border-border bg-card px-3 py-0 text-[13px]">
-              <MotionSelectValue />
-            </MotionSelectTrigger>
-            <MotionSelectContent>
-              <MotionSelectItem value="all">{t("explore.allLayers")}</MotionSelectItem>
-              {(layers.data ?? []).map((item) => (
-                <MotionSelectItem key={item.id} value={item.id}>
-                  {item.title || item.id}
-                </MotionSelectItem>
-              ))}
-            </MotionSelectContent>
-          </MotionSelect>
-        </div>
+          <div className="ml-auto flex items-center gap-2">
+            <Select
+              value={layer ?? "all"}
+              onValueChange={(value) => updateParams({ layer: value === "all" ? null : value })}
+              className="w-44"
+            >
+              <SelectTrigger className="h-8 rounded-full border-border bg-card px-3 py-0 text-[13px]">
+                <span className="flex min-w-0 items-center gap-2">
+                  <Layers className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+                  <SelectValue className="truncate" />
+                </span>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{t("explore.allLayers")}</SelectItem>
+                {(layers.data ?? []).map((item) => (
+                  <SelectItem key={item.id} value={item.id}>
+                    {item.title || item.id}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select value={sort} onValueChange={(value) => updateParams({ sort: value === DEFAULT_SORT ? null : value })} className="w-48">
+              <SelectTrigger className="h-8 rounded-full border-border bg-card px-3 py-0 text-[13px]">
+                <span className="flex min-w-0 items-center gap-2">
+                  <ArrowDownUp className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+                  <span className="sr-only">{t("explore.sort")}: </span>
+                  <SelectValue className="truncate" />
+                </span>
+              </SelectTrigger>
+              <SelectContent>
+                {SORTS.map((item) => (
+                  <SelectItem key={item} value={item}>
+                    {t(`explore.sort.${item}` as TranslationKey)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </fieldset>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-3">
+      <div className="px-5 pt-1">
         {listQuery.isPending ? (
           <Loading />
         ) : listQuery.error ? (
           <ErrorState error={listQuery.error} />
         ) : rows.length === 0 ? (
-          <Empty title={t("explore.empty.title")} description={t("explore.empty.description")} />
+          <motion.div
+            initial={{ opacity: 0, y: reduce ? 0 : 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.18, ease: EASE_OUT }}
+            className="flex flex-col items-center gap-1 rounded-2xl border border-dashed border-border px-4 py-12 text-center"
+          >
+            <SearchX className="mb-1 size-5 text-muted-foreground" aria-hidden="true" />
+            <p className="text-sm font-medium">{t("explore.empty.title")}</p>
+            <p className="text-sm text-muted-foreground">{t("explore.empty.description")}</p>
+            {hasFilters && (
+              <Button variant="secondary" size="sm" className="mt-3" pressScale={0.97} onClick={clearFilters}>
+                {t("explore.clearFilters")}
+              </Button>
+            )}
+          </motion.div>
         ) : (
           <div
+            key={view}
             role="listbox"
             tabIndex={0}
             aria-label={t("explore.notes")}
+            aria-activedescendant={`note-row-${selected}`}
             onKeyDown={handleKeyDown}
-            className="flex flex-col gap-0.5 outline-none"
+            className="flex flex-col gap-4 rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
           >
-            {rows.map((row, index) => (
-              <button
-                key={row.id}
-                id={`note-row-${index}`}
-                type="button"
-                role="option"
-                aria-selected={index === selected}
-                data-note-row
-                onMouseEnter={() => setSelected(index)}
-                onClick={() => openNote(row.id)}
-                className={cn(
-                  "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-muted",
-                  index === selected && "bg-muted",
-                )}
-              >
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-medium">{row.title}</span>
-                  <span className="block truncate font-mono text-[11px] text-muted-foreground">{row.id}</span>
-                </span>
-                {row.source.startsWith("agent:") && (
-                  <Badge variant="secondary" className="rounded px-1.5 font-mono text-[10px]">
-                    {t("explore.agentBadge")}
-                  </Badge>
-                )}
-                {row.kind && <span className="text-[11px] text-muted-foreground">{optionLabel(row.kind)}</span>}
-                <Badge variant="outline">{typeLabel(row.type)}</Badge>
-              </button>
-            ))}
+            {groups.map((group) => {
+              const headingId = group.type ? `explore-group-${group.type}` : undefined;
+              const items = (
+                <div className={cn(view === "grid" ? "grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-2" : "flex flex-col")}>
+                  <AnimatePresence mode="popLayout">
+                    {group.rows.map((row, offset) => renderItem(row, group.start + offset))}
+                  </AnimatePresence>
+                </div>
+              );
+              if (!group.type) return <div key="all">{items}</div>;
+              return (
+                <fieldset key={group.type} aria-labelledby={headingId} className="m-0 min-w-0 border-0 p-0">
+                  <h2
+                    id={headingId}
+                    className="mb-1 flex items-center gap-2 px-3 text-[11px] font-medium tracking-wide text-muted-foreground uppercase"
+                  >
+                    <span aria-hidden="true" className="size-1.5 rounded-full" style={{ backgroundColor: typeColor(group.type) }} />
+                    {typeLabel(group.type)}
+                    <span className="font-mono normal-case opacity-70">{group.rows.length}</span>
+                  </h2>
+                  {items}
+                </fieldset>
+              );
+            })}
           </div>
         )}
       </div>
     </div>
+  );
+}
+
+interface ItemProps {
+  row: Row;
+  index: number;
+  selected: boolean;
+  reduce: boolean;
+  layerTitles: Map<string, string>;
+  onHover: () => void;
+  onOpen: () => void;
+}
+
+function LayerChip({ id, title }: { id: string; title?: string }) {
+  return (
+    <span className="inline-flex h-5 items-center rounded-full border border-border px-2 font-mono text-[10.5px] text-muted-foreground">
+      {title ?? id}
+    </span>
+  );
+}
+
+function AgentBadge() {
+  const t = useT();
+  return (
+    <span className="inline-flex h-5 items-center rounded-full bg-primary/12 px-2 font-mono text-[10.5px] font-medium text-primary">
+      {t("explore.agentBadge")}
+    </span>
+  );
+}
+
+function ListRow({ row, index, selected, reduce, layerTitles, onHover, onOpen }: ItemProps) {
+  return (
+    <button
+      id={`note-row-${index}`}
+      type="button"
+      role="option"
+      aria-selected={selected}
+      data-note-row
+      tabIndex={-1}
+      onMouseEnter={onHover}
+      onClick={onOpen}
+      className="relative flex h-11 w-full scroll-mt-32 scroll-mb-24 items-center gap-3 rounded-xl px-3 text-left outline-none"
+    >
+      {selected && (
+        <motion.span
+          layoutId="explore-row-highlight"
+          aria-hidden="true"
+          transition={reduce ? { duration: 0 } : SPRING_LAYOUT}
+          className="absolute inset-0 rounded-xl bg-muted"
+        />
+      )}
+      <span aria-hidden="true" className="relative h-5 w-[3px] shrink-0 rounded-full" style={{ backgroundColor: typeColor(row.type) }} />
+      <span className="relative max-w-[40%] shrink-0 truncate text-sm font-medium">{row.title}</span>
+      <span className="relative max-w-48 min-w-0 shrink truncate font-mono text-[11px] text-muted-foreground">{row.id}</span>
+      <span className="relative min-w-0 flex-1 truncate text-[13px] text-muted-foreground">{row.excerpt}</span>
+      <span className="relative flex shrink-0 items-center gap-1">
+        {row.layers.map((id) => (
+          <LayerChip key={id} id={id} title={layerTitles.get(id)} />
+        ))}
+        {row.source.startsWith("agent:") && <AgentBadge />}
+      </span>
+    </button>
+  );
+}
+
+function GridCard({ row, index, selected, reduce, layerTitles, onHover, onOpen }: ItemProps) {
+  const t = useT();
+  const extraTags = row.tags.length - MAX_TAGS;
+  return (
+    <motion.div whileHover={reduce ? undefined : { y: -2 }} transition={SPRING_PRESS} className="h-full">
+      <Card
+        interactive
+        selected={selected}
+        size="compact"
+        onMouseEnter={onHover}
+        className="h-full gap-2.5 bg-card py-3.5 hover:border-foreground/20"
+      >
+        <CardHeader className="gap-1.5">
+          <div className="flex min-w-0 items-center gap-1.5">
+            <TypeChip type={row.type} />
+            {row.kind && <span className="truncate text-[11px] text-muted-foreground">{t(`option.${row.kind}` as TranslationKey)}</span>}
+            {row.source.startsWith("agent:") && (
+              <span className="ml-auto">
+                <AgentBadge />
+              </span>
+            )}
+          </div>
+          <button
+            id={`note-row-${index}`}
+            type="button"
+            role="option"
+            aria-selected={selected}
+            data-note-row
+            tabIndex={-1}
+            onClick={onOpen}
+            className={cn(
+              "min-w-0 scroll-mt-32 scroll-mb-24 truncate text-left text-[15px] font-semibold tracking-tight outline-none",
+              CARD_TARGET_CLASS,
+            )}
+          >
+            {row.title}
+          </button>
+          <span className="truncate font-mono text-[11px] text-muted-foreground">{row.id}</span>
+        </CardHeader>
+        <CardContent>
+          <p className="line-clamp-2 min-h-[2lh] text-[13px] leading-snug text-muted-foreground">{row.excerpt}</p>
+        </CardContent>
+        {(row.layers.length > 0 || row.tags.length > 0) && (
+          <CardFooter className="mt-auto flex-wrap gap-1">
+            {row.layers.map((id) => (
+              <LayerChip key={id} id={id} title={layerTitles.get(id)} />
+            ))}
+            {row.tags.slice(0, MAX_TAGS).map((tag) => (
+              <span
+                key={tag}
+                className="inline-flex h-5 items-center rounded-full bg-muted px-2 font-mono text-[10.5px] text-muted-foreground"
+              >
+                #{tag}
+              </span>
+            ))}
+            {extraTags > 0 && (
+              <span className="font-mono text-[10.5px] text-muted-foreground">{t("explore.moreTags", { count: extraTags })}</span>
+            )}
+          </CardFooter>
+        )}
+      </Card>
+    </motion.div>
   );
 }

@@ -6,13 +6,11 @@ test("creates a note and shows it in Explore", async ({ page }) => {
   await page.getByRole("button", { name: "New note", exact: true }).click();
   const dialog = page.getByRole("dialog");
 
-  await dialog.getByLabel("Type", { exact: true }).click();
-  await page.getByRole("option", { name: "Tech", exact: true }).click();
+  await dialog.getByRole("tab", { name: "Tech", exact: true }).click();
 
   await dialog.getByLabel("ID", { exact: true }).fill("e2e-demo");
 
-  await dialog.getByLabel("Layer", { exact: true }).click();
-  await page.getByRole("option", { name: "Backend", exact: true }).click();
+  await dialog.getByRole("tab", { name: "Backend", exact: true }).click();
 
   await dialog.getByRole("button", { name: "Create", exact: true }).click();
 

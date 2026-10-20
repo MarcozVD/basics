@@ -59,6 +59,24 @@ test("listNotes filters tech notes by layer", () => {
   assert.deepEqual(ids, ["playwright", "pytest", "vitest"]);
 });
 
+test("listNotes summaries carry tags and a one-line excerpt", () => {
+  const v = tempVault();
+  const notes = listNotes(v);
+  const vitest = notes.find((n) => n.id === "vitest");
+  assert.ok(vitest);
+  assert.deepEqual(vitest.tags, ["unit", "componentes"]);
+  assert.equal(vitest.excerpt, "tests unitarios de TypeScript, React o Node");
+
+  v.writeNote(
+    "excerpt-demo",
+    { type: "practice", applies_to: [], tags: [], source: "manual" },
+    "# Heading\n\nUse [[vitest]] for **unit** tests.\n",
+  );
+  const practice = listNotes(v).find((n) => n.id === "excerpt-demo");
+  assert.equal(practice?.excerpt, "Use vitest for unit tests.");
+  for (const note of notes) assert.ok(!note.excerpt || note.excerpt.length <= 120);
+});
+
 test("proposalDetail includes the current note and diffable texts without updated", () => {
   const v = tempVault();
   v.propose("fastapi", techData(), "# New FastAPI", { proposed_by: "test", reason: "test" });

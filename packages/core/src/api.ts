@@ -8,6 +8,9 @@ export interface NoteSummary {
   kind?: string;
   source: string;
   updated?: string;
+  tags: string[];
+  /** First `use_when` entry for tech notes, else the first non-heading body line (max 120 chars). */
+  excerpt?: string;
 }
 
 export interface LayerSummary {
