@@ -31,7 +31,10 @@ test("lists and approves a proposal from the inbox", async ({ page }) => {
     ].join("\n"),
   );
 
-  await page.goto("/inbox");
+  await page.goto("/explore");
+  await page.keyboard.press("g");
+  await page.keyboard.press("i");
+  await expect(page).toHaveURL(/\/inbox$/);
   await expect(page.locator('nav a[href="/inbox"]')).toContainText("1");
   await expect(page.getByRole("button", { name: /django/i })).toBeVisible();
 

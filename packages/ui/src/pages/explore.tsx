@@ -3,7 +3,16 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { cn } from "cn";
 import { Plus, Search } from "lucide-react";
 import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
+import { AnimatedNumber } from "@/components/motion/animated-number";
+import {
+  Select as MotionSelect,
+  SelectContent as MotionSelectContent,
+  SelectItem as MotionSelectItem,
+  SelectTrigger as MotionSelectTrigger,
+  SelectValue as MotionSelectValue,
+} from "@/components/motion/select";
+import { Tabs, TabsList, TabsTrigger } from "@/components/motion/tabs";
 import { Empty, ErrorState, Loading } from "@/components/state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -35,8 +44,10 @@ export function ExplorePage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const [type, setType] = useState<NoteType | undefined>();
-  const [layer, setLayer] = useState<string | undefined>();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const typeParam = searchParams.get("type");
+  const type = typeParam && ALL_TYPES.includes(typeParam as NoteType) ? (typeParam as NoteType) : undefined;
+  const layer = searchParams.get("layer") ?? undefined;
   const [searchText, setSearchText] = useState("");
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState(0);
@@ -101,15 +112,19 @@ export function ExplorePage() {
 
   const openNote = (id: string) => navigate(`/notes/${encodeURIComponent(id)}`);
 
-  const selectType = (value: NoteType | undefined) => {
-    setType(value);
+  const updateFilter = (patch: { type?: NoteType | null; layer?: string | null }) => {
+    const next = new URLSearchParams(searchParams);
+    for (const [key, value] of Object.entries(patch)) {
+      if (value) next.set(key, value);
+      else next.delete(key);
+    }
+    setSearchParams(next, { replace: true });
     setSelected(0);
   };
 
-  const selectLayer = (value: string | undefined) => {
-    setLayer(value);
-    setSelected(0);
-  };
+  const selectType = (value: NoteType | undefined) => updateFilter({ type: value ?? null });
+
+  const selectLayer = (value: string | undefined) => updateFilter({ layer: value ?? null });
 
   const handleKeyDown = (event: ReactKeyboardEvent) => {
     if (!rows.length) return;
@@ -169,138 +184,123 @@ export function ExplorePage() {
   const optionLabel = (value: string) => t(`option.${value}` as TranslationKey);
 
   return (
-    <div className="flex h-full min-h-0">
-      <aside className="flex w-[220px] shrink-0 flex-col gap-5 overflow-y-auto border-r px-2 py-3">
-        <section>
-          <h2 className="mb-1 px-2 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">{t("explore.layers")}</h2>
-          <button
-            type="button"
-            aria-pressed={layer === undefined}
-            onClick={() => selectLayer(undefined)}
-            className={cn(
-              "flex h-7 w-full items-center rounded-md px-2 text-left text-[13px] transition-colors hover:bg-muted",
-              layer === undefined ? "bg-primary/10 font-medium text-primary" : "text-muted-foreground",
-            )}
-          >
-            {t("explore.allLayers")}
-          </button>
-          {layers.data?.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              aria-pressed={layer === item.id}
-              onClick={() => selectLayer(item.id)}
-              className={cn(
-                "flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-[13px] transition-colors hover:bg-muted",
-                layer === item.id ? "bg-primary/10 font-medium text-primary" : "text-muted-foreground",
-              )}
-            >
-              <span className="truncate">{item.title || item.id}</span>
-              <span className="ml-auto font-mono text-[11px] tabular-nums">{item.techs.length}</span>
-            </button>
-          ))}
-        </section>
-
-        <section>
-          <h2 className="mb-1 px-2 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">{t("explore.types")}</h2>
-          <button
-            type="button"
-            aria-pressed={type === undefined}
-            onClick={() => selectType(undefined)}
-            className={cn(
-              "flex h-7 w-full items-center rounded-md px-2 text-left text-[13px] transition-colors hover:bg-muted",
-              type === undefined ? "bg-primary/10 font-medium text-primary" : "text-muted-foreground",
-            )}
-          >
-            {t("type.all")}
-            <span className="ml-auto font-mono text-[11px] tabular-nums">{allInLayer.data?.length ?? 0}</span>
-          </button>
-          {TYPE_ORDER.map((item) => (
-            <button
-              key={item}
-              type="button"
-              aria-pressed={type === item}
-              onClick={() => selectType(item)}
-              className={cn(
-                "flex h-7 w-full items-center rounded-md px-2 text-left text-[13px] transition-colors hover:bg-muted",
-                type === item ? "bg-primary/10 font-medium text-primary" : "text-muted-foreground",
-              )}
-            >
-              {typeLabel(item)}
-              <span className="ml-auto font-mono text-[11px] tabular-nums">{counts.get(item) ?? 0}</span>
-            </button>
-          ))}
-        </section>
-      </aside>
-
-      <div className="flex min-w-0 flex-1 flex-col">
-        <div className="flex shrink-0 items-center gap-2 border-b p-3">
-          <div className="relative flex-1">
-            <Search
-              className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
-              aria-hidden="true"
-            />
-            <Input
-              value={searchText}
-              onChange={(event) => setSearchText(event.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder={t("explore.searchPlaceholder")}
-              aria-label={t("explore.searchPlaceholder")}
-              className="pl-8"
-            />
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="shrink-0 px-5 pt-4">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div className="flex items-baseline gap-2">
+            <h1 className="text-xl font-semibold tracking-tight">{t("page.explore.title")}</h1>
+            <span className="text-sm text-muted-foreground">
+              <AnimatedNumber value={allInLayer.data?.length ?? 0} startOnView={false} duration={0.8} />
+            </span>
           </div>
-          <Button onClick={openDialog}>
-            <Plus aria-hidden="true" />
-            {t("explore.newNote")}
-          </Button>
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <Search
+                className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
+                aria-hidden="true"
+              />
+              <Input
+                value={searchText}
+                onChange={(event) => setSearchText(event.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder={t("explore.searchPlaceholder")}
+                aria-label={t("explore.searchPlaceholder")}
+                className="h-8 w-56 rounded-full pl-8"
+              />
+            </div>
+            <Button className="rounded-full" onClick={openDialog}>
+              <Plus aria-hidden="true" />
+              {t("explore.newNote")}
+            </Button>
+          </div>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto p-3">
-          {listQuery.isPending ? (
-            <Loading />
-          ) : listQuery.error ? (
-            <ErrorState error={listQuery.error} />
-          ) : rows.length === 0 ? (
-            <Empty title={t("explore.empty.title")} description={t("explore.empty.description")} />
-          ) : (
-            <div
-              role="listbox"
-              tabIndex={0}
-              aria-label={t("explore.types")}
-              onKeyDown={handleKeyDown}
-              className="flex flex-col gap-0.5 outline-none"
-            >
-              {rows.map((row, index) => (
-                <button
-                  key={row.id}
-                  id={`note-row-${index}`}
-                  type="button"
-                  role="option"
-                  aria-selected={index === selected}
-                  data-note-row
-                  onMouseEnter={() => setSelected(index)}
-                  onClick={() => openNote(row.id)}
-                  className={cn(
-                    "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-muted",
-                    index === selected && "bg-muted",
-                  )}
-                >
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-medium">{row.title}</span>
-                    <span className="block truncate font-mono text-[11px] text-muted-foreground">{row.id}</span>
-                  </span>
-                  {row.source.startsWith("agent:") && (
-                    <Badge variant="secondary" className="rounded px-1.5 font-mono text-[10px]">
-                      {t("explore.agentBadge")}
-                    </Badge>
-                  )}
-                  {row.kind && <span className="text-[11px] text-muted-foreground">{optionLabel(row.kind)}</span>}
-                  <Badge variant="outline">{typeLabel(row.type)}</Badge>
-                </button>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <Tabs
+            value={type ?? "all"}
+            onValueChange={(value) => selectType(value === "all" ? undefined : (value as NoteType))}
+            variant="pill"
+          >
+            <TabsList className="bg-transparent p-0">
+              <TabsTrigger value="all" className="gap-1.5 px-3 py-1 text-[12px]">
+                {t("type.all")}
+                <span className="font-mono text-[11px] opacity-60">{allInLayer.data?.length ?? 0}</span>
+              </TabsTrigger>
+              {TYPE_ORDER.map((item) => (
+                <TabsTrigger key={item} value={item} className="gap-1.5 px-3 py-1 text-[12px]">
+                  <span
+                    aria-hidden="true"
+                    className="size-1.5 shrink-0 rounded-full ring-1 ring-black/10 dark:ring-white/20"
+                    style={{ backgroundColor: `var(--type-${item})` }}
+                  />
+                  {typeLabel(item)}
+                  <span className="font-mono text-[11px] opacity-60">{counts.get(item) ?? 0}</span>
+                </TabsTrigger>
               ))}
-            </div>
-          )}
+            </TabsList>
+          </Tabs>
+
+          <MotionSelect value={layer ?? "all"} onValueChange={(value) => selectLayer(value === "all" ? undefined : value)} className="w-44">
+            <MotionSelectTrigger className="h-8 rounded-full border-border bg-card px-3 py-0 text-[13px]">
+              <MotionSelectValue />
+            </MotionSelectTrigger>
+            <MotionSelectContent>
+              <MotionSelectItem value="all">{t("explore.allLayers")}</MotionSelectItem>
+              {(layers.data ?? []).map((item) => (
+                <MotionSelectItem key={item.id} value={item.id}>
+                  {item.title || item.id}
+                </MotionSelectItem>
+              ))}
+            </MotionSelectContent>
+          </MotionSelect>
         </div>
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-3">
+        {listQuery.isPending ? (
+          <Loading />
+        ) : listQuery.error ? (
+          <ErrorState error={listQuery.error} />
+        ) : rows.length === 0 ? (
+          <Empty title={t("explore.empty.title")} description={t("explore.empty.description")} />
+        ) : (
+          <div
+            role="listbox"
+            tabIndex={0}
+            aria-label={t("explore.notes")}
+            onKeyDown={handleKeyDown}
+            className="flex flex-col gap-0.5 outline-none"
+          >
+            {rows.map((row, index) => (
+              <button
+                key={row.id}
+                id={`note-row-${index}`}
+                type="button"
+                role="option"
+                aria-selected={index === selected}
+                data-note-row
+                onMouseEnter={() => setSelected(index)}
+                onClick={() => openNote(row.id)}
+                className={cn(
+                  "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-muted",
+                  index === selected && "bg-muted",
+                )}
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-medium">{row.title}</span>
+                  <span className="block truncate font-mono text-[11px] text-muted-foreground">{row.id}</span>
+                </span>
+                {row.source.startsWith("agent:") && (
+                  <Badge variant="secondary" className="rounded px-1.5 font-mono text-[10px]">
+                    {t("explore.agentBadge")}
+                  </Badge>
+                )}
+                {row.kind && <span className="text-[11px] text-muted-foreground">{optionLabel(row.kind)}</span>}
+                <Badge variant="outline">{typeLabel(row.type)}</Badge>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>

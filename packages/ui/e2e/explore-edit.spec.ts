@@ -3,7 +3,9 @@ import { expect, test } from "@playwright/test";
 test("filters by layer, edits a note title and persists it", async ({ page }) => {
   await page.goto("/explore");
 
-  await page.getByRole("button", { name: /^Testing\b/ }).click();
+  await page.getByRole("button", { name: "All layers", exact: true }).click();
+  await page.getByRole("listbox").getByRole("option", { name: "Testing", exact: true }).click();
+  await expect(page).toHaveURL(/\/explore\?layer=/);
   await expect(page.getByRole("option")).toHaveCount(3);
 
   await page

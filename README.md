@@ -64,6 +64,8 @@ Pantallas:
 
 La UI se actualiza en vivo cuando cambian los archivos del vault (SSE) y trae selector de idioma EN/ES y tema claro/oscuro.
 
+Navegación: dock flotante en la parte inferior (Home, Explore, Graph, Inbox, Recommend) y atajos de teclado `g` + `h`/`e`/`g`/`i`/`r`; `Ctrl`/`⌘+K` abre la paleta de comandos.
+
 MCP sobre HTTP mientras corre `basics ui` (stateless streamable HTTP en `http://127.0.0.1:4747/mcp`):
 
 ```bash
