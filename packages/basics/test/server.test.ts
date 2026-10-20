@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { type NoteData, Vault } from "@marcozvd/basics-core";
+import { type NoteData, readActivity, Vault } from "@marcozvd/basics-core";
 import { test } from "vitest";
 import { createApp } from "../src/server/app.js";
 
@@ -21,6 +21,25 @@ function jsonInit(body: unknown, headers: Record<string, string> = {}, method = 
     method,
     headers: { ...HOST, "content-type": "application/json", ...headers },
     body: JSON.stringify(body),
+  };
+}
+
+const MCP_HEADERS = { ...HOST, "content-type": "application/json", accept: "application/json, text/event-stream" };
+
+function mcpPost(app: ReturnType<typeof createApp>, body: unknown, sessionId?: string): Promise<Response> {
+  return app.request("/mcp", {
+    method: "POST",
+    headers: { ...MCP_HEADERS, ...(sessionId ? { "mcp-session-id": sessionId } : {}) },
+    body: JSON.stringify(body),
+  });
+}
+
+function initialize(name: string): unknown {
+  return {
+    jsonrpc: "2.0",
+    id: 1,
+    method: "initialize",
+    params: { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name, version: "0.0.0" } },
   };
 }
 
@@ -127,28 +146,48 @@ test("inbox lists a proposal and approves it", async () => {
 test("MCP tools/list returns 7 tools", async () => {
   const v = tempVault();
   const app = createApp({ root: v.root });
-  const mcp = (body: unknown) =>
-    app.request("/mcp", {
-      method: "POST",
-      headers: {
-        ...HOST,
-        "content-type": "application/json",
-        accept: "application/json, text/event-stream",
-      },
-      body: JSON.stringify(body),
-    });
 
-  let res = await mcp({ jsonrpc: "2.0", id: 1, method: "tools/list" });
-  if (res.status !== 200) {
-    await mcp({
-      jsonrpc: "2.0",
-      id: 0,
-      method: "initialize",
-      params: { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "test", version: "0.0.0" } },
-    });
-    res = await mcp({ jsonrpc: "2.0", id: 1, method: "tools/list" });
-  }
+  const init = await mcpPost(app, initialize("test"));
+  assert.equal(init.status, 200);
+  const sessionId = init.headers.get("mcp-session-id");
+  assert.ok(sessionId);
+
+  const res = await mcpPost(app, { jsonrpc: "2.0", id: 2, method: "tools/list" }, sessionId);
   assert.equal(res.status, 200);
   const body = (await res.json()) as { result?: { tools?: unknown[] } };
   assert.equal(body.result?.tools?.length, 7);
+});
+
+test("MCP HTTP sessions keep the client name in activity", async () => {
+  const v = tempVault();
+  const app = createApp({ root: v.root });
+
+  const init = await mcpPost(app, initialize("test-agent"));
+  assert.equal(init.status, 200);
+  const sessionId = init.headers.get("mcp-session-id");
+  assert.ok(sessionId);
+
+  const initialized = await mcpPost(app, { jsonrpc: "2.0", method: "notifications/initialized" }, sessionId);
+  assert.equal(initialized.status, 202);
+
+  const call = await mcpPost(
+    app,
+    { jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "get_note", arguments: { id: "fastapi" } } },
+    sessionId,
+  );
+  assert.equal(call.status, 200);
+
+  const [event] = readActivity(v.root);
+  assert.equal(event.agent, "test-agent");
+  assert.equal(event.tool, "get_note");
+  assert.deepEqual(event.noteIds, ["fastapi"]);
+
+  const deleted = await app.request("/mcp", { method: "DELETE", headers: { ...HOST, "mcp-session-id": sessionId } });
+  assert.equal(deleted.status, 200);
+  const afterDelete = await mcpPost(
+    app,
+    { jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "get_note", arguments: { id: "fastapi" } } },
+    sessionId,
+  );
+  assert.equal(afterDelete.status, 404);
 });

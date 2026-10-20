@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -16,6 +17,7 @@ import {
   NotFoundError,
   proposalDetail,
   type RecommendRequest,
+  readActivity,
   recommend,
   renderContext,
   type SaveNoteRequest,
@@ -26,6 +28,7 @@ import {
   Vault,
   VaultNotFoundError,
 } from "@marcozvd/basics-core";
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
@@ -36,8 +39,26 @@ import type { EventHub } from "./events.js";
 const { version } = createRequire(import.meta.url)("../../package.json") as { version: string };
 
 const ALLOWED_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
+const MCP_SESSION_IDLE_MS = 30 * 60 * 1000;
+const MCP_MAX_SESSIONS = 50;
+
+interface McpSession {
+  transport: WebStandardStreamableHTTPServerTransport;
+  server: McpServer;
+  lastSeen: number;
+}
 
 const contextRequestSchema = z.object({ techIds: z.array(z.string()).min(1) });
+
+/** A sessionless POST only creates a session when it carries the initialize request. */
+async function isInitializeRequest(req: Request): Promise<boolean> {
+  try {
+    const body = (await req.clone().json()) as unknown;
+    return typeof body === "object" && body !== null && !Array.isArray(body) && (body as { method?: unknown }).method === "initialize";
+  } catch {
+    return false;
+  }
+}
 
 function hostnameOf(value: string): string | undefined {
   try {
@@ -58,6 +79,34 @@ function originHostname(value: string): string | undefined {
 export function createApp(opts: { root: string; uiDir?: string; events?: EventHub }): Hono {
   const app = new Hono();
   const vault = () => Vault.load(opts.root);
+  const mcpSessions = new Map<string, McpSession>();
+
+  const closeMcpSession = (id: string): void => {
+    const session = mcpSessions.get(id);
+    if (!session) return;
+    mcpSessions.delete(id);
+    void session.server.close().catch(() => {});
+  };
+
+  const oldestMcpSession = (): string | undefined => {
+    let oldest: string | undefined;
+    let oldestSeen = Number.POSITIVE_INFINITY;
+    for (const [id, session] of mcpSessions) {
+      if (session.lastSeen < oldestSeen) {
+        oldest = id;
+        oldestSeen = session.lastSeen;
+      }
+    }
+    return oldest;
+  };
+
+  const makeRoomForMcpSession = (): void => {
+    while (mcpSessions.size >= MCP_MAX_SESSIONS) {
+      const oldest = oldestMcpSession();
+      if (!oldest) break;
+      closeMcpSession(oldest);
+    }
+  };
 
   app.use("*", async (c, next) => {
     const host = hostnameOf(c.req.header("host") ?? "");
@@ -196,6 +245,18 @@ export function createApp(opts: { root: string; uiDir?: string; events?: EventHu
 
   app.get("/api/config", (c) => c.json({ language: loadConfig().language }));
 
+  app.get("/api/activity", (c) => {
+    const parsed = Number(c.req.query("limit"));
+    const limit = Number.isFinite(parsed) && parsed > 0 ? Math.min(Math.floor(parsed), 200) : undefined;
+    return c.json(
+      readActivity(opts.root, {
+        limit,
+        noteId: c.req.query("note") || undefined,
+        agent: c.req.query("agent") || undefined,
+      }),
+    );
+  });
+
   app.put("/api/config", async (c) => {
     const body = await c.req.json<{ language?: unknown }>();
     const config = configSchema.parse({ ...loadConfig(), language: body.language });
@@ -226,13 +287,42 @@ export function createApp(opts: { root: string; uiDir?: string; events?: EventHu
   }
 
   app.all("/mcp", async (c) => {
-    const server = createMcpServer(() => opts.root);
-    const transport = new WebStandardStreamableHTTPServerTransport({
-      sessionIdGenerator: undefined,
+    const now = Date.now();
+    for (const [id, session] of mcpSessions) {
+      if (now - session.lastSeen > MCP_SESSION_IDLE_MS) closeMcpSession(id);
+    }
+
+    const sessionId = c.req.header("mcp-session-id");
+    if (sessionId) {
+      const session = mcpSessions.get(sessionId);
+      if (!session) return c.json({ error: "not_found", message: "MCP session not found" } satisfies ApiError, 404);
+      session.lastSeen = now;
+      return session.transport.handleRequest(c.req.raw);
+    }
+
+    if (!(await isInitializeRequest(c.req.raw))) {
+      return c.json({ error: "invalid", message: "missing or invalid MCP session" } satisfies ApiError, 400);
+    }
+
+    makeRoomForMcpSession();
+
+    const server = createMcpServer(() => opts.root, { clientHint: c.req.header("user-agent") });
+    const transport: WebStandardStreamableHTTPServerTransport = new WebStandardStreamableHTTPServerTransport({
+      sessionIdGenerator: () => randomUUID(),
       enableJsonResponse: true,
+      onsessioninitialized: (id) => {
+        makeRoomForMcpSession();
+        mcpSessions.set(id, { transport, server, lastSeen: Date.now() });
+      },
+      onsessionclosed: (id) => {
+        mcpSessions.delete(id);
+      },
     });
     await server.connect(transport);
-    return transport.handleRequest(c.req.raw);
+
+    const response = await transport.handleRequest(c.req.raw);
+    if (!transport.sessionId || !mcpSessions.has(transport.sessionId)) await server.close().catch(() => {});
+    return response;
   });
 
   if (opts.uiDir && fs.existsSync(opts.uiDir)) {

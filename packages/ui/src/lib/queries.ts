@@ -1,5 +1,17 @@
 import { useQuery } from "@tanstack/react-query";
-import { getConfig, getHealth, getInbox, getLayers, getNote, getNotes, getProposal, type NoteFilter, search } from "./api";
+import {
+  type ActivityFilter,
+  getActivity,
+  getConfig,
+  getHealth,
+  getInbox,
+  getLayers,
+  getNote,
+  getNotes,
+  getProposal,
+  type NoteFilter,
+  search,
+} from "./api";
 
 export const queryKeys = {
   health: ["health"] as const,
@@ -10,6 +22,7 @@ export const queryKeys = {
   inbox: ["inbox"] as const,
   proposal: (id: string) => ["proposal", id] as const,
   config: ["config"] as const,
+  activity: (filter: ActivityFilter) => ["activity", filter] as const,
 };
 
 export function useHealth() {
@@ -42,4 +55,8 @@ export function useProposal(id: string | undefined) {
 
 export function useConfig() {
   return useQuery({ queryKey: queryKeys.config, queryFn: getConfig });
+}
+
+export function useActivity(filter: ActivityFilter = {}) {
+  return useQuery({ queryKey: queryKeys.activity(filter), queryFn: () => getActivity(filter) });
 }

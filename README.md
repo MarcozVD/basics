@@ -142,6 +142,11 @@ Con `basics ui` corriendo, el mismo servidor también expone MCP por HTTP (ver *
 
 Otros clientes MCP (Cursor, etc.): comando `node packages/basics/dist/mcp/server.js [ruta-vault]` por stdio (si se omite, se resuelve con la config global).
 
+El MCP por HTTP (`/mcp`) usa sesiones (`mcp-session-id`) para identificar al agente que llama; las sesiones inactivas se descartan solas.
+
+Actividad: cada llamada MCP correcta se registra en `<vault>/.basics/activity.jsonl` (agente, tool, notas afectadas), con tope ~1000 líneas.
+Es un log local, la carpeta `.basics/` se añade al `.gitignore` del vault automáticamente, y la UI lo lee por `GET /api/activity` y eventos SSE `activity`.
+
 | Tool | Uso |
 |---|---|
 | `list_layers` | capas y tecnologías |

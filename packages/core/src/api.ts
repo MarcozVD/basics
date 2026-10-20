@@ -81,4 +81,4 @@ export interface ApiError {
   issues?: unknown;
 }
 
-export type VaultEvent = { type: "vault"; paths: string[] };
+export type VaultEvent = { type: "vault"; paths: string[] } | { type: "activity" };

@@ -1,5 +1,15 @@
 import { createRequire } from "node:module";
-import { NOTE_TYPES, noteSchema, recommend, renderContext, search, title, Vault, VaultNotFoundError } from "@marcozvd/basics-core";
+import {
+  appendActivity,
+  NOTE_TYPES,
+  noteSchema,
+  recommend,
+  renderContext,
+  search,
+  title,
+  Vault,
+  VaultNotFoundError,
+} from "@marcozvd/basics-core";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
@@ -19,10 +29,26 @@ const withVault = <T>(fn: () => T) => {
   }
 };
 
-export function createMcpServer(resolveRoot: () => string): McpServer {
+export interface McpServerOptions {
+  clientHint?: string;
+}
+
+export function createMcpServer(resolveRoot: () => string, opts: McpServerOptions = {}): McpServer {
   const server = new McpServer({ name: "basics", version });
   // Reload on every call so manual edits in the vault show up immediately.
   const vault = () => Vault.load(resolveRoot());
+  const log = (tool: string, noteIds: string[], detail?: string) => {
+    try {
+      appendActivity(resolveRoot(), {
+        agent: server.server.getClientVersion()?.name ?? opts.clientHint ?? "unknown",
+        tool,
+        noteIds,
+        detail,
+      });
+    } catch {
+      // Activity logging must never break a tool call.
+    }
+  };
 
   server.registerTool(
     "list_layers",
@@ -33,13 +59,13 @@ export function createMcpServer(resolveRoot: () => string): McpServer {
     async () =>
       withVault(() => {
         const v = vault();
-        return json(
-          v.byType("layer").map((l) => ({
-            id: l.id,
-            title: title(l),
-            techs: v.techInLayer(l.id).map((t) => t.id),
-          })),
-        );
+        const layers = v.byType("layer").map((l) => ({
+          id: l.id,
+          title: title(l),
+          techs: v.techInLayer(l.id).map((t) => t.id),
+        }));
+        log("list_layers", []);
+        return json(layers);
       }),
   );
 
@@ -54,7 +80,16 @@ export function createMcpServer(resolveRoot: () => string): McpServer {
         limit: z.number().int().positive().max(50).optional(),
       },
     },
-    async ({ query, type, layer, limit }) => withVault(() => json(search(vault(), query, { type, layer, limit }))),
+    async ({ query, type, layer, limit }) =>
+      withVault(() => {
+        const hits = search(vault(), query, { type, layer, limit });
+        log(
+          "search_vault",
+          hits.slice(0, 10).map((h) => h.id),
+          query,
+        );
+        return json(hits);
+      }),
   );
 
   server.registerTool(
@@ -68,6 +103,7 @@ export function createMcpServer(resolveRoot: () => string): McpServer {
         const v = vault();
         const n = v.get(id);
         if (!n) return fail(`note "${id}" not found`);
+        log("get_note", [id]);
         return json({ id: n.id, data: n.data, body: n.body, links: n.links, backlinks: v.getBacklinks(n.id), hash: n.hash });
       }),
   );
@@ -84,7 +120,16 @@ export function createMcpServer(resolveRoot: () => string): McpServer {
         per_layer: z.number().int().positive().max(10).optional(),
       },
     },
-    async ({ description, layers, per_layer }) => withVault(() => json(recommend(vault(), description, { layers, perLayer: per_layer }))),
+    async ({ description, layers, per_layer }) =>
+      withVault(() => {
+        const rec = recommend(vault(), description, { layers, perLayer: per_layer });
+        log(
+          "recommend_stack",
+          Object.values(rec.layers).flatMap((candidates) => (candidates[0] ? [candidates[0].id] : [])),
+          description,
+        );
+        return json(rec);
+      }),
   );
 
   server.registerTool(
@@ -95,7 +140,12 @@ export function createMcpServer(resolveRoot: () => string): McpServer {
         "Call once the stack is chosen and follow it while writing code; run the listed checks before declaring work done.",
       inputSchema: { tech_ids: z.array(z.string()).min(1) },
     },
-    async ({ tech_ids }) => withVault(() => text(renderContext(vault(), tech_ids))),
+    async ({ tech_ids }) =>
+      withVault(() => {
+        const markdown = renderContext(vault(), tech_ids);
+        log("get_stack_context", tech_ids);
+        return text(markdown);
+      }),
   );
 
   server.registerTool(
@@ -119,6 +169,7 @@ export function createMcpServer(resolveRoot: () => string): McpServer {
       if (!parsed.success) return fail(`invalid frontmatter: ${parsed.error.message}`);
       return withVault(() => {
         const p = vault().propose(id, parsed.data, body, { proposed_by: agent, reason });
+        log("propose_note", [id], reason);
         return json({ status: "pending_review", id: p.id, action: p.meta.action, path: p.path });
       });
     },
@@ -131,13 +182,13 @@ export function createMcpServer(resolveRoot: () => string): McpServer {
       inputSchema: {},
     },
     async () =>
-      withVault(() =>
-        json(
-          vault()
-            .listProposals()
-            .map(({ id, meta, data }) => ({ id, type: data.type, ...meta })),
-        ),
-      ),
+      withVault(() => {
+        const proposals = vault()
+          .listProposals()
+          .map(({ id, meta, data }) => ({ id, type: data.type, ...meta }));
+        log("list_proposals", []);
+        return json(proposals);
+      }),
   );
 
   return server;

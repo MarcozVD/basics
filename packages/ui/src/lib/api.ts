@@ -1,4 +1,5 @@
 import type {
+  ActivityEvent,
   ApiError,
   ApproveRequest,
   ContextResponse,
@@ -30,6 +31,12 @@ export interface Health {
 export interface NoteFilter {
   type?: NoteType;
   layer?: string;
+}
+
+export interface ActivityFilter {
+  limit?: number;
+  noteId?: string;
+  agent?: string;
 }
 
 export class ApiRequestError extends Error {
@@ -133,6 +140,16 @@ export function rejectProposal(id: string): Promise<void> {
 
 export function getConfig(): Promise<AppConfig> {
   return request<AppConfig>("/api/config");
+}
+
+export function getActivity(filter: ActivityFilter = {}): Promise<ActivityEvent[]> {
+  return request<ActivityEvent[]>(
+    withQuery("/api/activity", {
+      limit: filter.limit?.toString(),
+      note: filter.noteId,
+      agent: filter.agent,
+    }),
+  );
 }
 
 export function setConfig(body: AppConfig): Promise<AppConfig> {

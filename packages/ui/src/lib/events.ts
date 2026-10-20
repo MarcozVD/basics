@@ -9,9 +9,14 @@ export function useVaultEvents(): void {
     const onVault = () => {
       void queryClient.invalidateQueries();
     };
+    const onActivity = () => {
+      void queryClient.invalidateQueries({ queryKey: ["activity"] });
+    };
     source.addEventListener("vault", onVault);
+    source.addEventListener("activity", onActivity);
     return () => {
       source.removeEventListener("vault", onVault);
+      source.removeEventListener("activity", onActivity);
       source.close();
     };
   }, [queryClient]);
