@@ -31,7 +31,6 @@
     "zod": "^4.6.7"
   },
   "scripts": {
-    "test": "tsx --test test/*.test.ts",
-    "prepublishOnly": "npm run build --prefix ../.. && npm test"
+    "prepublishOnly": "npm run build --prefix ../.. && npm test --prefix ../.."
   }
 }

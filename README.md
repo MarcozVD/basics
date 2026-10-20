@@ -42,9 +42,12 @@ basics --help
 
 ```bash
 npm install && npm run build        # o: pnpm install && pnpm build
-npm test                            # o: pnpm test
+npm test                            # Vitest (una vez); npm run test:watch en watch mode
 npm run typecheck                   # chequeo de tipos sin emitir
+npm run lint                        # Biome: lint (npm run format para aplicar fixes)
 ```
+
+El repo usa Biome para lint/format (2 espacios, línea máx. 140) y fuerza fin de línea LF con `.gitattributes`.
 
 Desde el repo, contra el vault de ejemplo:
 

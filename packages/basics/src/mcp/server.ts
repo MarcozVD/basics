@@ -1,17 +1,8 @@
 #!/usr/bin/env node
+import { NOTE_TYPES, noteSchema, recommend, renderContext, resolveVaultDir, search, title, Vault } from "@marcozvd/basics-core";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import {
-  NOTE_TYPES,
-  Vault,
-  noteSchema,
-  recommend,
-  renderContext,
-  resolveVaultDir,
-  search,
-  title,
-} from "@marcozvd/basics-core";
 
 const root = resolveVaultDir(process.argv[2]);
 // Reload on every call so manual edits in the vault show up immediately.
@@ -125,7 +116,12 @@ server.registerTool(
     description: "List agent proposals waiting for user review in the vault inbox.",
     inputSchema: {},
   },
-  async () => json(vault().listProposals().map(({ id, meta, data }) => ({ id, type: data.type, ...meta }))),
+  async () =>
+    json(
+      vault()
+        .listProposals()
+        .map(({ id, meta, data }) => ({ id, type: data.type, ...meta })),
+    ),
 );
 
 await server.connect(new StdioServerTransport());

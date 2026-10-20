@@ -12,13 +12,18 @@
   "scripts": {
     "build": "tsc -b packages/core packages/basics",
     "typecheck": "tsc -b packages/core packages/basics --noEmit",
-    "test": "npm run test -w @marcozvd/basics-core",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "biome check .",
+    "format": "biome check --write .",
     "cli": "tsx packages/basics/src/cli.ts",
     "dev:mcp": "tsx packages/basics/src/mcp/server.ts"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.5.15",
     "@types/node": "^22.20.5",
     "tsx": "^4.23.15",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.5"
   }
 }

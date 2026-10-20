@@ -2,9 +2,7 @@ import type { Note, NoteData, TechData } from "./schema.js";
 import { toId, type Vault } from "./vault.js";
 
 // Small ES/EN stopword list; the vault mixes both languages.
-const STOPWORDS = new Set(
-  "a al and con de del el en es for in is la las los o of on or para por que the to un una uno with y".split(" "),
-);
+const STOPWORDS = new Set("a al and con de del el en es for in is la las los o of on or para por que the to un una uno with y".split(" "));
 
 /** Lowercase, strip accents, split, drop stopwords, crude prefix stem so "concurrencia" ~ "concurrente". */
 export function tokens(text: string): string[] {
@@ -115,7 +113,7 @@ export function stackContext(vault: Vault, techIds: string[]) {
   const techs = new Map<string, Note>();
   const addTech = (id: string) => {
     const n = vault.get(id);
-    if (!n || n.data.type !== "tech" || techs.has(n.id)) return;
+    if (n?.data.type !== "tech" || techs.has(n.id)) return;
     techs.set(n.id, n);
     if (n.data.language) addTech(n.data.language);
   };
@@ -152,7 +150,7 @@ export function renderContext(vault: Vault, techIds: string[]): string {
   const ctx = stackContext(vault, techIds);
   const section = (heading: string, notes: Note[], extra?: (n: Note) => string) =>
     notes.length
-      ? `## ${heading}\n\n` + notes.map((n) => `### ${title(n)} (\`${n.id}\`)\n\n${extra?.(n) ?? ""}${demote(n.body)}\n`).join("\n")
+      ? `## ${heading}\n\n${notes.map((n) => `### ${title(n)} (\`${n.id}\`)\n\n${extra?.(n) ?? ""}${demote(n.body)}\n`).join("\n")}`
       : "";
   const techMeta = (n: Note) => {
     const d = n.data as TechData;
@@ -161,7 +159,7 @@ export function renderContext(vault: Vault, techIds: string[]): string {
       d.use_when.length && `- use when: ${d.use_when.join("; ")}`,
       d.avoid_when.length && `- avoid when: ${d.avoid_when.join("; ")}`,
     ].filter(Boolean);
-    return lines.join("\n") + "\n\n";
+    return `${lines.join("\n")}\n\n`;
   };
   const checkMeta = (n: Note) => {
     const d = n.data as Extract<NoteData, { type: "check" }>;

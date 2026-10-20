@@ -1,9 +1,9 @@
-import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { Vault, recommend, stackContext } from "../src/index.js";
+import { test } from "vitest";
+import { recommend, stackContext, Vault } from "../src/index.js";
 
 const SEED = path.resolve(import.meta.dirname, "../../../examples/vault");
 
@@ -37,7 +37,20 @@ test("agent proposals stay in inbox until approved", () => {
   const v = tempVault();
   v.propose(
     "django",
-    { type: "tech", kind: "framework", layer: "backend", language: "python", use_when: ["admin CRUD"], avoid_when: [], performs_best: [], related: [], practices: [], checks: [], tags: [], source: "manual" },
+    {
+      type: "tech",
+      kind: "framework",
+      layer: "backend",
+      language: "python",
+      use_when: ["admin CRUD"],
+      avoid_when: [],
+      performs_best: [],
+      related: [],
+      practices: [],
+      checks: [],
+      tags: [],
+      source: "manual",
+    },
     "# Django",
     { proposed_by: "test-agent", reason: "missing" },
   );

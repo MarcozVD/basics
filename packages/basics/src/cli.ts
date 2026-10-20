@@ -1,18 +1,18 @@
 #!/usr/bin/env node
 import fs from "node:fs";
 import path from "node:path";
-import { Command } from "commander";
 import {
   NOTE_TYPES,
-  Vault,
+  type NoteData,
+  type NoteType,
   recommend,
   renderContext,
   resolveVaultDir,
   search,
   title,
-  type NoteData,
-  type NoteType,
+  Vault,
 } from "@marcozvd/basics-core";
+import { Command } from "commander";
 
 const program = new Command("basics")
   .description("Personal tech-stack vault shared with coding agents")
@@ -28,12 +28,26 @@ program
     const v = load();
     if (!type || type === "tech") {
       for (const layer of v.byType("layer")) {
-        console.log(`${title(layer)}: ${v.techInLayer(layer.id).map((t) => t.id).join(", ") || "-"}`);
+        console.log(
+          `${title(layer)}: ${
+            v
+              .techInLayer(layer.id)
+              .map((t) => t.id)
+              .join(", ") || "-"
+          }`,
+        );
       }
       if (type) return;
     }
     for (const t of NOTE_TYPES.filter((t) => t !== "tech" && (!type || t === type))) {
-      console.log(`[${t}] ${v.byType(t).map((n) => n.id).join(", ") || "-"}`);
+      console.log(
+        `[${t}] ${
+          v
+            .byType(t)
+            .map((n) => n.id)
+            .join(", ") || "-"
+        }`,
+      );
     }
   });
 
@@ -47,11 +61,9 @@ program
     if (v.issues.length) process.exitCode = 1;
   });
 
-program
-  .command("search <query...>")
-  .action((query: string[]) => {
-    for (const h of search(load(), query.join(" "))) console.log(`${h.score}\t${h.type}\t${h.id}`);
-  });
+program.command("search <query...>").action((query: string[]) => {
+  for (const h of search(load(), query.join(" "))) console.log(`${h.score}\t${h.type}\t${h.id}`);
+});
 
 program
   .command("recommend <description...>")
@@ -69,8 +81,17 @@ program
     const templates: Record<NoteType, NoteData> = {
       layer: { type: "layer", tags: [], source: "manual" },
       tech: {
-        type: "tech", kind: "framework", layer, tags: [], source: "manual",
-        use_when: ["TODO"], avoid_when: ["TODO"], performs_best: ["TODO"], related: [], practices: [], checks: [],
+        type: "tech",
+        kind: "framework",
+        layer,
+        tags: [],
+        source: "manual",
+        use_when: ["TODO"],
+        avoid_when: ["TODO"],
+        performs_best: ["TODO"],
+        related: [],
+        practices: [],
+        checks: [],
       },
       practice: { type: "practice", applies_to: ["TODO"], tags: [], source: "manual" },
       check: { type: "check", kind: "test", applies_to: ["TODO"], tags: [], source: "manual" },
@@ -86,7 +107,9 @@ inbox.command("list", { isDefault: true }).action(() => {
   for (const p of ps) console.log(`${p.id}\t${p.meta.action}\t${p.data.type}\tby ${p.meta.proposed_by}: ${p.meta.reason}`);
 });
 inbox.command("show <id>").action((id: string) => {
-  const p = load().listProposals().find((x) => x.id === id);
+  const p = load()
+    .listProposals()
+    .find((x) => x.id === id);
   if (!p) throw new Error(`no proposal "${id}"`);
   console.log(fs.readFileSync(p.path, "utf8"));
 });
@@ -102,9 +125,12 @@ program
   .requiredOption("-s, --stack <ids>", "comma-separated tech ids, e.g. fastapi,react,playwright")
   .action((dir: string, { stack }) => {
     const v = load();
-    const ids = String(stack).split(",").map((s) => s.trim()).filter(Boolean);
+    const ids = String(stack)
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
     fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(path.join(dir, "STACK.md"), renderContext(v, ids) + "\n");
+    fs.writeFileSync(path.join(dir, "STACK.md"), `${renderContext(v, ids)}\n`);
     const agents = path.join(dir, "AGENTS.md");
     const pointer =
       `## Stack\n\nThis project uses: ${ids.join(", ")}.\n` +

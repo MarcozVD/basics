@@ -61,13 +61,7 @@ export const profileSchema = base.extend({
   stack: z.record(z.string(), z.array(z.string())).default({}),
 });
 
-export const noteSchema = z.discriminatedUnion("type", [
-  layerSchema,
-  techSchema,
-  practiceSchema,
-  checkSchema,
-  profileSchema,
-]);
+export const noteSchema = z.discriminatedUnion("type", [layerSchema, techSchema, practiceSchema, checkSchema, profileSchema]);
 
 export type NoteData = z.infer<typeof noteSchema>;
 export type TechData = z.infer<typeof techSchema>;

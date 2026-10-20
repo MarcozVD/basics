@@ -2,14 +2,14 @@ import fs from "node:fs";
 import path from "node:path";
 import matter from "gray-matter";
 import {
-  TYPE_DIRS,
-  noteSchema,
-  proposalMetaSchema,
   type Note,
   type NoteData,
   type NoteType,
+  noteSchema,
   type Proposal,
   type ProposalMeta,
+  proposalMetaSchema,
+  TYPE_DIRS,
 } from "./schema.js";
 
 const INBOX_DIR = "inbox";
@@ -165,7 +165,7 @@ export class Vault {
     const file = existing?.path ?? path.join(this.root, TYPE_DIRS[parsed.type], `${slugify(id)}.md`);
     fs.mkdirSync(path.dirname(file), { recursive: true });
     const stamped = { ...parsed, updated: new Date().toISOString().slice(0, 10) };
-    fs.writeFileSync(file, matter.stringify(body.trim() + "\n", stripEmpty(stamped)));
+    fs.writeFileSync(file, matter.stringify(`${body.trim()}\n`, stripEmpty(stamped)));
     this.reload();
     return file;
   }
@@ -179,7 +179,7 @@ export class Vault {
     const proposal: ProposalMeta = { ...meta, action, created: new Date().toISOString() };
     const file = path.join(this.root, INBOX_DIR, `${slug}.md`);
     fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.writeFileSync(file, matter.stringify(body.trim() + "\n", { ...stripEmpty(parsed), proposal }));
+    fs.writeFileSync(file, matter.stringify(`${body.trim()}\n`, { ...stripEmpty(parsed), proposal }));
     return { id: slug, path: file, meta: proposal, data: parsed, body };
   }
 
@@ -210,7 +210,5 @@ export class Vault {
 }
 
 function stripEmpty(obj: Record<string, unknown>): Record<string, unknown> {
-  return Object.fromEntries(
-    Object.entries(obj).filter(([, v]) => v !== undefined && !(Array.isArray(v) && v.length === 0)),
-  );
+  return Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined && !(Array.isArray(v) && v.length === 0)));
 }
