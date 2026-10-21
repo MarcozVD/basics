@@ -1,5 +1,16 @@
 # @marcozvd/basics
 
+## 0.3.0
+
+### Minor Changes
+
+- Project cycle: detect the stack from a project manifests (`basics detect`, `detect_stack`), filter practices and checks by the detected version, ship check file templates (`basics export --templates`, `get_check_templates`), link a project note through `basics.json`, run the stack checks with a trust list (`basics check`) and let agents record the project outcome (`record_project_outcome`).
+
+### Patch Changes
+
+- Updated dependencies
+  - @marcozvd/basics-core@0.3.0
+
 ## 0.2.0
 
 ### Minor Changes

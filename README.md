@@ -28,13 +28,15 @@ examples/vault/
   practices/  buenas prácticas (applies_to: [tech])
   checks/     validaciones que el código generado debe pasar (kind, command)
   profiles/   combinaciones de stack para tipos de proyecto
-  projects/   proyectos (description, path, status active|paused|archived, profile, stack, reason, lessons)
+  projects/   proyectos (description, path, status active|paused|archived, profile, stack, reason, lessons, last_checks)
   inbox/      propuestas de agentes pendientes de aprobación
 ```
 
 El vault es una carpeta normal: se puede abrir también con Obsidian y versionar con git.
 
-Schema v2: `tech` admite `version`; `practices` y `checks` admiten `since`/`until` (rango de versiones, el filtrado llega en M4);
+Schema v2: `tech` admite `version` y `packages` (npm/pypi) para reconocer la tecnología en los manifiestos de un proyecto;
+`practices` y `checks` admiten `since`/`until` (rango de versiones: se filtran por la versión detectada);
+`projects` admite `last_checks` (resultado del último `basics check`);
 los campos de frontmatter desconocidos se conservan al leer y reescribir notas.
 
 ## Instalación
@@ -184,15 +186,47 @@ basics recommend "API REST para servir modelos de ML"
 basics inbox                        # propuestas de agentes
 basics inbox approve django
 basics export ../mi-app --stack fastapi,postgresql,pytest
+basics detect ../mi-app             # tecnologías y versiones del proyecto
+basics check ../mi-app              # ejecuta los checks del stack en el proyecto
 basics ui                            # servidor local: API REST + UI web (http://127.0.0.1:4747)
 ```
 
 Desde el repo sin instalar: `npm run cli -- --vault examples/vault <comando>` o `pnpm cli ...`.
 
+## Detectar el stack
+
+```bash
+basics detect                       # en el directorio actual
+basics detect ../mi-app --json      # resultado completo en JSON
+```
+
+`basics detect [dir]` lee, sin recursión, `package.json` (dependencies y devDependencies), `pyproject.toml`
+(`[project]`, `[project.optional-dependencies]`, `[tool.poetry.*]`) y `requirements*.txt` (`requirements.txt`,
+`requirements-dev.txt`), y devuelve las tecnologías del vault con la versión detectada:
+
+```
+ID          VERSION   SOURCE
+next        15.3.0    package.json
+fastapi     0.115.0   pyproject.toml
+```
+
+El mapeo de paquete → tecnología sale del campo `packages` de la nota tech (`packages: { npm: [...], pypi: [...] }`):
+`nextjs` → npm `next`, `postgresql` → pypi `psycopg`, `psycopg2`, `psycopg2-binary`, `asyncpg` y npm `pg`,
+`playwright` → npm `@playwright/test` y pypi `playwright`, etc. En Python los nombres se normalizan según PEP 503
+(minúsculas y guiones), así que `psycopg2-binary` y `psycopg2_binary` apuntan a la misma tech.
+
+Los paquetes que no encajan con ninguna nota salen aparte como "Unknown packages", para que decidas si merece la pena
+una nota nueva. La versión es la mínima del rango declarado (`semver.minVersion` en npm, `>=`/`==`/`~=` en Python) y
+se deja vacía si no se puede parsear.
+
+Por MCP hace lo mismo la tool `detect_stack` (solo lectura).
+
 ## Exportar a un proyecto
 
 ```bash
 basics export ../mi-app --stack fastapi,postgresql,pytest --targets agents,claude,cursor
+basics export ../mi-app --detect            # detecta el stack del proyecto y lo fusiona con el guardado
+basics export ../mi-app --templates         # escribe las plantillas de archivos de los checks
 basics export ../mi-app --dry-run
 ```
 
@@ -209,6 +243,78 @@ El stack y los targets se guardan en `basics.json` en la raíz del proyecto, as�
 
 Por MCP, la tool `export_project` devuelve el contenido de esos archivos (JSON) sin tocar el disco: el agente los
 escribe en la raíz del proyecto.
+
+### Stack detectado y versiones
+
+`--detect` detecta el stack del proyecto con las mismas reglas que `basics detect`, fusiona los ids detectados con los
+guardados y persiste las versiones en `basics.json`:
+
+```json
+{
+  "stack": ["fastapi", "postgresql", "pytest"],
+  "targets": ["agents", "claude"],
+  "project": "mi-app",
+  "versions": { "fastapi": "0.115.0", "postgresql": "16.4" }
+}
+```
+
+Con las versiones a mano, el export (y el contexto del stack) se filtran por versión: las prácticas y los checks con
+`since`/`until` (`since` inclusivo, `until` exclusivo) fuera del rango de la tecnología detectada se omiten; si la
+versión se desconoce, se mantienen.
+
+### Nota de proyecto
+
+`basics export` crea (o actualiza) en el vault una nota de tipo `project` para esa carpeta —id = nombre de la carpeta
+(con `-2`, `-3`… si ya existe otra nota con ese id), `path` absoluto, `stack` agrupado por capa y `status: active`— y
+guarda su id en `basics.json` (`"project"`). Esa nota es la que va acumulando `lessons` y el resultado de los checks,
+y la que enlaza el proyecto con el vault.
+
+## Checks del proyecto
+
+```bash
+basics check                       # en el directorio actual (lee basics.json)
+basics check ../mi-app --list      # checks, comando y estado de confianza, sin ejecutar
+basics check ../mi-app --only pytest,ruff
+basics check ../mi-app --trust     # confía y ejecuta todo (CI)
+basics check ../mi-app --strict --verbose --timeout 120
+```
+
+`basics check [dir]` ejecuta en el directorio del proyecto el `command` de cada check del stack guardado en `basics.json`.
+Si el directorio no tiene `basics.json`, el comando avisa y sale con código 1: primero `basics export`.
+Antes de cada comando muestra el directorio y el comando exacto y pide confirmación: `y` (ejecutar esta vez), `n` (no) o
+`a` (always, guardar la confianza). La trust list vive en `<vault>/.basics/trust.json` y se indexa por
+`sha256(directorio absoluto + comando)`, así que al mover el proyecto o cambiar el comando vuelve a preguntar.
+
+Flags:
+
+| Flag | Qué hace |
+| --- | --- |
+| `--list` | lista checks, comando y si están confiados, sin ejecutar nada |
+| `--only <ids>` | ejecuta solo los checks indicados (comma separated) |
+| `--trust` | confía y ejecuta sin preguntar (para CI) |
+| `--timeout <s>` | timeout por check, 600 s por defecto |
+| `--verbose` | muestra la salida del comando en vivo |
+| `--strict` | también falla si algún check quedó `skip` o `untrusted` |
+
+Códigos de salida: `0` si todo pasó, `1` si algún check falló, si se canceló la confirmación o si `--strict` detecta
+checks omitidos o no confiados. Sin TTY y sin `--trust`, los comandos no confiados quedan `untrusted` y no se ejecutan.
+
+Los resultados se guardan en `last_checks` de la nota project (estado, fecha, duración y cola de salida) y en la UI se ven
+como chips de estado bajo el título.
+
+## Plantillas de tests
+
+Un check puede traer plantillas de archivos: un bloque de código con `file=<ruta>` en el cuerpo del check.
+
+````markdown
+```python file=tests/test_health.py
+def test_health():
+    assert True
+```
+````
+
+`basics export --templates` escribe esos archivos en el proyecto, pero solo los que **no** existen: nunca sobrescribe.
+La tool MCP `get_check_templates` devuelve las plantillas del stack en JSON para que el agente las escriba.
 
 ## Conectar agentes (MCP)
 
@@ -234,9 +340,12 @@ Es un log local, la carpeta `.basics/` se añade al `.gitignore` del vault autom
 | `get_note` | nota + backlinks + `hash` (para detectar conflictos al escribir) |
 | `recommend_stack` | shortlist por capa a partir de una descripción del proyecto |
 | `get_stack_context` | prácticas + checks del stack elegido, en markdown |
+| `detect_stack` | detecta tecnologías y versiones en los manifiestos de un proyecto (solo lectura) |
+| `get_check_templates` | plantillas de archivos (tests, configs) que traen los checks del stack |
 | `propose_note` | agente propone nota nueva o cambio, va a `inbox/` |
 | `list_proposals` | propuestas pendientes |
 | `export_project` | devuelve los archivos de export (STACK.md, AGENTS.md, CLAUDE.md, Cursor) para que los escriba el agente |
+| `record_project_outcome` | propone el resultado de un proyecto (lecciones, ampliaciones de tech) en el `inbox/` |
 
 Los agentes nunca escriben directo en el vault: todo pasa por `inbox/` hasta que lo apruebas.
 
@@ -249,7 +358,7 @@ Los cambios se describen con [changesets](https://github.com/changesets/changese
 - [ ] UI web local (Vite + React): editor, formularios por capa, vista grafo, revisión de inbox con diff
 - [ ] Índice SQLite FTS cuando el vault crezca
 - [ ] Recomendación semántica (embeddings) además de keywords
-- [ ] Runner de checks: ejecutar `command` de cada check en el proyecto y reportar
+- [x] Runner de checks: ejecutar `command` de cada check en el proyecto y reportar
 
 ## Créditos
 
