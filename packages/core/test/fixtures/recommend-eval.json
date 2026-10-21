@@ -219,5 +219,101 @@
       "frontend": { "top1": "react" },
       "testing": { "top1": "playwright" }
     }
+  },
+  {
+    "description": "Checkout where money movements must never be half-written",
+    "lang": "en",
+    "indirect": true,
+    "expect": {
+      "data": { "top1": "postgresql" }
+    }
+  },
+  {
+    "description": "Records shared by a whole team that must never drift out of sync",
+    "lang": "en",
+    "indirect": true,
+    "expect": {
+      "data": { "top1": "postgresql" }
+    }
+  },
+  {
+    "description": "Marketing site that must rank well in search results and feel instant on slow phones",
+    "lang": "en",
+    "indirect": true,
+    "expect": {
+      "frontend": { "top1": "nextjs" }
+    }
+  },
+  {
+    "description": "Click through the signup journey like a real person before each release",
+    "lang": "en",
+    "indirect": true,
+    "expect": {
+      "testing": { "top1": "playwright" }
+    }
+  },
+  {
+    "description": "Tiny checks that run on every save and finish in milliseconds",
+    "lang": "en",
+    "indirect": true,
+    "expect": {
+      "testing": { "top1": "vitest" }
+    }
+  },
+  {
+    "description": "Internal tool with dozens of widgets whose values change constantly in the tab",
+    "lang": "en",
+    "indirect": true,
+    "expect": {
+      "frontend": { "top1": "react" }
+    }
+  },
+  {
+    "description": "Cobros donde el dinero no puede quedar a medias si algo falla",
+    "lang": "es",
+    "indirect": true,
+    "expect": {
+      "data": { "top1": "postgresql" }
+    }
+  },
+  {
+    "description": "Fichas que edita todo el equipo y que nunca pueden quedar desincronizadas",
+    "lang": "es",
+    "indirect": true,
+    "expect": {
+      "data": { "top1": "postgresql" }
+    }
+  },
+  {
+    "description": "Web de marketing que debe salir bien en los buscadores y abrirse al instante en móviles lentos",
+    "lang": "es",
+    "indirect": true,
+    "expect": {
+      "frontend": { "top1": "nextjs" }
+    }
+  },
+  {
+    "description": "Recorrer el registro como una persona real antes de cada entrega",
+    "lang": "es",
+    "indirect": true,
+    "expect": {
+      "testing": { "top1": "playwright" }
+    }
+  },
+  {
+    "description": "Comprobaciones pequeñas que terminan en milisegundos al guardar",
+    "lang": "es",
+    "indirect": true,
+    "expect": {
+      "testing": { "top1": "vitest" }
+    }
+  },
+  {
+    "description": "Herramienta interna con decenas de widgets que cambian todo el rato en la pestaña",
+    "lang": "es",
+    "indirect": true,
+    "expect": {
+      "frontend": { "top1": "react" }
+    }
   }
 ]

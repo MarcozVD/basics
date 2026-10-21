@@ -2,9 +2,11 @@ import fs from "node:fs";
 import path from "node:path";
 import type { GraphData, GraphEdge, GraphNode, NoteDetail, NoteSummary, ProposalDetail, VaultStats } from "./api.js";
 import { inRange } from "./detect.js";
-import { splitNegations } from "./negation.js";
+import type { Embedder } from "./embeddings.js";
+import { phraseParts, splitNegations } from "./negation.js";
 import { NOTE_TYPES, type Note, type NoteData, type NoteType, type Proposal, type TechData } from "./schema.js";
 import { serializeNote, toId, type Vault } from "./vault.js";
+import type { LoadedIndex } from "./vector-index.js";
 
 // Small ES/EN stopword list; the vault mixes both languages.
 const STOPWORDS = new Set("a al and con de del el en es for in is la las los o of on or para por que the to un una uno with y".split(" "));
@@ -224,43 +226,85 @@ export interface Candidate {
   negated_use_when: string[];
   negated_avoid_when: string[];
   language_boost: number;
-  score_breakdown: { keywords: number; negation: number; language: number };
+  score_breakdown: { keywords: number; negation: number; language: number; semantic?: number };
+  /** Fused 0–1 score; only present in hybrid mode. */
+  hybrid?: number;
 }
 
 export interface Recommendation {
   description: string;
-  profiles: { id: string; score: number; stack: Record<string, string[]> }[];
+  profiles: { id: string; score: number; hybrid?: number; stack: Record<string, string[]> }[];
   layers: Record<string, Candidate[]>;
   note: string;
+  mode: "keywords" | "hybrid";
+}
+
+/** Default fusion weight for the keyword score; the rest goes to semantics. */
+export const HYBRID_WEIGHT = 0.4;
+/** Penalty for a query that is semantically close to a tech's avoid_when text. */
+export const HYBRID_LAMBDA = 1;
+/** Similarity above which the avoid_when penalty starts. */
+export const HYBRID_THETA = 0.85;
+/** Penalty for a negated phrase being semantically close to a tech's positive text. */
+export const HYBRID_MU = 0.5;
+/**
+ * e5 cosine similarities cluster in a narrow band, so they are mapped to 0..1 on a fixed
+ * scale instead of per-layer min-max (which turns tiny gaps between 2-3 candidates into 0 vs 1).
+ */
+export const SEMANTIC_FLOOR = 0.8;
+export const SEMANTIC_CEIL = 0.88;
+/** Keyword score treated as a full match when a layer's best score is lower. */
+export const KEYWORD_REFERENCE = 6;
+
+const clamp01 = (value: number): number => Math.min(1, Math.max(0, value));
+
+/** Absolute 0..1 scale for a cosine similarity. */
+export function calibrateSemantic(raw: number, floor = SEMANTIC_FLOOR, ceil = SEMANTIC_CEIL): number {
+  return clamp01((raw - floor) / (ceil - floor));
+}
+
+/** Keyword scores over max(reference, best in the group); negatives become 0. */
+export function scaleKeywords(scores: number[], reference = KEYWORD_REFERENCE): number[] {
+  const top = Math.max(reference, ...scores);
+  return scores.map((score) => clamp01(score / top));
 }
 
 function techLayers(d: TechData): string[] {
   return [d.layer].flat().map(toId);
 }
 
+export interface RecommendOptions {
+  layers?: string[];
+  perLayer?: number;
+}
+
 /**
  * Keyword-based shortlist. Deliberately simple: it gives the agent ranked candidates
  * plus the reasons they matched; the agent makes the final judgement.
  */
-export function recommend(vault: Vault, description: string, opts: { layers?: string[]; perLayer?: number } = {}): Recommendation {
+export function recommend(vault: Vault, description: string, opts: RecommendOptions = {}): Recommendation {
   const { positive, negated } = splitNegations(description);
   const q = new Set(tokens(positive));
-  const hits = (phrases: string[]) => phrases.filter((p) => overlap(q, p) > 0);
   const layerIds = opts.layers?.map(toId) ?? vault.byType("layer").map((n) => n.id);
 
+  // Positive query terms only match the affirmative part of a phrase ("API pura" in
+  // "API pura sin interfaz"), so mentioning "interfaz" doesn't count as that avoid_when.
+  const hits = (phrases: string[]) => phrases.filter((p) => overlap(q, phraseParts(p).positive) > 0);
+
+  // A negated query span keeps or flips polarity depending on which part of the phrase it
+  // hits: "sin interfaz" vs avoid_when "API pura sin interfaz" is the same situation.
   const negatedTokenSets = negated.map((span) => new Set(tokens(span)));
-  const negatedHits = (phrases: string[]): { phrases: string[]; count: number } => {
-    const matched = new Set<string>();
-    let count = 0;
+  const negatedHits = (phrases: string[]): { same: string[]; opposite: string[] } => {
+    const same = new Set<string>();
+    const opposite = new Set<string>();
     for (const span of negatedTokenSets) {
       for (const phrase of phrases) {
-        if (overlap(span, phrase) > 0) {
-          matched.add(phrase);
-          count += 1;
-        }
+        const parts = phraseParts(phrase);
+        if (parts.negated && overlap(span, parts.negated) > 0) same.add(phrase);
+        else if (overlap(span, parts.positive) > 0) opposite.add(phrase);
       }
     }
-    return { phrases: [...matched], count };
+    return { same: [...same], opposite: [...opposite] };
   };
 
   // Language techs named in the positive text: their implementation techs get a boost.
@@ -292,17 +336,21 @@ export function recommend(vault: Vault, description: string, opts: { layers?: st
         const negUse = negatedHits(d.use_when);
         const negAvoid = negatedHits(d.avoid_when);
         const keywords = use.length * 3 + best.length * 2 + overlap(q, [...d.tags, n.id].join(" ")) - avoid.length * 4;
-        const negation = negUse.count * -3 + negAvoid.count * 2;
+        // same polarity: negated use_when part = a use hit, negated avoid_when part = an avoid hit.
+        // A phrase already counted by the positive text is not counted again.
+        const useSame = negUse.same.filter((p) => !use.includes(p));
+        const avoidSame = negAvoid.same.filter((p) => !avoid.includes(p));
+        const negation = useSame.length * 3 - negUse.opposite.length * 3 - avoidSame.length * 4 + negAvoid.opposite.length * 2;
         const language = languageBoost(d);
         return {
           id: n.id,
           kind: d.kind,
           score: keywords + negation + language,
-          matched_use_when: use,
           matched_performs_best: best,
-          matched_avoid_when: avoid,
-          negated_use_when: negUse.phrases,
-          negated_avoid_when: negAvoid.phrases,
+          matched_use_when: [...new Set([...use, ...negUse.same])],
+          matched_avoid_when: [...new Set([...avoid, ...negAvoid.same])],
+          negated_use_when: negUse.opposite,
+          negated_avoid_when: negAvoid.opposite,
           language_boost: language,
           score_breakdown: { keywords, negation, language },
         };
@@ -326,6 +374,104 @@ export function recommend(vault: Vault, description: string, opts: { layers?: st
     profiles,
     layers,
     note: "Scores combine keyword overlap, explicit negations and language fit; score_breakdown shows each part. Read candidate notes (get_note) and decide.",
+    mode: "keywords",
+  };
+}
+
+/** Min-max scale to [0,1]; equal (or a single) values become 0.5. */
+export function minMaxNormalize(scores: number[]): number[] {
+  if (!scores.length) return [];
+  const min = Math.min(...scores);
+  const max = Math.max(...scores);
+  if (max === min) return scores.map(() => 0.5);
+  return scores.map((score) => (score - min) / (max - min));
+}
+
+function cosine(a: Float32Array | undefined, b: Float32Array | undefined): number {
+  if (!a || !b) return 0;
+  let dot = 0;
+  let normA = 0;
+  let normB = 0;
+  const length = Math.min(a.length, b.length);
+  for (let i = 0; i < length; i++) {
+    dot += a[i] * b[i];
+    normA += a[i] * a[i];
+    normB += b[i] * b[i];
+  }
+  return normA > 0 && normB > 0 ? dot / Math.sqrt(normA * normB) : 0;
+}
+
+const round3 = (value: number): number => Math.round(value * 1000) / 1000;
+
+export interface HybridOptions extends RecommendOptions {
+  /** Keyword weight, 0..1. */
+  weight?: number;
+  lambda?: number;
+  theta?: number;
+  mu?: number;
+  floor?: number;
+  ceil?: number;
+}
+
+/**
+ * Fuse the keyword shortlist with local embedding similarity. Keyword scores stay on
+ * `score`; the fused 0–1 value lands on `hybrid` and drives the ordering.
+ */
+export async function recommendHybrid(
+  vault: Vault,
+  description: string,
+  index: LoadedIndex,
+  embedder: Embedder,
+  opts: HybridOptions = {},
+): Promise<Recommendation> {
+  const weight = opts.weight ?? HYBRID_WEIGHT;
+  const lambda = opts.lambda ?? HYBRID_LAMBDA;
+  const theta = opts.theta ?? HYBRID_THETA;
+  const mu = opts.mu ?? HYBRID_MU;
+  const semantic01 = (raw: number) => calibrateSemantic(raw, opts.floor, opts.ceil);
+
+  const keyword = recommend(vault, description, { layers: opts.layers, perLayer: Number.MAX_SAFE_INTEGER });
+  const { positive, negated } = splitNegations(description);
+  const queryText = positive.trim() || description;
+  const [queryVector, ...negatedVectors] = await embedder.embed([queryText, ...negated], "query");
+
+  const layers: Record<string, Candidate[]> = {};
+  for (const [layer, candidates] of Object.entries(keyword.layers)) {
+    const semantic = candidates.map((candidate) => {
+      const pos = index.get(candidate.id, "pos");
+      const neg = index.get(candidate.id, "neg");
+      const negatedPenalty = mu * negatedVectors.reduce((max, span) => Math.max(max, cosine(span, pos)), 0);
+      const avoidPenalty = lambda * Math.max(0, cosine(queryVector, neg) - theta);
+      return cosine(queryVector, pos) - avoidPenalty - negatedPenalty;
+    });
+    const keywords = scaleKeywords(candidates.map((candidate) => candidate.score));
+    const semantics = semantic.map(semantic01);
+    layers[layer] = candidates
+      .map((candidate, i) => ({
+        ...candidate,
+        hybrid: round3(weight * keywords[i] + (1 - weight) * semantics[i]),
+        score_breakdown: { ...candidate.score_breakdown, semantic: round3(semantics[i]) },
+      }))
+      .sort((a, b) => (b.hybrid ?? 0) - (a.hybrid ?? 0) || b.score - a.score || a.id.localeCompare(b.id))
+      .slice(0, opts.perLayer ?? 3);
+  }
+
+  const profileScores = keyword.profiles.map((profile) => cosine(queryVector, index.get(profile.id, "main")));
+  const profileKeywords = scaleKeywords(keyword.profiles.map((profile) => profile.score));
+  const profileSemantics = profileScores.map(semantic01);
+  const profiles = keyword.profiles
+    .map((profile, i) => ({
+      ...profile,
+      hybrid: round3(weight * profileKeywords[i] + (1 - weight) * profileSemantics[i]),
+    }))
+    .sort((a, b) => (b.hybrid ?? 0) - (a.hybrid ?? 0) || b.score - a.score || a.id.localeCompare(b.id));
+
+  return {
+    description,
+    profiles,
+    layers,
+    note: "Scores fuse keyword overlap with local semantic similarity, minus explicit negations; score_breakdown shows each part. Read candidate notes (get_note) and decide.",
+    mode: "hybrid",
   };
 }
 

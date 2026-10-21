@@ -1,6 +1,6 @@
 import type { Candidate, ExportFile, Recommendation } from "@marcozvd/basics-core";
 import { useMutation } from "@tanstack/react-query";
-import { AlertTriangle, Check, Copy, Download, FileDown, type LucideIcon, Star, X } from "lucide-react";
+import { AlertTriangle, Ban, Check, Copy, Download, FileDown, type LucideIcon, Star, X } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
@@ -114,9 +114,29 @@ interface CandidateCardProps {
   onToggle: () => void;
 }
 
+function ModeIndicator({ mode }: { mode: Recommendation["mode"] }) {
+  const t = useT();
+  return (
+    <span className="rounded-full border border-border px-2 py-0.5 font-mono text-[10px] text-muted-foreground">
+      {t(mode === "hybrid" ? "recommend.mode.hybrid" : "recommend.mode.keywords")}
+    </span>
+  );
+}
+
 function CandidateCard({ candidate, maxScore, selected, reduce, onToggle }: CandidateCardProps) {
   const t = useT();
   const avoid = candidate.matched_avoid_when.length > 0;
+  const hybrid = candidate.hybrid;
+  const breakdown = candidate.score_breakdown;
+  const negated = [...new Set([...candidate.negated_use_when, ...candidate.negated_avoid_when])];
+  const detail = [
+    `${t("recommend.breakdown.keywords")} ${breakdown.keywords}`,
+    breakdown.semantic === undefined ? "" : `${t("recommend.breakdown.semantic")} ${breakdown.semantic.toFixed(3)}`,
+    `${t("recommend.breakdown.negation")} ${breakdown.negation}`,
+    `${t("recommend.breakdown.language")} ${breakdown.language}`,
+  ]
+    .filter(Boolean)
+    .join(" · ");
   return (
     <Card
       interactive
@@ -125,7 +145,7 @@ function CandidateCard({ candidate, maxScore, selected, reduce, onToggle }: Cand
       className={cn(
         "gap-2.5 bg-card py-3 hover:border-foreground/20",
         avoid && "border-destructive/35 hover:border-destructive/50",
-        candidate.score <= 0 && "border-dashed bg-transparent",
+        (hybrid === undefined ? candidate.score <= 0 : hybrid <= 0) && "border-dashed bg-transparent",
       )}
     >
       <CardHeader className="gap-2">
@@ -141,11 +161,14 @@ function CandidateCard({ candidate, maxScore, selected, reduce, onToggle }: Cand
             {candidate.id}
           </Link>
           <span className="truncate text-[11px] text-muted-foreground">{t(`option.${candidate.kind}` as TranslationKey)}</span>
-          <span className="ml-auto font-mono text-[11px] text-muted-foreground tabular-nums" title={t("recommend.score")}>
-            {candidate.score}
+          <span
+            className="ml-auto font-mono text-[11px] text-muted-foreground tabular-nums"
+            title={hybrid === undefined ? t("recommend.score") : detail}
+          >
+            {hybrid === undefined ? candidate.score : hybrid.toFixed(3)}
           </span>
         </div>
-        <ScoreBar value={candidate.score} max={maxScore} reduce={reduce} />
+        <ScoreBar value={hybrid ?? candidate.score} max={hybrid === undefined ? maxScore : 1} reduce={reduce} />
       </CardHeader>
       {candidate.matched_use_when.length + candidate.matched_performs_best.length + candidate.matched_avoid_when.length > 0 && (
         <CardContent className="flex flex-col gap-1.5">
@@ -157,6 +180,11 @@ function CandidateCard({ candidate, maxScore, selected, reduce, onToggle }: Cand
             className="text-destructive"
             phrases={candidate.matched_avoid_when}
           />
+        </CardContent>
+      )}
+      {negated.length > 0 && (
+        <CardContent>
+          <PhraseList icon={Ban} label={t("recommend.negated")} className="text-destructive/70" phrases={negated} />
         </CardContent>
       )}
     </Card>
@@ -196,7 +224,7 @@ function RecommendationResults({ recommendation, layerTitle, selected, reduce, o
                         {profile.id}
                       </Link>
                       <span className="font-mono text-[11px] text-muted-foreground tabular-nums" title={t("recommend.score")}>
-                        {profile.score}
+                        {profile.hybrid === undefined ? profile.score : profile.hybrid.toFixed(3)}
                       </span>
                       <Button
                         variant="secondary"
@@ -258,7 +286,7 @@ function RecommendationResults({ recommendation, layerTitle, selected, reduce, o
         )}
       </section>
 
-      <p className="text-xs text-muted-foreground">{t("recommend.note")}</p>
+      <p className="text-xs text-muted-foreground">{t(recommendation.mode === "hybrid" ? "recommend.note.hybrid" : "recommend.note")}</p>
     </div>
   );
 }
@@ -388,7 +416,26 @@ export function RecommendPage() {
   return (
     <div className="flex min-h-full flex-col">
       <div className={cn("mx-auto flex w-full max-w-[1200px] flex-col gap-4 px-5 pt-4", selected.size > 0 && "pb-16")}>
-        <h1 className="text-xl font-semibold tracking-tight">{t("page.recommend.title")}</h1>
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-semibold tracking-tight">{t("page.recommend.title")}</h1>
+            {run.data ? <ModeIndicator mode={run.data.mode} /> : null}
+          </div>
+          {run.data?.mode === "keywords" ? (
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <span>{t("recommend.enableHybrid")}</span>
+              <button
+                type="button"
+                aria-label={t("recommend.copyCli")}
+                title={t("recommend.copyCli")}
+                onClick={() => void copyText("basics embeddings enable")}
+                className="grid size-5 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              >
+                <Copy className="size-3" aria-hidden="true" />
+              </button>
+            </div>
+          ) : null}
+        </div>
 
         <PromptInput
           ref={inputRef}

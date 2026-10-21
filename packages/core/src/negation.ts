@@ -102,3 +102,17 @@ export function splitNegations(description: string): { positive: string; negated
       .trim();
   return { positive: positive.map(clean).filter(Boolean).join(". "), negated };
 }
+
+/**
+ * Split a single note phrase at its first negation cue: "API pura sin interfaz" ->
+ * { positive: "api pura", negated: "interfaz" }. Text is accent-folded and lowercased.
+ */
+export function phraseParts(phrase: string): { positive: string; negated?: string } {
+  const folded = fold(phrase);
+  CUE_RE.lastIndex = 0;
+  const match = CUE_RE.exec(folded);
+  CUE_RE.lastIndex = 0;
+  if (!match) return { positive: folded };
+  const negated = folded.slice(match.index + match[0].length).trim();
+  return { positive: folded.slice(0, match.index).trim(), negated: negated || undefined };
+}

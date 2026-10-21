@@ -29,6 +29,11 @@ export class EventHub {
     return () => this.subscribers.delete(fn);
   }
 
+  /** Broadcast an event produced outside the file watcher, such as embedding progress. */
+  publish(event: VaultEvent): void {
+    this.emit(event);
+  }
+
   async close(): Promise<void> {
     if (this.timer) clearTimeout(this.timer);
     this.timer = undefined;

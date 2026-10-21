@@ -18,12 +18,12 @@ import {
   listNotes,
   listPacks,
   loadConfig,
+  loadIndex,
   type NoteType,
   NotFoundError,
   proposalDetail,
   type RecommendRequest,
   readActivity,
-  recommend,
   renderContext,
   renderExport,
   type SaveNoteRequest,
@@ -42,8 +42,10 @@ import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { ZodError, z } from "zod";
+import { runtimeInstalled } from "../embeddings-runtime.js";
 import { createMcpServer } from "../mcp/tools.js";
 import { packsDir } from "../packs-dir.js";
+import { getRecommender } from "../recommender.js";
 import type { EventHub } from "./events.js";
 
 const { version } = createRequire(import.meta.url)("../../package.json") as { version: string };
@@ -224,7 +226,10 @@ export function createApp(opts: { root: string; uiDir?: string; events?: EventHu
 
   app.post("/api/recommend", async (c) => {
     const body = await c.req.json<RecommendRequest>();
-    return c.json(recommend(vault(), body.description, { layers: body.layers, perLayer: body.perLayer }));
+    const run = await getRecommender(vault(), {
+      onProgress: (done, total) => opts.events?.publish({ type: "embeddings", done, total }),
+    });
+    return c.json(await run(body.description, { layers: body.layers, perLayer: body.perLayer }));
   });
 
   app.post("/api/context", async (c) => {
@@ -273,6 +278,19 @@ export function createApp(opts: { root: string; uiDir?: string; events?: EventHu
   app.get("/api/graph", (c) => c.json(buildGraph(vault(), { broken: c.req.query("broken") === "1" })));
 
   app.get("/api/config", (c) => c.json({ language: loadConfig().language }));
+
+  app.get("/api/embeddings", (c) => {
+    const cfg = loadConfig();
+    const v = vault();
+    const index = loadIndex(v);
+    return c.json({
+      enabled: cfg.embeddings,
+      runtime: runtimeInstalled(),
+      model: cfg.embeddingsModel,
+      indexed: index.notes,
+      stale: index.stale(v).length,
+    });
+  });
 
   app.get("/api/activity", (c) => {
     const parsed = Number(c.req.query("limit"));

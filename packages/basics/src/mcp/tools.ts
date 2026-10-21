@@ -5,7 +5,6 @@ import {
   detectStack,
   NOTE_TYPES,
   noteSchema,
-  recommend,
   recordOutcome,
   renderContext,
   renderExport,
@@ -18,6 +17,7 @@ import {
 } from "@marcozvd/basics-core";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
+import { getRecommender } from "../recommender.js";
 
 const { version } = createRequire(import.meta.url)("../../package.json") as { version: string };
 
@@ -27,9 +27,9 @@ const fail = (message: string) => ({ content: [{ type: "text" as const, text: me
 const TEMPLATES_NOTE = "Write missing files into the project; never overwrite existing files.";
 
 // Report a missing vault as a tool error instead of crashing the whole server.
-const withVault = <T>(fn: () => T) => {
+const withVault = async <T>(fn: () => T | Promise<T>) => {
   try {
-    return fn();
+    return await fn();
   } catch (err) {
     if (err instanceof VaultNotFoundError) return fail(err.message);
     throw err;
@@ -128,8 +128,10 @@ export function createMcpServer(resolveRoot: () => string, opts: McpServerOption
       },
     },
     async ({ description, layers, per_layer }) =>
-      withVault(() => {
-        const rec = recommend(vault(), description, { layers, perLayer: per_layer });
+      withVault(async () => {
+        const v = vault();
+        const run = await getRecommender(v);
+        const rec = await run(description, { layers, perLayer: per_layer });
         log(
           "recommend_stack",
           Object.values(rec.layers).flatMap((candidates) => (candidates[0] ? [candidates[0].id] : [])),

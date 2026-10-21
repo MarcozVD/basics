@@ -24,7 +24,7 @@ import {
   type NoteType,
   normalizeTechIds,
   type PackInstallResult,
-  recommend,
+  type Recommendation,
   renderExport,
   resolveVaultDir,
   saveConfig,
@@ -52,6 +52,7 @@ import {
   runtimeInstalled,
 } from "./embeddings-runtime.js";
 import { packsDir } from "./packs-dir.js";
+import { getRecommender } from "./recommender.js";
 
 const { version } = createRequire(import.meta.url)("../package.json") as { version: string };
 
@@ -748,10 +749,39 @@ program
     for (const h of search(load(), query.join(" "))) console.log(`${h.score}\t${h.type}\t${h.id}`);
   });
 
+function printRecommendation(rec: Recommendation): void {
+  console.log(rec.mode === "hybrid" ? "Hybrid recommendation" : "Keyword recommendation");
+  console.log(rec.description);
+  for (const [layer, candidates] of Object.entries(rec.layers)) {
+    console.log(`\n${layer}`);
+    if (!candidates.length) {
+      console.log("  (none)");
+      continue;
+    }
+    for (const candidate of candidates) {
+      const score = rec.mode === "hybrid" ? (candidate.hybrid ?? 0).toFixed(3) : String(candidate.score);
+      const breakdown = candidate.score_breakdown;
+      const semantic = breakdown.semantic === undefined ? "—" : breakdown.semantic.toFixed(3);
+      console.log(
+        `  ${candidate.id.padEnd(18)} ${score.padStart(7)}  kw=${breakdown.keywords} sem=${semantic} neg=${breakdown.negation} lang=${breakdown.language}`,
+      );
+      for (const phrase of candidate.matched_use_when) console.log(`      use: ${phrase}`);
+      for (const phrase of candidate.matched_performs_best) console.log(`      best: ${phrase}`);
+      for (const phrase of candidate.matched_avoid_when) console.log(`      avoid: ${phrase}`);
+    }
+  }
+}
+
 program
   .command("recommend <description...>")
   .description("shortlist technologies per layer for a project description")
-  .action((desc: string[]) => console.log(JSON.stringify(recommend(load(), desc.join(" ")), null, 2)));
+  .option("--json", "print the full JSON response")
+  .action(async (desc: string[], opts: { json?: boolean }) => {
+    const run = await getRecommender(load());
+    const rec = await run(desc.join(" "));
+    if (opts.json) console.log(JSON.stringify(rec, null, 2));
+    else printRecommendation(rec);
+  });
 
 program
   .command("new <type> <id>")

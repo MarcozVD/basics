@@ -135,7 +135,7 @@ export interface ApiError {
   issues?: unknown;
 }
 
-export type VaultEvent = { type: "vault"; paths: string[] } | { type: "activity" };
+export type VaultEvent = { type: "vault"; paths: string[] } | { type: "activity" } | { type: "embeddings"; done: number; total: number };
 
 export type GraphNodeType = NoteType | "missing";
 

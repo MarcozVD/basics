@@ -268,3 +268,28 @@ test("GET /api/graph returns nodes and edges, broken targets only on request", a
   assert.ok(ghost && ghost.type === "missing" && ghost.degree === 1);
   assert.ok(withBroken.edges.some((edge) => edge.source === "fastapi" && edge.target === "ghost-tech" && edge.kind === "broken"));
 });
+
+test("GET /api/embeddings reports config and index state", async () => {
+  const v = tempVault();
+  const configFile = path.join(v.root, "config.json");
+  fs.writeFileSync(configFile, JSON.stringify({ vault: v.root, language: "en" }));
+  const previous = process.env.BASICS_CONFIG;
+  process.env.BASICS_CONFIG = configFile;
+  try {
+    const app = createApp({ root: v.root });
+    const res = await app.request("/api/embeddings", { headers: HOST });
+    assert.equal(res.status, 200);
+    const body = (await res.json()) as { enabled: boolean; runtime: boolean; model: string; indexed: number; stale: number };
+    assert.equal(body.enabled, false);
+    assert.equal(typeof body.runtime, "boolean");
+    assert.equal(body.model, "Xenova/multilingual-e5-small");
+    assert.equal(body.indexed, 0);
+    assert.ok(body.stale > 0);
+
+    const recommendation = await (await app.request("/api/recommend", jsonInit({ description: "REST API in Python" }))).json();
+    assert.equal((recommendation as { mode: string }).mode, "keywords");
+  } finally {
+    if (previous === undefined) delete process.env.BASICS_CONFIG;
+    else process.env.BASICS_CONFIG = previous;
+  }
+});
