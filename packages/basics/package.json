@@ -23,6 +23,7 @@
     "dist"
   ],
   "dependencies": {
+    "@clack/prompts": "^1.8.1",
     "@hono/node-server": "^2.1.5",
     "@marcozvd/basics-core": "0.1.0",
     "@modelcontextprotocol/sdk": "^1.32.1",

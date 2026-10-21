@@ -2,10 +2,13 @@
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { cancel, intro, isCancel, multiselect, outro, select, text } from "@clack/prompts";
 import {
   configPath,
   configSchema,
   expandHome,
+  installPack,
+  listPacks,
   loadConfig,
   NOTE_TYPES,
   type NoteData,
@@ -15,16 +18,118 @@ import {
   resolveVaultDir,
   saveConfig,
   search,
+  TYPE_DIRS,
   title,
   Vault,
 } from "@marcozvd/basics-core";
 import { Command } from "commander";
+import { packsDir } from "./packs-dir.js";
 
 const program = new Command("basics")
   .description("Personal tech-stack vault shared with coding agents")
   .option("-v, --vault <dir>", 'vault directory (default: $BASICS_DIR, config "vault", or ~/basics-vault)');
 
 const load = () => Vault.load(resolveVaultDir(program.opts().vault));
+
+function parseLang(value: string | undefined, fallback: "en" | "es"): "en" | "es" {
+  if (value === undefined) return fallback;
+  if (value !== "en" && value !== "es") throw new Error("language must be en or es");
+  return value;
+}
+
+function parsePackList(value: string | undefined, available: string[]): string[] {
+  if (value === undefined) return available;
+  if (value.trim().toLowerCase() === "none") return [];
+  return value
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function printTable(rows: string[][]): void {
+  const widths = rows[0].map((_, i) => Math.max(...rows.map((row) => row[i].length)));
+  for (const row of rows) console.log(row.map((cell, i) => (i === row.length - 1 ? cell : cell.padEnd(widths[i]))).join("  "));
+}
+
+function cancelInit(): never {
+  cancel("Init cancelled");
+  process.exit(1);
+}
+
+function assertInitTarget(dir: string): void {
+  if (!fs.existsSync(dir)) return;
+  if (fs.readdirSync(dir).length === 0) return;
+  const looksLikeVault = Object.values(TYPE_DIRS).some((typeDir) => fs.existsSync(path.join(dir, typeDir)));
+  if (!looksLikeVault) throw new Error(`refusing to init ${dir}: directory is not empty and is not a basics vault`);
+}
+
+interface InitOptions {
+  lang?: string;
+  packs?: string;
+  yes?: boolean;
+}
+
+async function init(dir: string | undefined, opts: InitOptions): Promise<void> {
+  const cfg = loadConfig();
+  const interactive = !opts.yes && process.stdin.isTTY === true;
+  const available = listPacks(packsDir());
+  let vaultDir = dir ? path.resolve(expandHome(dir)) : resolveVaultDir(program.opts().vault);
+  let language = parseLang(opts.lang, cfg.language);
+
+  if (interactive) {
+    intro("basics init");
+    const answer = await text({ message: "Vault directory", initialValue: vaultDir, defaultValue: vaultDir });
+    if (isCancel(answer)) return cancelInit();
+    vaultDir = path.resolve(expandHome(answer.trim() || vaultDir));
+  }
+  assertInitTarget(vaultDir);
+
+  if (interactive) {
+    const answer = await select<"en" | "es">({
+      message: "Vault language",
+      options: [
+        { value: "en", label: "English" },
+        { value: "es", label: "Español" },
+      ],
+      initialValue: language,
+    });
+    if (isCancel(answer)) return cancelInit();
+    language = answer;
+  }
+
+  let selected = parsePackList(
+    opts.packs,
+    available.map((p) => p.name),
+  );
+  if (interactive && opts.packs === undefined) {
+    const answer = await multiselect<string>({
+      message: "Packs to install",
+      options: available.map((p) => ({ value: p.name, label: p.name, hint: p.description[language] || p.description.en })),
+      initialValues: available.map((p) => p.name),
+    });
+    if (isCancel(answer)) return cancelInit();
+    selected = answer;
+  }
+  for (const name of selected) {
+    if (!available.some((p) => p.name === name)) throw new Error(`unknown pack "${name}"`);
+  }
+
+  for (const typeDir of Object.values(TYPE_DIRS)) fs.mkdirSync(path.join(vaultDir, typeDir), { recursive: true });
+  fs.mkdirSync(path.join(vaultDir, "inbox"), { recursive: true });
+
+  const vault = Vault.load(vaultDir);
+  for (const name of selected) {
+    const result = installPack(vault, packsDir(), name, { lang: language });
+    console.log(`${name}: ${result.installed.length} installed, ${result.skipped.length} skipped`);
+  }
+
+  saveConfig(configSchema.parse({ ...cfg, vault: vaultDir, language }));
+  console.log(`Vault: ${vaultDir}`);
+  console.log("Next steps:");
+  console.log("  basics ui");
+  console.log("  claude mcp add --transport http basics http://127.0.0.1:4747/mcp");
+  if (interactive) outro("Done");
+}
 
 function openBrowser(url: string): void {
   const command = process.platform === "win32" ? "cmd" : process.platform === "darwin" ? "open" : "xdg-open";
@@ -66,6 +171,55 @@ config
     const parsed = configSchema.parse(next);
     saveConfig(parsed);
     console.log(JSON.stringify(parsed, null, 2));
+  });
+
+program
+  .command("init [dir]")
+  .description("create a vault and install note packs")
+  .option("--lang <lang>", "note language (en|es)")
+  .option("--packs <names>", "comma-separated pack names, or none")
+  .option("--yes", "accept defaults and install all packs")
+  .action((dir: string | undefined, opts: InitOptions) => init(dir, opts));
+
+const pack = program.command("pack").description("manage official note packs");
+pack
+  .command("list")
+  .description("list packs and installed versions")
+  .action(() => {
+    const cfg = loadConfig();
+    const root = resolveVaultDir(program.opts().vault);
+    const vault = fs.existsSync(root) ? Vault.load(root) : undefined;
+    const packs = listPacks(packsDir(), vault);
+    if (!packs.length) return console.log("no packs found");
+    printTable([
+      ["NAME", "VERSION", "INSTALLED", "NOTES", "DESCRIPTION"],
+      ...packs.map((p) => [
+        p.name,
+        p.version,
+        p.installed ?? "—",
+        String(p.notes),
+        p.description[cfg.language] || p.description.en || Object.values(p.description)[0] || "",
+      ]),
+    ]);
+  });
+pack
+  .command("install <names...>")
+  .description("install packs and their requirements")
+  .option("--lang <lang>", "note language (en|es)")
+  .action((names: string[], { lang }: { lang?: string }) => {
+    const language = parseLang(lang, loadConfig().language);
+    const vault = load();
+    for (const name of names) {
+      const result = installPack(vault, packsDir(), name, { lang: language });
+      console.log(`${name}: ${result.installed.length} installed, ${result.skipped.length} skipped`);
+    }
+  });
+pack
+  .command("update [name]")
+  .description("update installed packs")
+  .action(() => {
+    console.log("not implemented yet");
+    process.exit(1);
   });
 
 program

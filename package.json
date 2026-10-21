@@ -10,7 +10,7 @@
     "node": ">=20.11"
   },
   "scripts": {
-    "build": "tsc -b packages/core packages/basics && npm run build -w @marcozvd/basics-ui && node scripts/copy-ui.mjs",
+    "build": "tsc -b packages/core packages/basics && npm run build -w @marcozvd/basics-ui && node scripts/copy-ui.mjs && node scripts/copy-packs.mjs",
     "typecheck": "tsc -b packages/core packages/basics --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
