@@ -6,6 +6,7 @@ import { cancel, intro, isCancel, multiselect, outro, select, text } from "@clac
 import {
   configPath,
   configSchema,
+  type ExportTarget,
   expandHome,
   installedPacks,
   installPack,
@@ -16,7 +17,7 @@ import {
   type NoteType,
   type PackInstallResult,
   recommend,
-  renderContext,
+  renderExport,
   resolveVaultDir,
   saveConfig,
   search,
@@ -141,6 +142,85 @@ async function init(dir: string | undefined, opts: InitOptions): Promise<void> {
   console.log("  basics ui");
   console.log("  claude mcp add --transport http basics http://127.0.0.1:4747/mcp");
   if (interactive) outro("Done");
+}
+
+const EXPORT_TARGETS: ExportTarget[] = ["agents", "claude", "cursor"];
+
+function isExportTarget(value: string): value is ExportTarget {
+  return (EXPORT_TARGETS as string[]).includes(value);
+}
+
+function parseIds(value: string | undefined): string[] | undefined {
+  if (value === undefined) return undefined;
+  return value
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function parseTargets(value: string | undefined): ExportTarget[] | undefined {
+  if (value === undefined) return undefined;
+  const names = value
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const unknown = names.filter((name) => !isExportTarget(name));
+  if (unknown.length) throw new Error(`unknown targets: ${unknown.join(", ")} (expected ${EXPORT_TARGETS.join(", ")})`);
+  return [...new Set(names)] as ExportTarget[];
+}
+
+interface ExportSettings {
+  stack: string[];
+  targets: ExportTarget[];
+}
+
+function readExportSettings(file: string): ExportSettings | undefined {
+  if (!fs.existsSync(file)) return undefined;
+  const raw = JSON.parse(fs.readFileSync(file, "utf8")) as { stack?: unknown; targets?: unknown };
+  return {
+    stack: Array.isArray(raw.stack) ? raw.stack.filter((id): id is string => typeof id === "string") : [],
+    targets: Array.isArray(raw.targets) ? raw.targets.filter((t): t is ExportTarget => typeof t === "string" && isExportTarget(t)) : [],
+  };
+}
+
+interface ExportOptions {
+  stack?: string;
+  targets?: string;
+  dryRun?: boolean;
+}
+
+function runExport(dir: string | undefined, opts: ExportOptions, forcedTargets?: ExportTarget[]): void {
+  const root = path.resolve(expandHome(dir ?? "."));
+  const settingsFile = path.join(root, "basics.json");
+  const saved = readExportSettings(settingsFile);
+  const stack = parseIds(opts.stack) ?? saved?.stack ?? [];
+  if (!stack.length) {
+    throw new Error('no stack configured: pass --stack <ids> or create basics.json with { "stack": [...] }');
+  }
+  const targets: ExportTarget[] =
+    parseTargets(opts.targets) ?? forcedTargets ?? (saved?.targets.length ? saved.targets : ["agents", "claude"]);
+
+  const read = (relPath: string): string | null => {
+    const file = path.join(root, relPath);
+    return fs.existsSync(file) ? fs.readFileSync(file, "utf8") : null;
+  };
+  const files = renderExport(load(), stack, targets, read);
+  const before = new Map(files.map((file) => [file.path, read(file.path)]));
+
+  if (!opts.dryRun) {
+    fs.mkdirSync(root, { recursive: true });
+    fs.writeFileSync(settingsFile, `${JSON.stringify({ stack, targets }, null, 2)}\n`);
+    for (const file of files) {
+      const target = path.join(root, file.path);
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.writeFileSync(target, file.content);
+    }
+  }
+
+  for (const file of files) {
+    if (opts.dryRun) console.log(`${file.path}: ${before.get(file.path) === file.content ? "unchanged" : "would change"}`);
+    else console.log(`wrote ${file.path}`);
+  }
 }
 
 function openBrowser(url: string): void {
@@ -374,25 +454,21 @@ program
   });
 
 program
-  .command("init-project <dir>")
-  .description("write STACK.md (practices + checks) and an AGENTS.md pointer into a project")
-  .requiredOption("-s, --stack <ids>", "comma-separated tech ids, e.g. fastapi,react,playwright")
-  .action((dir: string, { stack }) => {
-    const v = load();
-    const ids = String(stack)
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
-    fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(path.join(dir, "STACK.md"), `${renderContext(v, ids)}\n`);
-    const agents = path.join(dir, "AGENTS.md");
-    const pointer =
-      `## Stack\n\nThis project uses: ${ids.join(", ")}.\n` +
-      `Follow the practices in STACK.md and run its checks before finishing a task.\n` +
-      `If the basics MCP server is available, use get_stack_context / propose_note to read or extend the stack knowledge.\n`;
-    if (!fs.existsSync(agents)) fs.writeFileSync(agents, `# Agent instructions\n\n${pointer}`);
-    else if (!fs.readFileSync(agents, "utf8").includes("STACK.md")) fs.appendFileSync(agents, `\n${pointer}`);
-    console.log(`wrote ${path.join(dir, "STACK.md")} and ${agents}`);
+  .command("export [dir]")
+  .description("write STACK.md plus agent instructions (AGENTS.md, CLAUDE.md, Cursor rules) for a project")
+  .option("-s, --stack <ids>", "comma-separated tech ids, e.g. fastapi,react,playwright")
+  .option("-t, --targets <names>", `comma-separated targets (${EXPORT_TARGETS.join(",")})`)
+  .option("--dry-run", "print each file and whether it would change, without writing")
+  .action((dir: string | undefined, opts: ExportOptions) => runExport(dir, opts));
+
+program
+  .command("init-project [dir]", { hidden: true })
+  .description("deprecated: use basics export --targets agents")
+  .option("-s, --stack <ids>", "comma-separated tech ids, e.g. fastapi,react,playwright")
+  .option("--dry-run", "print each file and whether it would change, without writing")
+  .action((dir: string | undefined, opts: ExportOptions) => {
+    console.log("init-project is deprecated; use `basics export <dir> --targets agents`.");
+    runExport(dir, opts, ["agents"]);
   });
 
 program.parseAsync().catch((err) => {

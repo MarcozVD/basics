@@ -5,6 +5,7 @@ import {
   noteSchema,
   recommend,
   renderContext,
+  renderExport,
   search,
   title,
   Vault,
@@ -173,6 +174,26 @@ export function createMcpServer(resolveRoot: () => string, opts: McpServerOption
         return json({ status: "pending_review", id: p.id, action: p.meta.action, path: p.path });
       });
     },
+  );
+
+  server.registerTool(
+    "export_project",
+    {
+      description:
+        "Render the files that make a project's coding agents follow the user's stack: STACK.md always, plus AGENTS.md, CLAUDE.md and/or Cursor rules. " +
+        "Pass the current file contents in `existing` so agent-file blocks merge instead of overwriting user text; basics never writes outside the vault.",
+      inputSchema: {
+        stack: z.array(z.string()).min(1),
+        targets: z.array(z.enum(["agents", "claude", "cursor"])).optional(),
+        existing: z.record(z.string(), z.string()).optional().describe("Current file contents keyed by relative path"),
+      },
+    },
+    async ({ stack, targets, existing }) =>
+      withVault(() => {
+        const files = renderExport(vault(), stack, targets ?? ["agents", "claude"], (relPath) => existing?.[relPath] ?? null);
+        log("export_project", stack);
+        return text(`${JSON.stringify(files, null, 2)}\n\nWrite these files into the project root; basics never writes outside the vault.`);
+      }),
   );
 
   server.registerTool(
