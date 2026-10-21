@@ -74,6 +74,17 @@ export const profileSchema = base.extend({
   stack: z.record(z.string(), z.array(z.string())).default({}),
 });
 
+export const checkStatusSchema = z.enum(["pass", "fail", "skip", "untrusted"]);
+export type CheckStatus = z.infer<typeof checkStatusSchema>;
+
+export const lastCheckSchema = z.object({
+  status: checkStatusSchema,
+  at: z.string(),
+  duration_ms: z.number().optional(),
+  output_tail: z.string().optional(),
+});
+export type LastCheck = z.infer<typeof lastCheckSchema>;
+
 export const projectSchema = base.extend({
   type: z.literal("project"),
   description: z.string().optional(),
@@ -87,6 +98,8 @@ export const projectSchema = base.extend({
   reason: z.string().optional(),
   // Short learnings for the vault.
   lessons: list,
+  // Results of the last `basics check` run, keyed by check id.
+  last_checks: z.record(z.string(), lastCheckSchema).optional(),
 });
 
 export const noteSchema = z.discriminatedUnion("type", [

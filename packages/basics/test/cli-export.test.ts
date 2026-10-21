@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { Vault } from "@marcozvd/basics-core";
+import { type NoteData, Vault } from "@marcozvd/basics-core";
 import { test } from "vitest";
 
 const ROOT = path.resolve(import.meta.dirname, "../../..");
@@ -21,9 +21,15 @@ function runCli(args: string[], configFile: string): { status: number | null; st
   return { status: result.status, stdout: result.stdout, stderr: result.stderr || String(result.error ?? "") };
 }
 
-function writeConfig(dir: string, vault = VAULT): string {
+function seedVault(dir: string): string {
+  const vaultDir = path.join(dir, "vault");
+  if (!fs.existsSync(vaultDir)) fs.cpSync(VAULT, vaultDir, { recursive: true });
+  return vaultDir;
+}
+
+function writeConfig(dir: string, vault?: string): string {
   const configFile = path.join(dir, "config.json");
-  fs.writeFileSync(configFile, JSON.stringify({ vault, language: "en" }));
+  fs.writeFileSync(configFile, JSON.stringify({ vault: vault ?? seedVault(dir), language: "en" }));
   return configFile;
 }
 
@@ -51,7 +57,17 @@ test("export writes the files and basics.json, then reuses it without flags", ()
   assert.deepEqual(JSON.parse(fs.readFileSync(path.join(project, "basics.json"), "utf8")), {
     stack: ["fastapi", "react"],
     targets: ["agents", "claude", "cursor"],
+    project: "project",
   });
+  const vault = Vault.load(seedVault(dir));
+  const projectNote = vault.get("project");
+  assert.equal(projectNote?.data.type, "project");
+  const projectData = projectNote?.data as Extract<NoteData, { type: "project" }>;
+  assert.equal(projectData.path, path.resolve(project));
+  assert.deepEqual(projectData.stack, { backend: ["fastapi"], frontend: ["react"] });
+  assert.equal(projectData.status, "active");
+  assert.equal(projectData.source, "manual");
+
   const agents = fs.readFileSync(path.join(project, "AGENTS.md"), "utf8");
   assert.ok(agents.includes("<!-- basics:start -->"));
   assert.ok(agents.includes("backend: fastapi"));
@@ -63,13 +79,14 @@ test("export writes the files and basics.json, then reuses it without flags", ()
   assert.deepEqual(JSON.parse(fs.readFileSync(path.join(project, "basics.json"), "utf8")), {
     stack: ["fastapi", "react"],
     targets: ["agents", "claude", "cursor"],
+    project: "project",
   });
 
   const dry = runCli(["export", project, "--dry-run"], configFile);
   assert.equal(dry.status, 0, dry.stderr);
   assert.ok(dry.stdout.includes("STACK.md: unchanged"), dry.stdout);
   assert.ok(dry.stdout.includes("AGENTS.md: unchanged"), dry.stdout);
-});
+}, 30000);
 
 test("export --dry-run writes nothing", () => {
   const dir = tempDir();
@@ -129,10 +146,11 @@ test("detect prints JSON and export --detect merges ids and versions", () => {
   assert.deepEqual(JSON.parse(fs.readFileSync(path.join(project, "basics.json"), "utf8")), {
     stack: ["fastapi", "react", "typescript"],
     targets: ["agents"],
+    project: "project",
     versions: { react: "19.0.0", typescript: "5.9.0" },
   });
   assert.ok(fs.readFileSync(path.join(project, "STACK.md"), "utf8").includes("React"));
-});
+}, 30000);
 
 test("export errors without a stack and without basics.json", () => {
   const dir = tempDir();

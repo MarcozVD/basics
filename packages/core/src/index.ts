@@ -8,4 +8,5 @@ export * from "./packs.js";
 export * from "./query.js";
 export * from "./schema.js";
 export * from "./templates.js";
+export * from "./trust.js";
 export * from "./vault.js";

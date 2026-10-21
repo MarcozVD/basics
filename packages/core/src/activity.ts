@@ -19,12 +19,18 @@ export function activityPath(root: string): string {
   return path.join(root, ".basics", "activity.jsonl");
 }
 
-export function appendActivity(root: string, ev: Omit<ActivityEvent, "ts">): void {
-  const file = activityPath(root);
-  const dir = path.dirname(file);
+/** Create `<root>/.basics` with the gitignore that keeps local state out of the vault repo. */
+export function basicsDir(root: string): string {
+  const dir = path.join(root, ".basics");
   fs.mkdirSync(dir, { recursive: true });
   const gitignore = path.join(dir, ".gitignore");
   if (!fs.existsSync(gitignore)) fs.writeFileSync(gitignore, "*\n");
+  return dir;
+}
+
+export function appendActivity(root: string, ev: Omit<ActivityEvent, "ts">): void {
+  const file = activityPath(root);
+  basicsDir(root);
 
   const event: ActivityEvent = {
     ts: new Date().toISOString(),
