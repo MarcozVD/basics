@@ -1,16 +1,18 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Inbox as InboxIcon } from "lucide-react";
+import { Inbox as InboxIcon, Package } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { ApprovalCard } from "@/components/agents/approval-card";
 import { AnimatedNumber } from "@/components/motion/animated-number";
+import { Button } from "@/components/motion/button/base";
 import { Tabs, TabsList, TabsTrigger } from "@/components/motion/tabs";
 import { ErrorState, Loading } from "@/components/state";
 import { type TranslationKey, useI18n } from "@/i18n";
 import { agentColor, agentInitial } from "@/lib/agent-color";
-import { ApiRequestError, approveProposal, rejectProposal } from "@/lib/api";
+import { ApiRequestError, approveAllProposals, approveProposal, rejectProposal } from "@/lib/api";
 import { EASE_OUT, SPRING_LAYOUT } from "@/lib/ease";
+import { groupPackProposals, packProposer } from "@/lib/packs";
 import { useInbox } from "@/lib/queries";
 import { formatRelativeTime } from "@/lib/relative-time";
 import { toast } from "@/lib/toast";
@@ -40,6 +42,8 @@ export function InboxPage() {
   const [selected, setSelected] = useState(0);
   const [armed, setArmed] = useState<string | null>(null);
   const armTimer = useRef<number | undefined>(undefined);
+  const [armedPack, setArmedPack] = useState<string | null>(null);
+  const packTimer = useRef<number | undefined>(undefined);
 
   const proposals = useMemo(
     () => [...(inbox.data ?? [])].sort((a, b) => createdTime(b.meta.created) - createdTime(a.meta.created)),
@@ -56,6 +60,8 @@ export function InboxPage() {
     [filter, proposals],
   );
 
+  const packGroups = useMemo(() => groupPackProposals(proposals).filter((group) => group.proposals.length >= 2), [proposals]);
+
   useEffect(() => {
     setSelected((current) => Math.min(current, Math.max(0, visible.length - 1)));
   }, [visible.length]);
@@ -65,10 +71,12 @@ export function InboxPage() {
   }, [selected]);
 
   useEffect(() => () => window.clearTimeout(armTimer.current), []);
+  useEffect(() => () => window.clearTimeout(packTimer.current), []);
 
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ["inbox"] });
     void queryClient.invalidateQueries({ queryKey: ["notes"] });
+    void queryClient.invalidateQueries({ queryKey: ["stats"] });
   };
 
   const approve = useMutation({
@@ -106,6 +114,15 @@ export function InboxPage() {
     },
   });
 
+  const approveAll = useMutation({
+    mutationFn: (from: string) => approveAllProposals(from),
+    onSuccess: (data) => {
+      invalidate();
+      toast.success(t("inbox.approveAllDone", { count: data.approved.length }));
+    },
+    onError: () => toast.error(t("inbox.approveAllFailed")),
+  });
+
   const arm = (id: string) => {
     window.clearTimeout(armTimer.current);
     setArmed(id);
@@ -120,6 +137,18 @@ export function InboxPage() {
       return;
     }
     arm(id);
+  };
+
+  const requestApproveAll = (from: string) => {
+    if (armedPack === from) {
+      window.clearTimeout(packTimer.current);
+      setArmedPack(null);
+      approveAll.mutate(from);
+      return;
+    }
+    window.clearTimeout(packTimer.current);
+    setArmedPack(from);
+    packTimer.current = window.setTimeout(() => setArmedPack(null), 3000);
   };
 
   const open = (id: string) => navigate(`/inbox/${encodeURIComponent(id)}`);
@@ -195,6 +224,42 @@ export function InboxPage() {
         </Tabs>
       </header>
 
+      {packGroups.length > 0 ? (
+        <div className="mt-4 flex flex-col gap-1.5">
+          {packGroups.map((group) => {
+            const busy = approveAll.isPending && approveAll.variables === group.from;
+            const confirms = armedPack === group.from;
+            return (
+              <div
+                key={group.from}
+                data-pack={group.name}
+                className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-border/70 bg-card/50 px-3 py-1.5"
+              >
+                <Package className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+                <span className="min-w-0 truncate text-xs">
+                  <span className="font-mono font-medium">{group.name}</span>{" "}
+                  <span className="font-mono text-muted-foreground">{group.version}</span>
+                </span>
+                <span aria-hidden="true" className="text-muted-foreground/60">
+                  ·
+                </span>
+                <span className="text-xs text-muted-foreground">{t("inbox.updates", { count: group.proposals.length })}</span>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  pressScale={0.97}
+                  disabled={busy}
+                  onClick={() => requestApproveAll(group.from)}
+                  className={confirms ? "ml-auto h-7 border-destructive/40 px-3 text-destructive" : "ml-auto h-7 px-3"}
+                >
+                  {confirms ? t("inbox.approveAllConfirm") : t("inbox.approveAll")}
+                </Button>
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
+
       {inbox.isPending ? (
         <div className="py-10">
           <Loading />
@@ -236,6 +301,7 @@ export function InboxPage() {
                 (approve.isPending && approve.variables === proposal.id) || (reject.isPending && reject.variables === proposal.id);
               const typeLabel = t(`type.${proposal.type}` as TranslationKey);
               const name = proposal.meta.proposed_by;
+              const pack = packProposer(name);
               return (
                 <motion.div
                   key={proposal.id}
@@ -273,6 +339,7 @@ export function InboxPage() {
                     agentInitial={agentInitial(name)}
                     agentColor={agentColor(name)}
                     agentForeground="#111113"
+                    agentKind={pack ? "pack" : "agent"}
                     reason={proposal.meta.reason}
                     time={
                       <time dateTime={proposal.meta.created} title={proposal.meta.created}>

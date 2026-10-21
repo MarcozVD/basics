@@ -1,14 +1,19 @@
 import type {
   ActivityEvent,
   ApiError,
+  ApproveAllResponse,
   ApproveRequest,
   ContextResponse,
   CreateNoteRequest,
+  ExportFile,
+  ExportTarget,
   GraphData,
   LayerSummary,
   NoteDetail,
   NoteSummary,
   NoteType,
+  PackInfo,
+  PackInstallResult,
   ProposalDetail,
   ProposalSummary,
   Recommendation,
@@ -128,6 +133,21 @@ export function getContext(techIds: string[]): Promise<ContextResponse> {
   return request<ContextResponse>("/api/context", { method: "POST", body: JSON.stringify({ techIds }) });
 }
 
+export function exportStack(stack: string[], targets: ExportTarget[]): Promise<ExportFile[]> {
+  return request<ExportFile[]>("/api/export", { method: "POST", body: JSON.stringify({ stack, targets }) });
+}
+
+export function getPacks(): Promise<PackInfo[]> {
+  return request<PackInfo[]>("/api/packs");
+}
+
+export function installPack(name: string, lang: Language): Promise<PackInstallResult> {
+  return request<PackInstallResult>(`/api/packs/${encodeURIComponent(name)}/install`, {
+    method: "POST",
+    body: JSON.stringify({ lang }),
+  });
+}
+
 export function getInbox(): Promise<ProposalSummary[]> {
   return request<ProposalSummary[]>("/api/inbox");
 }
@@ -142,6 +162,10 @@ export function approveProposal(id: string, override?: ApproveRequest): Promise<
 
 export function rejectProposal(id: string): Promise<void> {
   return request<void>(`${proposalPath(id)}/reject`, { method: "POST" });
+}
+
+export function approveAllProposals(from: string): Promise<ApproveAllResponse> {
+  return request<ApproveAllResponse>("/api/inbox/approve-all", { method: "POST", body: JSON.stringify({ from }) });
 }
 
 export function getConfig(): Promise<AppConfig> {

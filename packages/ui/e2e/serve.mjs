@@ -10,14 +10,18 @@ const repoRoot = path.resolve(here, "../../..");
 const runDir = fs.mkdtempSync(path.join(os.tmpdir(), "basics-e2e-"));
 const vault = path.join(runDir, "vault");
 const config = path.join(runDir, "config.json");
+const empty = process.env.BASICS_E2E_EMPTY === "1";
+const port = process.env.BASICS_E2E_PORT ?? "4810";
+const stateFile = process.env.BASICS_E2E_STATE ?? ".vault-path";
 
-fs.cpSync(path.join(repoRoot, "examples", "vault"), vault, { recursive: true });
+if (empty) fs.mkdirSync(vault, { recursive: true });
+else fs.cpSync(path.join(repoRoot, "examples", "vault"), vault, { recursive: true });
 fs.writeFileSync(config, JSON.stringify({ language: "en" }));
-fs.writeFileSync(path.join(here, ".vault-path"), vault);
-console.log(`[e2e] vault: ${vault}`);
+fs.writeFileSync(path.join(here, stateFile), vault);
+console.log(`[e2e] vault: ${vault}${empty ? " (empty)" : ""}`);
 
 const cli = path.join(repoRoot, "packages", "basics", "dist", "cli.js");
-const child = spawn(process.execPath, [cli, "--vault", vault, "ui", "--no-open", "--port", "4810"], {
+const child = spawn(process.execPath, [cli, "--vault", vault, "ui", "--no-open", "--port", port], {
   stdio: "inherit",
   env: { ...process.env, BASICS_CONFIG: config },
 });
@@ -27,7 +31,7 @@ function cleanup() {
   if (cleaned) return;
   cleaned = true;
   fs.rmSync(runDir, { recursive: true, force: true });
-  fs.rmSync(path.join(here, ".vault-path"), { force: true });
+  fs.rmSync(path.join(here, stateFile), { force: true });
 }
 
 for (const signal of ["SIGINT", "SIGTERM"]) {

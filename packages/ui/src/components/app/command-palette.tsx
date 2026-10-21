@@ -9,6 +9,7 @@ import {
   LayoutList,
   type LucideIcon,
   Moon,
+  Package,
   Plus,
   Sparkles,
   Sun,
@@ -201,6 +202,14 @@ export function AppCommandPalette() {
     }
 
     list.push(
+      {
+        id: "action:install-packs",
+        group: t("palette.group.actions"),
+        label: t("palette.action.installPacks"),
+        keywords: ["starter", "onboarding", "setup", "packs"],
+        icon: Package,
+        onSelect: () => navigate("/?packs=1"),
+      },
       {
         id: "action:new-note",
         group: t("palette.group.actions"),

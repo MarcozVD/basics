@@ -9,6 +9,7 @@ import {
   getLayers,
   getNote,
   getNotes,
+  getPacks,
   getProposal,
   getStats,
   type NoteFilter,
@@ -23,6 +24,7 @@ export const queryKeys = {
   note: (id: string) => ["note", id] as const,
   inbox: ["inbox"] as const,
   proposal: (id: string) => ["proposal", id] as const,
+  packs: ["packs"] as const,
   config: ["config"] as const,
   activity: (filter: ActivityFilter) => ["activity", filter] as const,
   stats: ["stats"] as const,
@@ -55,6 +57,10 @@ export function useInbox() {
 
 export function useProposal(id: string | undefined) {
   return useQuery({ queryKey: queryKeys.proposal(id ?? ""), queryFn: () => getProposal(id ?? ""), enabled: Boolean(id) });
+}
+
+export function usePacks(enabled = true) {
+  return useQuery({ queryKey: queryKeys.packs, queryFn: getPacks, enabled });
 }
 
 export function useConfig() {

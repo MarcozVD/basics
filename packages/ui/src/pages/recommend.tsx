@@ -1,6 +1,6 @@
-import type { Candidate, Recommendation } from "@marcozvd/basics-core";
+import type { Candidate, ExportFile, Recommendation } from "@marcozvd/basics-core";
 import { useMutation } from "@tanstack/react-query";
-import { AlertTriangle, Check, Download, FileDown, type LucideIcon, Star, X } from "lucide-react";
+import { AlertTriangle, Check, Copy, Download, FileDown, type LucideIcon, Star, X } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
@@ -18,9 +18,10 @@ import { CARD_TARGET_CLASS, Card, CardContent, CardHeader } from "@/components/m
 import { CenterMorphModal, CenterMorphModalContent } from "@/components/motion/center-morph-modal";
 import { Checkbox } from "@/components/motion/checkbox";
 import { Loader } from "@/components/motion/loader";
+import { Tabs, TabsList, TabsTrigger } from "@/components/motion/tabs";
 import { ErrorState } from "@/components/state";
 import { type TranslationKey, useT } from "@/i18n";
-import { getContext, recommend } from "@/lib/api";
+import { exportStack, recommend } from "@/lib/api";
 import { EASE_OUT, SPRING_PANEL } from "@/lib/ease";
 import { useLayers } from "@/lib/queries";
 import { useReturnFocus } from "@/lib/return-focus";
@@ -29,6 +30,17 @@ import { tintStyle } from "@/lib/type-color";
 import { cn } from "@/lib/utils";
 
 const EXAMPLES = ["recommend.example.api", "recommend.example.ml", "recommend.example.web"] as const;
+const EXPORT_TABS = [
+  { value: "stack", path: "STACK.md", label: "STACK.md" },
+  { value: "agents", path: "AGENTS.md", label: "AGENTS.md" },
+  { value: "claude", path: "CLAUDE.md", label: "CLAUDE.md" },
+  { value: "cursor", path: ".cursor/rules/stack.mdc", label: "Cursor" },
+] as const;
+const EXPORT_TARGETS = ["agents", "claude", "cursor"] as const;
+
+function fileBasename(filePath: string): string {
+  return filePath.split("/").pop() ?? filePath;
+}
 const COLUMNS = "grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(280px,1fr))]";
 /** Profiles keep their column width even when only one matches. */
 const PROFILE_COLUMNS = "grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(280px,1fr))]";
@@ -280,7 +292,9 @@ export function RecommendPage() {
   const [selectedLayers, setSelectedLayers] = useState<string[] | null>(null);
   const [perLayer, setPerLayer] = useState(3);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [markdown, setMarkdown] = useState("");
+  const [files, setFiles] = useState<ExportFile[]>([]);
+  const [stackIds, setStackIds] = useState<string[]>([]);
+  const [exportTab, setExportTab] = useState<string>("stack");
   const [dialogOpen, setDialogOpen] = useState(false);
   const generateRef = useRef<HTMLButtonElement>(null);
   useReturnFocus(dialogOpen, generateRef);
@@ -297,13 +311,15 @@ export function RecommendPage() {
     onSuccess: () => setSelected(new Set()),
   });
 
-  const context = useMutation({
-    mutationFn: getContext,
-    onSuccess: (data) => {
-      setMarkdown(data.markdown);
+  const exportFiles = useMutation({
+    mutationFn: (ids: string[]) => exportStack(ids, [...EXPORT_TARGETS]),
+    onSuccess: (data, ids) => {
+      setFiles(data);
+      setStackIds(ids);
+      setExportTab("stack");
       setDialogOpen(true);
     },
-    onError: () => toast.error(t("recommend.contextFailed")),
+    onError: () => toast.error(t("recommend.exportFailed")),
   });
 
   const toggleLayer = (id: string) => {
@@ -333,20 +349,26 @@ export function RecommendPage() {
     inputRef.current?.focus();
   };
 
-  const copy = async () => {
+  const copyText = async (value: string) => {
     try {
-      await navigator.clipboard.writeText(markdown);
+      await navigator.clipboard.writeText(value);
       toast.success(t("recommend.copied"));
     } catch {
       toast.error(t("recommend.copyFailed"));
     }
   };
 
+  const activeTab = EXPORT_TABS.find((item) => item.value === exportTab) ?? EXPORT_TABS[0];
+  const activeFile = files.find((file) => file.path === activeTab.path) ?? files[0];
+  const content = activeFile?.content ?? "";
+  const filename = activeFile ? fileBasename(activeFile.path) : "STACK.md";
+  const cli = `basics export --stack ${stackIds.join(",")} --targets ${EXPORT_TARGETS.join(",")}`;
+
   const download = () => {
-    const url = URL.createObjectURL(new Blob([markdown], { type: "text/markdown" }));
+    const url = URL.createObjectURL(new Blob([content], { type: "text/markdown" }));
     const link = document.createElement("a");
     link.href = url;
-    link.download = "STACK.md";
+    link.download = filename;
     link.click();
     URL.revokeObjectURL(url);
   };
@@ -504,10 +526,10 @@ export function RecommendPage() {
               size="sm"
               pressScale={0.97}
               className="ml-1"
-              disabled={context.isPending}
-              onClick={() => context.mutate([...selected])}
+              disabled={exportFiles.isPending}
+              onClick={() => exportFiles.mutate([...selected])}
             >
-              {context.isPending ? (
+              {exportFiles.isPending ? (
                 <Loader variant="spinner" size={14} label={t("state.loading")} />
               ) : (
                 <FileDown className="size-3.5" aria-hidden="true" />
@@ -526,19 +548,46 @@ export function RecommendPage() {
         >
           <h2 className="font-mono text-base font-semibold tracking-tight">{t("recommend.dialog.title")}</h2>
           <p className="mt-0.5 pr-10 text-[13px] text-muted-foreground">{t("recommend.dialog.description")}</p>
+
+          <Tabs value={exportTab} onValueChange={setExportTab} variant="segment" className="mt-4">
+            <TabsList aria-label={t("recommend.exportFiles")}>
+              {EXPORT_TABS.map((tab) => (
+                <TabsTrigger key={tab.value} value={tab.value} className="px-3 py-1 text-xs">
+                  {tab.label}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+
           <CodeBlock
-            code={markdown}
+            code={content}
             language="markdown"
-            filename="STACK.md"
+            filename={filename}
             showStatus={false}
             copyable={false}
             showLineNumbers
             wrap
-            maxHeight="58dvh"
-            className="mt-4"
+            maxHeight="54dvh"
+            className="mt-2"
           />
+
+          <div className="mt-3 flex min-w-0 items-center gap-2">
+            <code className="min-w-0 flex-1 truncate rounded-md bg-muted/70 px-2 py-1 font-mono text-[10.5px] text-muted-foreground">
+              {cli}
+            </code>
+            <button
+              type="button"
+              aria-label={t("recommend.copyCli")}
+              title={t("recommend.copyCli")}
+              onClick={() => void copyText(cli)}
+              className="grid size-7 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            >
+              <Copy className="size-3.5" aria-hidden="true" />
+            </button>
+          </div>
+
           <div className="mt-4 flex justify-end gap-2">
-            <Button variant="secondary" size="sm" pressScale={0.97} onClick={() => void copy()}>
+            <Button variant="secondary" size="sm" pressScale={0.97} onClick={() => void copyText(content)}>
               {t("recommend.copy")}
             </Button>
             <Button size="sm" pressScale={0.97} onClick={download}>

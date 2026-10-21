@@ -12,6 +12,7 @@ import {
   type ContextResponse,
   type CreateNoteRequest,
   configSchema,
+  type ExportRequest,
   installPack,
   type LayerSummary,
   listNotes,
@@ -24,6 +25,7 @@ import {
   readActivity,
   recommend,
   renderContext,
+  renderExport,
   type SaveNoteRequest,
   saveConfig,
   search,
@@ -56,6 +58,10 @@ interface McpSession {
 }
 
 const contextRequestSchema = z.object({ techIds: z.array(z.string()).min(1) });
+const exportRequestSchema = z.object({
+  stack: z.array(z.string()).min(1),
+  targets: z.array(z.enum(["agents", "claude", "cursor"])).optional(),
+});
 const packInstallRequestSchema = z.object({ lang: z.enum(["en", "es"]).optional() });
 const approveAllRequestSchema = z.object({ from: z.string().min(1) });
 
@@ -219,6 +225,18 @@ export function createApp(opts: { root: string; uiDir?: string; events?: EventHu
   app.post("/api/context", async (c) => {
     const body = contextRequestSchema.parse(await c.req.json());
     return c.json({ markdown: renderContext(vault(), body.techIds) } satisfies ContextResponse);
+  });
+
+  app.post("/api/export", async (c) => {
+    const body = exportRequestSchema.parse(await c.req.json()) as ExportRequest;
+    try {
+      return c.json(renderExport(vault(), body.stack, body.targets ?? ["agents", "claude"], () => null));
+    } catch (err) {
+      if (err instanceof Error && err.message.startsWith("unknown tech ids")) {
+        return c.json({ error: "invalid", message: err.message } satisfies ApiError, 400);
+      }
+      throw err;
+    }
   });
 
   app.get("/api/inbox", (c) => {

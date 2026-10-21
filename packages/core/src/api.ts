@@ -1,3 +1,4 @@
+import type { ExportTarget } from "./export.js";
 import type { NoteData, NoteType, ProposalMeta } from "./schema.js";
 
 export interface NoteSummary {
@@ -115,6 +116,11 @@ export interface ContextRequest {
 
 export interface ContextResponse {
   markdown: string;
+}
+
+export interface ExportRequest {
+  stack: string[];
+  targets?: ExportTarget[];
 }
 
 export interface ApiError {

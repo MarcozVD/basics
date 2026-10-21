@@ -1,7 +1,7 @@
 "use client";
 // beui.dev/components/agents/approval-card (adapted for Basics proposal cards)
 
-import { Check, LoaderCircle, MessageSquareText, X } from "lucide-react";
+import { Check, LoaderCircle, MessageSquareText, Package, X } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import type { ReactNode } from "react";
 import { AnimatedBadge } from "@/components/motion/animated-badge";
@@ -22,6 +22,8 @@ export interface ApprovalCardProps {
   agentInitial: string;
   agentColor: string;
   agentForeground: string;
+  /** Packs get a neutral package glyph instead of the proposal author's letter. */
+  agentKind?: "agent" | "pack";
   reason: string;
   time: ReactNode;
   status?: ApprovalCardStatus;
@@ -65,6 +67,7 @@ export function ApprovalCard({
   agentInitial,
   agentColor,
   agentForeground,
+  agentKind = "agent",
   reason,
   time,
   status = "pending",
@@ -138,10 +141,13 @@ export function ApprovalCard({
         <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
           <span
             aria-hidden="true"
-            className="grid size-[18px] shrink-0 place-items-center rounded-md font-mono text-[10px] font-semibold"
-            style={{ backgroundColor: agentColor, color: agentForeground }}
+            className={cn(
+              "grid size-[18px] shrink-0 place-items-center rounded-md font-mono text-[10px] font-semibold",
+              agentKind === "pack" && "bg-muted text-muted-foreground ring-1 ring-border",
+            )}
+            style={agentKind === "pack" ? undefined : { backgroundColor: agentColor, color: agentForeground }}
           >
-            {agentInitial}
+            {agentKind === "pack" ? <Package className="size-3" /> : agentInitial}
           </span>
           <span className="min-w-0 truncate">{agentName}</span>
         </div>
