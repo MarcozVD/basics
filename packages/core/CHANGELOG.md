@@ -1,5 +1,11 @@
 # @marcozvd/basics-core
 
+## 0.4.0
+
+### Minor Changes
+
+- M5 hybrid recommender: keyword scoring now understands negations in Spanish and English ("sin SEO", "no UI", "without SSR") and boosts techs whose language is named in the description; the `score_breakdown` (keywords, negation, language) is printed by `basics recommend`, and `--json` keeps the JSON output. Opt-in local embeddings (`basics embeddings enable|status|reindex|disable`, model `Xenova/multilingual-e5-small`) with an incremental vector index in `<vault>/.basics/`; when enabled, the CLI, the `recommend_stack` MCP tool and the web UI use a hybrid keyword + semantic score. Adds a 30-case recommendation eval set and `npm run eval` (`--hybrid`, `--grid`).
+
 ## 0.3.0
 
 ### Minor Changes

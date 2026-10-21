@@ -95,6 +95,7 @@ Pantallas:
   las propuestas de un pack se agrupan con una barra "Approve all" para aprobarlas de golpe.
 - **Recomendar**: descripción del proyecto y capas → perfiles y candidatos por capa (`use_when`, `performs_best`, `avoid_when`),
   selección de candidatos y modal de export con pestañas **STACK.md | AGENTS.md | CLAUDE.md | Cursor**.
+  Muestra el modo de recomendación (**Keywords** o **Hybrid**, según los [embeddings locales](#búsqueda-semántica-local-opcional)) y el desglose de cada score.
 
 Con el vault vacío, **Home** muestra el onboarding de packs iniciales ("Start with a starter pack"): elegirlos e instalarlos sin salir de la pantalla.
 
@@ -110,7 +111,7 @@ Seguridad: el servidor solo escucha en `127.0.0.1` y rechaza peticiones con `Hos
 
 ## Configuración
 
-Config global en `~/.config/basics/config.json` (ruta alternativa con `BASICS_CONFIG`). Claves: `vault`, `language` (`en`|`es`), `embeddings` (`true`|`false`).
+Config global en `~/.config/basics/config.json` (ruta alternativa con `BASICS_CONFIG`). Claves: `vault`, `language` (`en`|`es`), `embeddings` (`true`|`false`), `embeddingsModel` (modelo de embeddings, ver *Búsqueda semántica local*).
 
 ```bash
 basics config path                    # ruta del archivo de config
@@ -162,6 +163,60 @@ como "Unknown packages". La versión es la mínima del rango declarado (`semver.
 y se deja vacía si no se puede parsear.
 
 Por MCP hace lo mismo la tool `detect_stack` (solo lectura).
+
+## Recomendación
+
+```bash
+basics recommend "API REST sin SEO, en TypeScript"
+basics recommend "API REST para servir modelos de ML" --json   # respuesta completa en JSON
+```
+
+`basics recommend` devuelve, por capa, las techs del vault ordenadas por score. Cada línea muestra el score y su desglose:
+
+```
+backend
+  fastapi                  3  kw=5 sem=— neg=0 lang=-2
+      use: API REST o JSON async
+```
+
+- `kw`: puntuación por keywords (`use_when`, `performs_best`, tags frente a la descripción).
+- `sem`: similitud semántica; `—` cuando no hay embeddings activos.
+- `neg`: ajuste por negaciones.
+- `lang`: boost por lenguaje.
+
+Las negaciones se detectan en español e inglés ("sin SEO", "no UI", "evitar SSR", "without SSR"): la cláusula negada no suma
+por sus términos positivos, y un `use_when` que coincide con ella resta puntos mientras que un `avoid_when` que coincide suma.
+Si la descripción nombra un lenguaje ("en TypeScript"), las techs escritas en ese lenguaje suben y las de la misma capa escritas
+en otro lenguaje bajan.
+
+Por MCP, la tool `recommend_stack` devuelve el mismo resultado; la pantalla **Recomendar** de la UI muestra el mismo desglose.
+
+## Búsqueda semántica local (opcional)
+
+Además de las keywords, basics puede comparar la descripción con las notas por significado usando un modelo de embeddings
+que corre en tu máquina. Está desactivado por defecto y **no se descarga nada hasta que lo actives**:
+
+```bash
+basics embeddings enable              # pide confirmación; --yes la omite
+basics embeddings status              # config, runtime, caché del modelo e índice
+basics embeddings reindex             # sincroniza el índice con el vault
+basics embeddings reindex --full      # vuelve a embeber todas las notas
+basics embeddings disable             # desactiva (conserva los ficheros descargados)
+basics embeddings disable --purge     # desactiva y borra el runtime y el modelo de la caché
+```
+
+`enable` descarga unos 375 MB de runtime (`@huggingface/transformers` + `onnxruntime`) y el modelo
+`Xenova/multilingual-e5-small` (unos 130 MB): unos 500 MB en total, guardados en `BASICS_CACHE` o en `~/.cache/basics`.
+Sin terminal interactiva y sin `--yes`, el comando aborta.
+
+El índice vive en `<vault>/.basics/embeddings.json` + `embeddings.bin`. Solo se reembeben las notas que cambiaron desde la
+última sincronización; las notas borradas salen del índice. Cambiar de modelo reconstruye el índice entero.
+
+Cuando los embeddings están activos, `basics recommend`, la tool MCP `recommend_stack` y la pantalla Recomendar usan el modo
+**híbrido**: fusionan el score de keywords y el semántico (normalizados por capa) y el score mostrado pasa a ser el híbrido.
+La UI indica el modo activo: **Keywords** o **Hybrid**. Sin embeddings, todo funciona igual que antes con keywords.
+
+Modelo configurable con la clave `embeddingsModel` (por defecto `Xenova/multilingual-e5-small`).
 
 ## Exportar a un proyecto
 
@@ -273,7 +328,7 @@ Otros clientes MCP (Cursor, etc.): ejecuta `basics-mcp [ruta-vault]` por stdio (
 | `list_layers` | capas y tecnologías |
 | `search_vault` | búsqueda full-text |
 | `get_note` | nota + backlinks + `hash` (para detectar conflictos al escribir) |
-| `recommend_stack` | shortlist por capa a partir de una descripción del proyecto |
+| `recommend_stack` | shortlist por capa a partir de una descripción del proyecto (híbrido si hay embeddings) |
 | `get_stack_context` | prácticas + checks del stack elegido, en markdown |
 | `detect_stack` | detecta tecnologías y versiones en los manifiestos de un proyecto (solo lectura) |
 | `get_check_templates` | plantillas de archivos (tests, configs) que traen los checks del stack |
@@ -289,9 +344,18 @@ Los agentes nunca escriben directo en el vault: todo pasa por `inbox/` hasta que
 El código vive en el monorepo [github.com/MarcozVD/basics](https://github.com/MarcozVD/basics): `packages/basics` (esta CLI + servidor),
 `packages/core` ([`@marcozvd/basics-core`](https://www.npmjs.com/package/@marcozvd/basics-core)) y `packages/ui` (UI web).
 
+Evaluación de la recomendación (desde el repo, sobre los packs oficiales):
+
+```bash
+npm run eval                        # keywords: hit@1, hit@3 y violaciones de forbid
+npm run eval -- --hybrid            # score híbrido (requiere `basics embeddings enable`)
+npm run eval -- --hybrid --grid     # barrido de pesos (w, θ, μ) del score híbrido
+npm run eval -- --json              # resultado crudo en JSON
+```
+
 ## Roadmap
 
 - [ ] Vista grafo en la UI
 - [ ] Índice SQLite FTS cuando el vault crezca
-- [ ] Recomendación semántica (embeddings) además de keywords
+- [x] Recomendación semántica (embeddings) además de keywords
 - [x] Runner de checks: ejecutar `command` de cada check en el proyecto y reportar
