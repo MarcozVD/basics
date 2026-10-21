@@ -7,7 +7,7 @@ import { FIELDS } from "@/lib/fields";
 import { cn } from "@/lib/utils";
 import { FieldInput } from "./field-input";
 
-const META_KEYS = new Set(["type", "source", "updated"]);
+const META_KEYS = new Set(["type", "source", "updated", "last_checks"]);
 const OPEN_KEY = "basics-editor-properties-open";
 
 function readOpen(): boolean {

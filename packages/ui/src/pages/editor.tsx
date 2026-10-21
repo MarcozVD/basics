@@ -1,5 +1,5 @@
 import { markdown } from "@codemirror/lang-markdown";
-import type { NoteData } from "@marcozvd/basics-core";
+import type { LastCheck, NoteData } from "@marcozvd/basics-core";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import CodeMirror, { EditorView } from "@uiw/react-codemirror";
 import { Check, ChevronDown, MoreHorizontal, Trash2 } from "lucide-react";
@@ -30,6 +30,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { type TranslationKey, useI18n } from "@/i18n";
 import { ApiRequestError, deleteNote as deleteNoteApi, saveNote } from "@/lib/api";
 import { SPRING_SWAP } from "@/lib/ease";
+import { type CheckTone, lastCheckChips, tailLines } from "@/lib/last-checks";
 import { queryKeys, useActivity, useNote, useNotes } from "@/lib/queries";
 import { rememberRecentNote } from "@/lib/recent-notes";
 import { formatRelativeTime } from "@/lib/relative-time";
@@ -122,6 +123,53 @@ function ConnectionList({ ids, empty, broken }: { ids: string[]; empty: string; 
           <ConnectionRow id={id} broken={broken} />
         </li>
       ))}
+    </ul>
+  );
+}
+
+const CHECK_TONE: Record<CheckTone, string> = {
+  pass: "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+  fail: "border-destructive/25 bg-destructive/10 text-destructive-text",
+  muted: "border-border bg-muted/60 text-muted-foreground",
+};
+
+/** Read-only chips for the last `basics check` run, under the project note meta line. */
+function LastChecks({ checks }: { checks: Record<string, LastCheck> }) {
+  const { t, language } = useI18n();
+  const chips = lastCheckChips(checks);
+  if (chips.length === 0) return null;
+
+  return (
+    <ul aria-label={t("editor.lastChecks")} className="mt-2 flex flex-wrap items-center gap-1.5">
+      {chips.map(({ id, check, tone }) => {
+        const output = tailLines(check.output_tail);
+        return (
+          <Tooltip
+            key={id}
+            side="top"
+            align="start"
+            content={
+              <div className="flex flex-col gap-1 font-mono text-[11px]">
+                {check.duration_ms !== undefined ? <span>{t("editor.checkDuration", { ms: check.duration_ms })}</span> : null}
+                {output.length ? (
+                  <pre className="max-w-80 overflow-auto whitespace-pre-wrap text-[10.5px] leading-relaxed">{output.join("\n")}</pre>
+                ) : null}
+              </div>
+            }
+          >
+            <li
+              className={cn(
+                "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-0.5 font-mono text-[10.5px]",
+                CHECK_TONE[tone],
+              )}
+            >
+              <span>{id}</span>
+              <span className="text-[10px] tracking-wide uppercase">{t(`editor.checkStatus.${check.status}` as TranslationKey)}</span>
+              <span className="text-muted-foreground">{formatRelativeTime(check.at, language)}</span>
+            </li>
+          </Tooltip>
+        );
+      })}
     </ul>
   );
 }
@@ -541,6 +589,7 @@ export function EditorPage() {
             </Tooltip>
           ) : null}
         </div>
+        {data.type === "project" && data.last_checks ? <LastChecks checks={data.last_checks} /> : null}
       </div>
 
       <div className="mt-3">

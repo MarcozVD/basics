@@ -4,6 +4,7 @@ export * from "./config.js";
 export * from "./detect.js";
 export * from "./export.js";
 export * from "./fsutil.js";
+export * from "./outcome.js";
 export * from "./packs.js";
 export * from "./query.js";
 export * from "./schema.js";

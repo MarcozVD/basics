@@ -194,7 +194,7 @@ test("inbox lists a proposal and approves it", async () => {
   assert.deepEqual(await empty.json(), []);
 });
 
-test("MCP tools/list returns 10 tools", async () => {
+test("MCP tools/list returns 11 tools", async () => {
   const v = tempVault();
   const app = createApp({ root: v.root });
 
@@ -206,7 +206,7 @@ test("MCP tools/list returns 10 tools", async () => {
   const res = await mcpPost(app, { jsonrpc: "2.0", id: 2, method: "tools/list" }, sessionId);
   assert.equal(res.status, 200);
   const body = (await res.json()) as { result?: { tools?: unknown[] } };
-  assert.equal(body.result?.tools?.length, 10);
+  assert.equal(body.result?.tools?.length, 11);
 });
 
 test("MCP HTTP sessions keep the client name in activity", async () => {

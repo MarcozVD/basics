@@ -6,6 +6,7 @@ import {
   NOTE_TYPES,
   noteSchema,
   recommend,
+  recordOutcome,
   renderContext,
   renderExport,
   search,
@@ -214,6 +215,45 @@ export function createMcpServer(resolveRoot: () => string, opts: McpServerOption
         const p = vault().propose(id, parsed.data, body, { proposed_by: agent, reason });
         log("propose_note", [id], reason);
         return json({ status: "pending_review", id: p.id, action: p.meta.action, path: p.path });
+      });
+    },
+  );
+
+  server.registerTool(
+    "record_project_outcome",
+    {
+      description:
+        "Propose an outcome for a project note: append lessons, optionally extend tech notes (use_when, avoid_when, performs_best, lessons) and add a dated outcome section. " +
+        "Everything lands in the vault inbox for review; nothing is applied directly.",
+      inputSchema: {
+        project: z.string().describe("Project note id"),
+        summary: z.string().describe("What happened and what was learned"),
+        lessons: z.array(z.string()).optional(),
+        tech_updates: z
+          .array(
+            z.object({
+              id: z.string(),
+              add_use_when: z.array(z.string()).optional(),
+              add_avoid_when: z.array(z.string()).optional(),
+              add_performs_best: z.array(z.string()).optional(),
+              lesson: z.string().optional(),
+            }),
+          )
+          .optional(),
+      },
+    },
+    async (input) => {
+      const agent = server.server.getClientVersion()?.name ?? opts.clientHint ?? "unknown";
+      if (agent.startsWith("pack:")) return fail("agent names starting with 'pack:' are reserved");
+      return withVault(() => {
+        try {
+          const ids = recordOutcome(vault(), input, agent);
+          log("record_project_outcome", ids);
+          return json({ status: "pending_review", proposals: ids });
+        } catch (err) {
+          if (err instanceof Error) return fail(err.message);
+          throw err;
+        }
       });
     },
   );
