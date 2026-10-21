@@ -6,5 +6,5 @@
     "es": "Stack de API Python: FastAPI, pytest y PostgreSQL."
   },
   "requires": ["core-layers"],
-  "languages": ["es"]
+  "languages": ["en", "es"]
 }

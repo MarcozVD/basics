@@ -61,7 +61,8 @@ export function listPacks(packsDir: string, vault?: Vault): PackInfo[] {
     .map((name) => {
       const dir = path.join(packsDir, name);
       const manifest = readPack(packsDir, name);
-      return { ...manifest, dir, notes: noteFiles(path.join(dir, "notes")).length, installed: installed[name] ?? null };
+      const defaultLang = path.join(dir, "notes", manifest.languages[0]);
+      return { ...manifest, dir, notes: noteFiles(defaultLang).length, installed: installed[name] ?? null };
     });
 }
 

@@ -6,5 +6,5 @@
     "es": "Perfiles listos para productos comunes."
   },
   "requires": ["web-typescript", "python-api"],
-  "languages": ["es"]
+  "languages": ["en", "es"]
 }

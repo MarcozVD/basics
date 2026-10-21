@@ -6,5 +6,5 @@
     "es": "Capas de arquitectura base: frontend, backend, data, infra y testing."
   },
   "requires": [],
-  "languages": ["es"]
+  "languages": ["en", "es"]
 }

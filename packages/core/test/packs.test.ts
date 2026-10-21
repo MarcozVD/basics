@@ -55,12 +55,12 @@ test("an unknown pack throws NotFoundError", () => {
   assert.throws(() => installPack(emptyVault(), PACKS, "nope"), NotFoundError);
 });
 
-test("every pack note validates with the schema", () => {
+test("every pack note validates with the schema in both languages", () => {
   for (const pack of listPacks(PACKS)) {
-    for (const lang of readPack(PACKS, pack.name).languages) {
-      const notes = packNotes(PACKS, pack.name, lang);
-      assert.ok(notes.length > 0);
-      for (const note of notes) assert.equal(noteSchema.safeParse(note.data).success, true);
-    }
+    const es = packNotes(PACKS, pack.name, "es");
+    const en = packNotes(PACKS, pack.name, "en");
+    assert.ok(es.length > 0);
+    assert.deepEqual(en.map((n) => n.id).sort(), es.map((n) => n.id).sort());
+    for (const note of [...es, ...en]) assert.equal(noteSchema.safeParse(note.data).success, true);
   }
 });

@@ -6,5 +6,5 @@
     "es": "Stack web TypeScript: React, Next.js, Vitest y Playwright."
   },
   "requires": ["core-layers"],
-  "languages": ["es"]
+  "languages": ["en", "es"]
 }
