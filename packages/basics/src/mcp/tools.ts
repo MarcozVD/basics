@@ -9,6 +9,7 @@ import {
   renderContext,
   renderExport,
   search,
+  stackTemplates,
   title,
   UnknownTechError,
   Vault,
@@ -22,6 +23,7 @@ const { version } = createRequire(import.meta.url)("../../package.json") as { ve
 const json = (value: unknown) => ({ content: [{ type: "text" as const, text: JSON.stringify(value, null, 2) }] });
 const text = (value: string) => ({ content: [{ type: "text" as const, text: value }] });
 const fail = (message: string) => ({ content: [{ type: "text" as const, text: message }], isError: true });
+const TEMPLATES_NOTE = "Write missing files into the project; never overwrite existing files.";
 
 // Report a missing vault as a tool error instead of crashing the whole server.
 const withVault = <T>(fn: () => T) => {
@@ -149,6 +151,22 @@ export function createMcpServer(resolveRoot: () => string, opts: McpServerOption
         const markdown = renderContext(vault(), tech_ids, { versions });
         log("get_stack_context", tech_ids);
         return text(markdown);
+      }),
+  );
+
+  server.registerTool(
+    "get_check_templates",
+    {
+      description:
+        "Return the file templates (tests, configs) shipped by the checks of a chosen stack. " +
+        "Write missing files into the project; never overwrite existing files.",
+      inputSchema: { stack: z.array(z.string()).min(1), versions: z.record(z.string(), z.string()).optional() },
+    },
+    async ({ stack, versions }) =>
+      withVault(() => {
+        const templates = stackTemplates(vault(), stack, { versions });
+        log("get_check_templates", stack);
+        return text(`${JSON.stringify(templates, null, 2)}\n\n${TEMPLATES_NOTE}`);
       }),
   );
 

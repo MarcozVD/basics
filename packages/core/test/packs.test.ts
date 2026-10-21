@@ -26,7 +26,7 @@ test("installPack installs required packs first and stamps the source", () => {
   const result = installPack(v, PACKS, "python-api");
   assert.ok(result.installed.includes("python"));
   assert.ok(result.installed.includes("backend"));
-  assert.equal(v.get("python")?.data.source, "pack:python-api@1.0.0");
+  assert.equal(v.get("python")?.data.source, "pack:python-api@1.1.0");
   assert.equal(v.get("backend")?.data.source, "pack:core-layers@1.0.0");
   assert.equal(v.get("python")?.data.pack_lang, "en");
   assert.deepEqual(v.issues, []);
@@ -53,8 +53,8 @@ test("installedPacks reports every pack with its version", () => {
   assert.deepEqual(installedPacks(v), {
     "core-layers": "1.0.0",
     profiles: "1.0.0",
-    "python-api": "1.0.0",
-    "web-typescript": "1.0.0",
+    "python-api": "1.1.0",
+    "web-typescript": "1.1.0",
   });
 });
 

@@ -7,4 +7,5 @@ export * from "./fsutil.js";
 export * from "./packs.js";
 export * from "./query.js";
 export * from "./schema.js";
+export * from "./templates.js";
 export * from "./vault.js";

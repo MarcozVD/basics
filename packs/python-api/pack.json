@@ -1,6 +1,6 @@
 {
   "name": "python-api",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": {
     "en": "Python API stack: FastAPI, pytest and PostgreSQL.",
     "es": "Stack de API Python: FastAPI, pytest y PostgreSQL."

@@ -24,6 +24,7 @@ import {
   resolveVaultDir,
   saveConfig,
   search,
+  stackTemplates,
   TYPE_DIRS,
   title,
   updatePack,
@@ -200,6 +201,7 @@ interface ExportOptions {
   targets?: string;
   dryRun?: boolean;
   detect?: boolean;
+  templates?: boolean;
 }
 
 function runExport(dir: string | undefined, opts: ExportOptions, forcedTargets?: ExportTarget[]): void {
@@ -242,6 +244,21 @@ function runExport(dir: string | undefined, opts: ExportOptions, forcedTargets?:
   for (const file of files) {
     if (opts.dryRun) console.log(`${file.path}: ${before.get(file.path) === file.content ? "unchanged" : "would change"}`);
     else console.log(`wrote ${file.path}`);
+  }
+
+  if (opts.templates) {
+    for (const template of stackTemplates(vault, ids, { versions })) {
+      const target = path.join(root, template.file);
+      if (fs.existsSync(target)) {
+        console.log(`skipped ${template.file} (exists)`);
+      } else if (opts.dryRun) {
+        console.log(`would write ${template.file}`);
+      } else {
+        fs.mkdirSync(path.dirname(target), { recursive: true });
+        fs.writeFileSync(target, `${template.content}\n`);
+        console.log(`wrote ${template.file}`);
+      }
+    }
   }
 }
 
@@ -485,6 +502,7 @@ program
   .option("-s, --stack <ids>", "comma-separated tech ids, e.g. fastapi,react,playwright")
   .option("-t, --targets <names>", `comma-separated targets (${EXPORT_TARGETS.join(",")})`)
   .option("--detect", "detect the stack from package.json, pyproject.toml and requirements files")
+  .option("--templates", "write check file templates that do not exist yet")
   .option("--dry-run", "print each file and whether it would change, without writing")
   .action((dir: string | undefined, opts: ExportOptions) => runExport(dir, opts));
 

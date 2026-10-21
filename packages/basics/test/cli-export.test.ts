@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { Vault } from "@marcozvd/basics-core";
 import { test } from "vitest";
 
 const ROOT = path.resolve(import.meta.dirname, "../../..");
@@ -20,10 +21,21 @@ function runCli(args: string[], configFile: string): { status: number | null; st
   return { status: result.status, stdout: result.stdout, stderr: result.stderr || String(result.error ?? "") };
 }
 
-function writeConfig(dir: string): string {
+function writeConfig(dir: string, vault = VAULT): string {
   const configFile = path.join(dir, "config.json");
-  fs.writeFileSync(configFile, JSON.stringify({ vault: VAULT, language: "en" }));
+  fs.writeFileSync(configFile, JSON.stringify({ vault, language: "en" }));
   return configFile;
+}
+
+/** Copy of the seed vault whose FastAPI check carries a file template. */
+function templateVault(dir: string): string {
+  const vaultDir = path.join(dir, "vault");
+  fs.cpSync(VAULT, vaultDir, { recursive: true });
+  const vault = Vault.load(vaultDir);
+  const check = vault.get("fastapi-endpoint-tests");
+  assert.ok(check);
+  vault.writeNote(check.id, check.data, `${check.body}\n\n\`\`\`python file=tests/test_health.py\nprint("ok")\n\`\`\``);
+  return vaultDir;
 }
 
 test("export writes the files and basics.json, then reuses it without flags", () => {
@@ -140,6 +152,46 @@ test("--version prints the package version", () => {
   const result = runCli(["--version"], configFile);
   assert.equal(result.status, 0, result.stderr);
   assert.equal(result.stdout.trim(), version);
+});
+
+test("export --templates writes missing files and never overwrites", () => {
+  const dir = tempDir();
+  const project = path.join(dir, "project");
+  const configFile = writeConfig(dir, templateVault(dir));
+
+  const first = runCli(["export", project, "-s", "fastapi", "-t", "agents", "--templates"], configFile);
+  assert.equal(first.status, 0, first.stderr);
+  assert.ok(first.stdout.includes("wrote tests/test_health.py"), first.stdout);
+  const file = path.join(project, "tests/test_health.py");
+  assert.ok(fs.existsSync(file));
+  assert.ok(fs.readFileSync(file, "utf8").includes('print("ok")'));
+
+  fs.writeFileSync(file, "# local edit\n");
+  const second = runCli(["export", project, "--templates"], configFile);
+  assert.equal(second.status, 0, second.stderr);
+  assert.ok(second.stdout.includes("skipped tests/test_health.py (exists)"), second.stdout);
+  assert.equal(fs.readFileSync(file, "utf8"), "# local edit\n");
+});
+
+test("export --templates --dry-run writes nothing", () => {
+  const dir = tempDir();
+  const project = path.join(dir, "missing");
+  const configFile = writeConfig(dir, templateVault(dir));
+
+  const result = runCli(["export", project, "-s", "fastapi", "--dry-run", "--templates"], configFile);
+  assert.equal(result.status, 0, result.stderr);
+  assert.ok(result.stdout.includes("would write tests/test_health.py"), result.stdout);
+  assert.equal(fs.existsSync(project), false);
+});
+
+test("export without --templates leaves template files alone", () => {
+  const dir = tempDir();
+  const project = path.join(dir, "project");
+  const configFile = writeConfig(dir, templateVault(dir));
+
+  const result = runCli(["export", project, "-s", "fastapi", "-t", "agents"], configFile);
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(fs.existsSync(path.join(project, "tests/test_health.py")), false);
 });
 
 test("init-project stays as a deprecated alias for the agents target", () => {

@@ -24,7 +24,7 @@ test("updatePack proposes changed and new notes, approve-all stamps the pack sou
   const packs = tempPacks();
   const manifestFile = path.join(packs, "python-api", "pack.json");
   const manifest = JSON.parse(fs.readFileSync(manifestFile, "utf8"));
-  fs.writeFileSync(manifestFile, JSON.stringify({ ...manifest, version: "1.1.0" }, null, 2));
+  fs.writeFileSync(manifestFile, JSON.stringify({ ...manifest, version: "1.2.0" }, null, 2));
 
   fs.appendFileSync(path.join(packs, "python-api", "notes", "en", "tech", "python.md"), "\nAdd type hints everywhere.\n");
   fs.writeFileSync(
@@ -57,14 +57,14 @@ Batteries-included framework.
 
   const proposal = vault.getProposal("python");
   assert.equal(proposal?.meta.action, "update");
-  assert.equal(proposal?.meta.proposed_by, "pack:python-api@1.1.0");
-  assert.equal(proposal?.meta.reason, "Pack python-api 1.0.0 → 1.1.0");
+  assert.equal(proposal?.meta.proposed_by, "pack:python-api@1.2.0");
+  assert.equal(proposal?.meta.reason, "Pack python-api 1.1.0 → 1.2.0");
 
   const approved = vault.approveAll({ pack: "python-api" });
   assert.deepEqual(approved.sort(), ["django", "python"]);
-  assert.equal(vault.get("python")?.data.source, "pack:python-api@1.1.0");
-  assert.equal(vault.get("django")?.data.source, "pack:python-api@1.1.0");
-  assert.equal(vault.get("fastapi")?.data.source, "pack:python-api@1.0.0");
+  assert.equal(vault.get("python")?.data.source, "pack:python-api@1.2.0");
+  assert.equal(vault.get("django")?.data.source, "pack:python-api@1.2.0");
+  assert.equal(vault.get("fastapi")?.data.source, "pack:python-api@1.1.0");
   assert.equal(vault.get("python")?.data.pack_lang, "en");
   assert.equal(vault.listProposals().length, 0);
 });
@@ -93,7 +93,7 @@ test("updatePack loads each note in its recorded pack_lang", () => {
   const packs = tempPacks();
   const manifestFile = path.join(packs, "python-api", "pack.json");
   const manifest = JSON.parse(fs.readFileSync(manifestFile, "utf8"));
-  fs.writeFileSync(manifestFile, JSON.stringify({ ...manifest, version: "1.1.0" }, null, 2));
+  fs.writeFileSync(manifestFile, JSON.stringify({ ...manifest, version: "1.2.0" }, null, 2));
   fs.appendFileSync(path.join(packs, "python-api", "notes", "es", "tech", "python.md"), "\nCambio en español.\n");
 
   const result = updatePack(vault, packs, "python-api");
@@ -112,7 +112,7 @@ test("updatePack skips notes the pack does not own", () => {
   const packs = tempPacks();
   const manifestFile = path.join(packs, "python-api", "pack.json");
   const manifest = JSON.parse(fs.readFileSync(manifestFile, "utf8"));
-  fs.writeFileSync(manifestFile, JSON.stringify({ ...manifest, version: "1.1.0" }, null, 2));
+  fs.writeFileSync(manifestFile, JSON.stringify({ ...manifest, version: "1.2.0" }, null, 2));
   fs.appendFileSync(path.join(packs, "python-api", "notes", "en", "tech", "python.md"), "\nPack change.\n");
 
   const result = updatePack(vault, packs, "python-api");

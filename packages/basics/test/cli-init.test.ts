@@ -63,7 +63,8 @@ test("pack list shows the installed version of every pack", () => {
     const line = result.stdout.split("\n").find((l) => l.startsWith(pack.name));
     assert.ok(line, `missing row for ${pack.name}`);
     assert.ok(line.includes(pack.version), `missing version for ${pack.name}: ${line}`);
-    assert.ok(line.includes("1.0.0"), `missing installed version for ${pack.name}: ${line}`);
+    const columns = line.split(/\s{2,}/);
+    assert.equal(columns[2], pack.version, `wrong installed version for ${pack.name}: ${line}`);
   }
 }, 60000);
 
