@@ -1,6 +1,8 @@
 ---
 type: tech
 kind: library
+packages:
+  npm: [react]
 title: React
 layer: frontend
 language: typescript

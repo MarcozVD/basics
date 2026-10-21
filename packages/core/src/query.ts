@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { GraphData, GraphEdge, GraphNode, NoteDetail, NoteSummary, ProposalDetail, VaultStats } from "./api.js";
+import { inRange } from "./detect.js";
 import { NOTE_TYPES, type Note, type NoteData, type NoteType, type Proposal, type TechData } from "./schema.js";
 import { serializeNote, toId, type Vault } from "./vault.js";
 
@@ -272,7 +273,7 @@ export function recommend(vault: Vault, description: string, opts: { layers?: st
 }
 
 /** Resolve tech ids plus their languages, then collect linked practices and checks. */
-export function stackContext(vault: Vault, techIds: string[]) {
+export function stackContext(vault: Vault, techIds: string[], opts: { versions?: Record<string, string> } = {}) {
   const techs = new Map<string, Note>();
   const addTech = (id: string) => {
     const n = vault.get(id);
@@ -282,6 +283,17 @@ export function stackContext(vault: Vault, techIds: string[]) {
   };
   techIds.forEach(addTech);
 
+  const versions = opts.versions ?? {};
+  const keep = (n: Note, field: "practices" | "checks"): boolean => {
+    const data = n.data as { applies_to: string[]; since?: string; until?: string };
+    const applies = new Set(data.applies_to.map(toId));
+    for (const t of techs.values()) {
+      if ((t.data as TechData)[field].map(toId).includes(n.id)) applies.add(t.id);
+    }
+    const versioned = [...applies].filter((id) => techs.has(id) && versions[id] !== undefined);
+    if (!versioned.length) return true;
+    return versioned.some((id) => inRange(versions[id], data.since, data.until));
+  };
   const collect = (type: "practice" | "check", field: "practices" | "checks") => {
     const out = new Map<string, Note>();
     for (const t of techs.values()) {
@@ -294,7 +306,7 @@ export function stackContext(vault: Vault, techIds: string[]) {
       const applies = (n.data as { applies_to: string[] }).applies_to.map(toId);
       if (applies.some((a) => techs.has(a))) out.set(n.id, n);
     }
-    return [...out.values()];
+    return [...out.values()].filter((n) => keep(n, field));
   };
 
   return {
@@ -309,8 +321,8 @@ export function stackContext(vault: Vault, techIds: string[]) {
 const demote = (md: string) => md.replace(/^(#{1,3}) /gm, "###$1 ");
 
 /** Markdown bundle an agent (or a project's STACK.md) can consume directly. */
-export function renderContext(vault: Vault, techIds: string[]): string {
-  const ctx = stackContext(vault, techIds);
+export function renderContext(vault: Vault, techIds: string[], opts: { versions?: Record<string, string> } = {}): string {
+  const ctx = stackContext(vault, techIds, opts);
   const section = (heading: string, notes: Note[], extra?: (n: Note) => string) =>
     notes.length
       ? `## ${heading}\n\n${notes.map((n) => `### ${title(n)} (\`${n.id}\`)\n\n${extra?.(n) ?? ""}${demote(n.body)}\n`).join("\n")}`

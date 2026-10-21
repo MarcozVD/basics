@@ -1,6 +1,9 @@
 ---
 type: tech
 kind: framework
+packages:
+  npm: ["@playwright/test"]
+  pypi: [playwright]
 title: Playwright
 layer: testing
 language: typescript

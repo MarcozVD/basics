@@ -81,6 +81,47 @@ test("export saves normalized, deduped tech ids", () => {
   assert.deepEqual(JSON.parse(fs.readFileSync(path.join(project, "basics.json"), "utf8")).stack, ["fastapi", "react"]);
 });
 
+test("detect prints JSON and export --detect merges ids and versions", () => {
+  const dir = tempDir();
+  const project = path.join(dir, "project");
+  const configFile = writeConfig(dir);
+  fs.mkdirSync(project);
+  fs.writeFileSync(
+    path.join(project, "package.json"),
+    JSON.stringify({ dependencies: { react: "^19.0.0" }, devDependencies: { typescript: "^5.9.0", vite: "^8.0.0" } }),
+  );
+  fs.writeFileSync(path.join(project, "basics.json"), JSON.stringify({ stack: ["fastapi"], targets: ["agents"] }));
+
+  const detected = runCli(["detect", project, "--json"], configFile);
+  assert.equal(detected.status, 0, detected.stderr);
+  const result = JSON.parse(detected.stdout) as {
+    techs: { id: string; version?: string }[];
+    unknown: { name: string }[];
+    files: string[];
+  };
+  assert.deepEqual(result.files, ["package.json"]);
+  assert.deepEqual(
+    result.techs.map((tech) => [tech.id, tech.version]),
+    [
+      ["react", "19.0.0"],
+      ["typescript", "5.9.0"],
+    ],
+  );
+  assert.deepEqual(
+    result.unknown.map((pkg) => pkg.name),
+    ["vite"],
+  );
+
+  const exported = runCli(["export", project, "--detect"], configFile);
+  assert.equal(exported.status, 0, exported.stderr);
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(project, "basics.json"), "utf8")), {
+    stack: ["fastapi", "react", "typescript"],
+    targets: ["agents"],
+    versions: { react: "19.0.0", typescript: "5.9.0" },
+  });
+  assert.ok(fs.readFileSync(path.join(project, "STACK.md"), "utf8").includes("React"));
+});
+
 test("export errors without a stack and without basics.json", () => {
   const dir = tempDir();
   const project = path.join(dir, "project");

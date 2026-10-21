@@ -1,6 +1,8 @@
 ---
 type: tech
 kind: framework
+packages:
+  npm: [next]
 title: Next.js
 layer: [frontend, backend]
 language: typescript

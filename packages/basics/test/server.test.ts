@@ -206,7 +206,7 @@ test("MCP tools/list returns 8 tools", async () => {
   const res = await mcpPost(app, { jsonrpc: "2.0", id: 2, method: "tools/list" }, sessionId);
   assert.equal(res.status, 200);
   const body = (await res.json()) as { result?: { tools?: unknown[] } };
-  assert.equal(body.result?.tools?.length, 8);
+  assert.equal(body.result?.tools?.length, 9);
 });
 
 test("MCP HTTP sessions keep the client name in activity", async () => {

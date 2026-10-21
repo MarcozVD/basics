@@ -7,6 +7,7 @@ import { cancel, intro, isCancel, multiselect, outro, select, text } from "@clac
 import {
   configPath,
   configSchema,
+  detectStack,
   type ExportTarget,
   expandHome,
   installedPacks,
@@ -177,14 +178,20 @@ function parseTargets(value: string | undefined): ExportTarget[] | undefined {
 interface ExportSettings {
   stack: string[];
   targets: ExportTarget[];
+  versions: Record<string, string>;
 }
 
 function readExportSettings(file: string): ExportSettings | undefined {
   if (!fs.existsSync(file)) return undefined;
-  const raw = JSON.parse(fs.readFileSync(file, "utf8")) as { stack?: unknown; targets?: unknown };
+  const raw = JSON.parse(fs.readFileSync(file, "utf8")) as { stack?: unknown; targets?: unknown; versions?: unknown };
+  const versions =
+    raw.versions && typeof raw.versions === "object"
+      ? Object.fromEntries(Object.entries(raw.versions).filter((entry): entry is [string, string] => typeof entry[1] === "string"))
+      : {};
   return {
     stack: Array.isArray(raw.stack) ? raw.stack.filter((id): id is string => typeof id === "string") : [],
     targets: Array.isArray(raw.targets) ? raw.targets.filter((t): t is ExportTarget => typeof t === "string" && isExportTarget(t)) : [],
+    versions,
   };
 }
 
@@ -192,13 +199,21 @@ interface ExportOptions {
   stack?: string;
   targets?: string;
   dryRun?: boolean;
+  detect?: boolean;
 }
 
 function runExport(dir: string | undefined, opts: ExportOptions, forcedTargets?: ExportTarget[]): void {
   const root = path.resolve(expandHome(dir ?? "."));
   const settingsFile = path.join(root, "basics.json");
   const saved = readExportSettings(settingsFile);
-  const stack = parseIds(opts.stack) ?? saved?.stack ?? [];
+  let stack = parseIds(opts.stack) ?? saved?.stack ?? [];
+  const versions = { ...saved?.versions };
+  const vault = load();
+  if (opts.detect) {
+    const detected = detectStack(vault, root);
+    stack = [...new Set([...stack, ...detected.techs.map((tech) => tech.id)])];
+    for (const tech of detected.techs) if (tech.version) versions[tech.id] = tech.version;
+  }
   if (!stack.length) {
     throw new Error('no stack configured: pass --stack <ids> or create basics.json with { "stack": [...] }');
   }
@@ -209,14 +224,14 @@ function runExport(dir: string | undefined, opts: ExportOptions, forcedTargets?:
     const file = path.join(root, relPath);
     return fs.existsSync(file) ? fs.readFileSync(file, "utf8") : null;
   };
-  const vault = load();
   const ids = normalizeTechIds(vault, stack);
-  const files = renderExport(vault, ids, targets, read);
+  const files = renderExport(vault, ids, targets, read, { versions });
   const before = new Map(files.map((file) => [file.path, read(file.path)]));
 
   if (!opts.dryRun) {
     fs.mkdirSync(root, { recursive: true });
-    fs.writeFileSync(settingsFile, `${JSON.stringify({ stack: ids, targets }, null, 2)}\n`);
+    const settings = { stack: ids, targets, ...(Object.keys(versions).length ? { versions } : {}) };
+    fs.writeFileSync(settingsFile, `${JSON.stringify(settings, null, 2)}\n`);
     for (const file of files) {
       const target = path.join(root, file.path);
       fs.mkdirSync(path.dirname(target), { recursive: true });
@@ -469,8 +484,29 @@ program
   .description("write STACK.md plus agent instructions (AGENTS.md, CLAUDE.md, Cursor rules) for a project")
   .option("-s, --stack <ids>", "comma-separated tech ids, e.g. fastapi,react,playwright")
   .option("-t, --targets <names>", `comma-separated targets (${EXPORT_TARGETS.join(",")})`)
+  .option("--detect", "detect the stack from package.json, pyproject.toml and requirements files")
   .option("--dry-run", "print each file and whether it would change, without writing")
   .action((dir: string | undefined, opts: ExportOptions) => runExport(dir, opts));
+
+program
+  .command("detect [dir]")
+  .description("detect technologies and versions from a project's manifests")
+  .option("--json", "print the full detection result as JSON")
+  .action((dir: string | undefined, { json }: { json?: boolean }) => {
+    const root = path.resolve(expandHome(dir ?? "."));
+    if (!fs.existsSync(root) || !fs.statSync(root).isDirectory()) throw new Error(`not a directory: ${root}`);
+    const result = detectStack(load(), root);
+    if (json) return console.log(JSON.stringify(result, null, 2));
+    if (!result.files.length) console.log("no manifests found");
+    else {
+      printTable([["ID", "VERSION", "SOURCE"], ...result.techs.map((tech) => [tech.id, tech.version ?? "—", tech.source])]);
+    }
+    if (result.unknown.length) {
+      console.log("");
+      console.log("Unknown packages:");
+      printTable([["ECOSYSTEM", "NAME", "VERSION"], ...result.unknown.map((pkg) => [pkg.ecosystem, pkg.name, pkg.version ?? "—"])]);
+    }
+  });
 
 program
   .command("init-project [dir]", { hidden: true })

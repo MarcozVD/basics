@@ -117,9 +117,10 @@ export function renderExport(
   techIds: string[],
   targets: ExportTarget[],
   existing: (relPath: string) => string | null,
+  opts: { versions?: Record<string, string> } = {},
 ): ExportFile[] {
   const ids = normalizeTechIds(vault, techIds);
-  const context = renderContext(vault, ids);
+  const context = renderContext(vault, ids, opts);
   const files: ExportFile[] = [{ path: "STACK.md", content: `${STACK_BANNER}\n\n${context}\n` }];
   const block = agentBlock(vault, ids);
 

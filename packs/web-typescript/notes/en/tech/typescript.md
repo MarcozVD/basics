@@ -1,6 +1,8 @@
 ---
 type: tech
 kind: language
+packages:
+  npm: [typescript]
 title: TypeScript
 layer: [frontend, backend]
 use_when:

@@ -1,6 +1,8 @@
+import fs from "node:fs";
 import { createRequire } from "node:module";
 import {
   appendActivity,
+  detectStack,
   NOTE_TYPES,
   noteSchema,
   recommend,
@@ -140,13 +142,33 @@ export function createMcpServer(resolveRoot: () => string, opts: McpServerOption
       description:
         "Compile best practices and validation checks for a chosen set of technologies into one markdown document. " +
         "Call once the stack is chosen and follow it while writing code; run the listed checks before declaring work done.",
-      inputSchema: { tech_ids: z.array(z.string()).min(1) },
+      inputSchema: { tech_ids: z.array(z.string()).min(1), versions: z.record(z.string(), z.string()).optional() },
     },
-    async ({ tech_ids }) =>
+    async ({ tech_ids, versions }) =>
       withVault(() => {
-        const markdown = renderContext(vault(), tech_ids);
+        const markdown = renderContext(vault(), tech_ids, { versions });
         log("get_stack_context", tech_ids);
         return text(markdown);
+      }),
+  );
+
+  server.registerTool(
+    "detect_stack",
+    {
+      description:
+        "Detect technologies and versions from a project directory's package.json, pyproject.toml and requirements files. Read-only.",
+      inputSchema: { path: z.string().describe("Existing project directory") },
+    },
+    async ({ path: dir }) =>
+      withVault(() => {
+        if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) return fail(`not a directory: ${dir}`);
+        const result = detectStack(vault(), dir);
+        log(
+          "detect_stack",
+          result.techs.map((tech) => tech.id),
+          dir,
+        );
+        return json(result);
       }),
   );
 

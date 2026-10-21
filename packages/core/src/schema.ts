@@ -38,6 +38,8 @@ export const techSchema = base.extend({
   language: z.string().optional(),
   // Version of the tech the user's notes target, e.g. "19" or "2.7".
   version: z.string().optional(),
+  // Package names that identify this tech in manifests.
+  packages: z.object({ npm: list, pypi: list }).partial().optional(),
   use_when: list,
   avoid_when: list,
   performs_best: list,

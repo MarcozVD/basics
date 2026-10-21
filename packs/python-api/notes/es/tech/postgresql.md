@@ -1,6 +1,9 @@
 ---
 type: tech
 kind: database
+packages:
+  npm: [pg]
+  pypi: [psycopg, psycopg2, psycopg2-binary, asyncpg]
 title: PostgreSQL
 layer: data
 use_when:

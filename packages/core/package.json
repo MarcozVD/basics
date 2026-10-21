@@ -28,9 +28,14 @@
   ],
   "dependencies": {
     "gray-matter": "^4.0.3",
+    "semver": "^7.8.5",
+    "smol-toml": "^1.9.1",
     "zod": "^4.6.7"
   },
   "scripts": {
     "prepublishOnly": "npm run build --prefix ../.. && npm test --prefix ../.."
+  },
+  "devDependencies": {
+    "@types/semver": "^7.8.0"
   }
 }

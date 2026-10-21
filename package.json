@@ -11,7 +11,7 @@
   },
   "scripts": {
     "build": "tsc -b packages/core packages/basics && npm run build -w @marcozvd/basics-ui && node scripts/copy-ui.mjs && node scripts/copy-packs.mjs",
-    "typecheck": "tsc -b packages/core packages/basics --noEmit",
+    "typecheck": "tsc -b packages/core packages/basics && tsc --noEmit -p packages/ui/tsconfig.app.json && tsc --noEmit -p packages/ui/tsconfig.node.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "e2e": "npm run e2e -w @marcozvd/basics-ui",
