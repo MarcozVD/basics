@@ -293,3 +293,25 @@ test("GET /api/embeddings reports config and index state", async () => {
     else process.env.BASICS_CONFIG = previous;
   }
 });
+
+test("ui: missing hashed assets 404 instead of falling back to index.html", async () => {
+  const vault = tempVault();
+  const uiDir = fs.mkdtempSync(path.join(os.tmpdir(), "basics-ui-"));
+  try {
+    fs.mkdirSync(path.join(uiDir, "assets"));
+    fs.writeFileSync(path.join(uiDir, "index.html"), "<!doctype html><title>Basics</title>");
+    fs.writeFileSync(path.join(uiDir, "assets", "app-new.js"), "export {};");
+    const app = createApp({ root: vault.root, uiDir });
+
+    const page = await app.request("/explore", { headers: HOST });
+    assert.equal(page.status, 200);
+    assert.equal(page.headers.get("cache-control"), "no-cache");
+    assert.match(await page.text(), /<title>Basics<\/title>/);
+
+    assert.equal((await app.request("/assets/app-new.js", { headers: HOST })).status, 200);
+    assert.equal((await app.request("/assets/app-old.js", { headers: HOST })).status, 404);
+  } finally {
+    fs.rmSync(vault.root, { recursive: true, force: true });
+    fs.rmSync(uiDir, { recursive: true, force: true });
+  }
+});

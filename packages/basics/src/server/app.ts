@@ -393,8 +393,14 @@ export function createApp(opts: { root: string; uiDir?: string; events?: EventHu
     const uiDir = opts.uiDir;
     app.use("/*", serveStatic({ root: uiDir }));
     app.get("*", async (c) => {
-      if (c.req.path.startsWith("/api") || c.req.path.startsWith("/mcp")) return c.notFound();
+      // A missing hashed asset (an old build's chunk) must 404, not fall back to index.html,
+      // so the client sees a real load error and can reload onto the new build.
+      if (c.req.path.startsWith("/api") || c.req.path.startsWith("/mcp") || c.req.path.startsWith("/assets/")) {
+        return c.notFound();
+      }
       const res = await serveStatic({ root: uiDir, path: path.join("index.html") })(c, async () => {});
+      // index.html names the current chunks; never let the browser cache it.
+      res?.headers.set("Cache-Control", "no-cache");
       return res ?? c.notFound();
     });
   }
