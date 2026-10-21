@@ -8,6 +8,7 @@ import {
   renderExport,
   search,
   title,
+  UnknownTechError,
   Vault,
   VaultNotFoundError,
 } from "@marcozvd/basics-core";
@@ -166,6 +167,7 @@ export function createMcpServer(resolveRoot: () => string, opts: McpServerOption
       },
     },
     async ({ id, type, frontmatter, body, reason, agent }) => {
+      if (agent.startsWith("pack:")) return fail("agent names starting with 'pack:' are reserved");
       const parsed = noteSchema.safeParse({ ...frontmatter, type });
       if (!parsed.success) return fail(`invalid frontmatter: ${parsed.error.message}`);
       return withVault(() => {
@@ -190,9 +192,16 @@ export function createMcpServer(resolveRoot: () => string, opts: McpServerOption
     },
     async ({ stack, targets, existing }) =>
       withVault(() => {
-        const files = renderExport(vault(), stack, targets ?? ["agents", "claude"], (relPath) => existing?.[relPath] ?? null);
-        log("export_project", stack);
-        return text(`${JSON.stringify(files, null, 2)}\n\nWrite these files into the project root; basics never writes outside the vault.`);
+        try {
+          const files = renderExport(vault(), stack, targets ?? ["agents", "claude"], (relPath) => existing?.[relPath] ?? null);
+          log("export_project", stack);
+          return text(
+            `${JSON.stringify(files, null, 2)}\n\nWrite these files into the project root; basics never writes outside the vault.`,
+          );
+        } catch (err) {
+          if (err instanceof UnknownTechError) return fail(err.message);
+          throw err;
+        }
       }),
   );
 

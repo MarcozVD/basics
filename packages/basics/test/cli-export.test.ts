@@ -71,6 +71,16 @@ test("export --dry-run writes nothing", () => {
   assert.equal(fs.existsSync(project), false);
 });
 
+test("export saves normalized, deduped tech ids", () => {
+  const dir = tempDir();
+  const project = path.join(dir, "project");
+  const configFile = writeConfig(dir);
+
+  const result = runCli(["export", project, "-s", "[[FastAPI]],react,react", "-t", "agents"], configFile);
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(project, "basics.json"), "utf8")).stack, ["fastapi", "react"]);
+});
+
 test("export errors without a stack and without basics.json", () => {
   const dir = tempDir();
   const project = path.join(dir, "project");
@@ -79,6 +89,16 @@ test("export errors without a stack and without basics.json", () => {
   const result = runCli(["export", project], configFile);
   assert.equal(result.status, 1);
   assert.ok(result.stderr.includes("no stack configured"), result.stderr);
+});
+
+test("--version prints the package version", () => {
+  const dir = tempDir();
+  const configFile = writeConfig(dir);
+  const { version } = JSON.parse(fs.readFileSync(path.join(ROOT, "packages/basics/package.json"), "utf8")) as { version: string };
+
+  const result = runCli(["--version"], configFile);
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout.trim(), version);
 });
 
 test("init-project stays as a deprecated alias for the agents target", () => {

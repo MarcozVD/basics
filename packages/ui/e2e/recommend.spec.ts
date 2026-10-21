@@ -2,6 +2,8 @@ import { expect, test } from "@playwright/test";
 
 test("recommends fastapi and exports the project files", async ({ page }) => {
   await page.goto("/recommend");
+  // The layer filter only renders once /api/layers resolves; submit needs those ids.
+  await expect(page.getByRole("button", { name: "Backend", exact: true })).toBeVisible();
 
   await page.getByLabel("Describe the project", { exact: true }).fill("API REST para servir modelos de machine learning");
   await page.getByRole("button", { name: "Recommend", exact: true }).click();

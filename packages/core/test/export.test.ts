@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import path from "node:path";
 import { test } from "vitest";
-import { renderExport, upsertBlock, Vault } from "../src/index.js";
+import { normalizeTechIds, renderExport, UnknownTechError, upsertBlock, Vault } from "../src/index.js";
 
 const SEED = path.resolve(import.meta.dirname, "../../../examples/vault");
 const BLOCK = "<!-- basics:start -->\n## Stack\n\nbackend: fastapi\n<!-- basics:end -->";
@@ -28,6 +28,24 @@ test("upsertBlock is idempotent", () => {
   const once = upsertBlock("# Notes\n", BLOCK);
   assert.equal(upsertBlock(once, BLOCK), once);
   assert.equal(upsertBlock(null, BLOCK).match(/basics:start/g)?.length, 1);
+});
+
+test("upsertBlock replaces the legacy init-project pointer", () => {
+  const legacy = [
+    "# Agent instructions",
+    "",
+    "## Stack",
+    "",
+    "This project uses: fastapi, react.",
+    "Follow the practices in STACK.md and run its checks before finishing a task.",
+    "If the basics MCP server is available, use get_stack_context / propose_note to read or extend the stack knowledge.",
+    "",
+  ].join("\n");
+  assert.equal(upsertBlock(legacy, BLOCK), `# Agent instructions\n\n${BLOCK}\n`);
+
+  const keep = `${legacy}Keep this line.\n`;
+  const merged = upsertBlock(keep, BLOCK);
+  assert.equal(merged, `# Agent instructions\n\n${BLOCK}\nKeep this line.\n`);
 });
 
 test("renderExport writes STACK.md plus the requested agent files", () => {
@@ -65,4 +83,18 @@ test("renderExport merges into an existing agent file", () => {
 test("renderExport throws listing unknown tech ids", () => {
   const vault = Vault.load(SEED);
   assert.throws(() => renderExport(vault, ["fastapi", "nope"], ["agents"], () => null), /unknown tech ids: nope/);
+});
+
+test("renderExport rejects non-tech ids with UnknownTechError", () => {
+  const vault = Vault.load(SEED);
+  assert.throws(
+    () => renderExport(vault, ["fastapi", "backend"], ["agents"], () => null),
+    (err: unknown) =>
+      err instanceof UnknownTechError && err.message === "unknown tech ids: backend (not a tech note)" && err.ids.length === 1,
+  );
+});
+
+test("normalizeTechIds resolves references and dedupes", () => {
+  const vault = Vault.load(SEED);
+  assert.deepEqual(normalizeTechIds(vault, ["[[FastAPI]]", "fastapi", "react", "react"]), ["fastapi", "react"]);
 });

@@ -214,6 +214,8 @@ export const es: typeof en = {
   "recommend.dialog.description": "Archivos que conectan el stack seleccionado con tu proyecto y sus agentes.",
   "recommend.exportFiles": "Archivos de exportación",
   "recommend.copy": "Copiar",
+  "recommend.copyBlock": "Copiar bloque",
+  "recommend.mergeHint": "Pega el bloque en tu archivo existente o ejecuta el comando de abajo para fusionarlo automáticamente.",
   "recommend.download": "Descargar",
   "recommend.copied": "Copiado al portapapeles",
   "recommend.copyFailed": "No se pudo copiar",

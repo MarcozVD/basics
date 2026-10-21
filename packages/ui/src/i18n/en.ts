@@ -212,6 +212,8 @@ export const en = {
   "recommend.dialog.description": "Files that wire the selected stack into your project and its agents.",
   "recommend.exportFiles": "Export files",
   "recommend.copy": "Copy",
+  "recommend.copyBlock": "Copy block",
+  "recommend.mergeHint": "Paste into your existing file, or run the command below to merge automatically.",
   "recommend.download": "Download",
   "recommend.copied": "Copied to clipboard",
   "recommend.copyFailed": "Could not copy",

@@ -28,7 +28,15 @@ test("installPack installs required packs first and stamps the source", () => {
   assert.ok(result.installed.includes("backend"));
   assert.equal(v.get("python")?.data.source, "pack:python-api@1.0.0");
   assert.equal(v.get("backend")?.data.source, "pack:core-layers@1.0.0");
+  assert.equal(v.get("python")?.data.pack_lang, "en");
   assert.deepEqual(v.issues, []);
+});
+
+test("installPack records the requested language", () => {
+  const v = emptyVault();
+  installPack(v, PACKS, "python-api", { lang: "es" });
+  assert.equal(v.get("python")?.data.pack_lang, "es");
+  assert.match(v.get("python")?.body ?? "", /asíncrono|asincrono|Python/i);
 });
 
 test("a second install skips every existing id", () => {
@@ -53,6 +61,19 @@ test("installedPacks reports every pack with its version", () => {
 test("an unknown pack throws NotFoundError", () => {
   assert.throws(() => readPack(PACKS, "nope"), NotFoundError);
   assert.throws(() => installPack(emptyVault(), PACKS, "nope"), NotFoundError);
+});
+
+test("pack names and requires entries cannot escape the packs directory", () => {
+  assert.throws(() => readPack(PACKS, "../packs/python-api"), NotFoundError);
+  assert.throws(() => readPack(PACKS, "Python-API"), NotFoundError);
+  assert.throws(() => installPack(emptyVault(), PACKS, "../../etc"), NotFoundError);
+
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "basics-packs-evil-"));
+  fs.cpSync(PACKS, dir, { recursive: true });
+  const manifestFile = path.join(dir, "python-api", "pack.json");
+  const manifest = JSON.parse(fs.readFileSync(manifestFile, "utf8"));
+  fs.writeFileSync(manifestFile, JSON.stringify({ ...manifest, requires: ["../evil"] }, null, 2));
+  assert.throws(() => installPack(emptyVault(), dir, "python-api"), NotFoundError);
 });
 
 test("every pack note validates with the schema in both languages", () => {

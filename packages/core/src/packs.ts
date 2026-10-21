@@ -28,6 +28,13 @@ const packManifestSchema = z.object({
   languages: z.array(z.string()).min(1),
 });
 
+const PACK_NAME = /^[a-z0-9][a-z0-9-]*$/;
+type PackNote = ReturnType<typeof packNotes>[number];
+
+function assertPackName(name: string): void {
+  if (!PACK_NAME.test(name)) throw new NotFoundError(`pack:${name}`);
+}
+
 function noteFiles(dir: string): string[] {
   if (!fs.existsSync(dir)) return [];
   return fs
@@ -68,6 +75,7 @@ export function listPacks(packsDir: string, vault?: Vault): PackInfo[] {
 }
 
 export function readPack(packsDir: string, name: string): PackManifest {
+  assertPackName(name);
   const file = path.join(packsDir, name, "pack.json");
   if (!fs.existsSync(file)) throw new NotFoundError(`pack:${name}`);
   return packManifestSchema.parse(JSON.parse(fs.readFileSync(file, "utf8")));
@@ -75,8 +83,10 @@ export function readPack(packsDir: string, name: string): PackManifest {
 
 export function packNotes(packsDir: string, name: string, lang?: string): { id: string; type: NoteType; data: NoteData; body: string }[] {
   const manifest = readPack(packsDir, name);
-  const dir = path.join(packsDir, name, "notes", lang ?? manifest.languages[0]);
-  if (!fs.existsSync(dir)) throw new NotFoundError(`pack:${name}:${lang ?? manifest.languages[0]}`);
+  const language = lang ?? manifest.languages[0];
+  if (!manifest.languages.includes(language)) throw new NotFoundError(`pack:${name}:${language}`);
+  const dir = path.join(packsDir, name, "notes", language);
+  if (!fs.existsSync(dir)) throw new NotFoundError(`pack:${name}:${language}`);
   return noteFiles(dir).map((file) => {
     const { data, content } = matter(fs.readFileSync(file, "utf8"));
     const parsed = noteSchema.parse(data);
@@ -94,6 +104,7 @@ export function installPack(
   const skipped: string[] = [];
   const byPack: Record<string, { installed: string[]; skipped: string[] }> = {};
   const done = new Set<string>();
+  const written = new Set<string>();
   const stack: string[] = [];
 
   const install = (packName: string, withRequires: boolean): void => {
@@ -104,13 +115,17 @@ export function installPack(
     if (withRequires) for (const required of manifest.requires) install(required, true);
     const counts: { installed: string[]; skipped: string[] } = { installed: [], skipped: [] };
     byPack[packName] = counts;
-    for (const note of packNotes(packsDir, packName, opts.lang)) {
-      if (vault.get(note.id)) {
+    const lang = opts.lang ?? manifest.languages[0];
+    for (const note of packNotes(packsDir, packName, lang)) {
+      if (vault.get(note.id) || written.has(note.id)) {
         counts.skipped.push(note.id);
         skipped.push(note.id);
         continue;
       }
-      vault.writeNote(note.id, { ...note.data, source: `pack:${packName}@${manifest.version}` }, note.body);
+      vault.writeNote(note.id, { ...note.data, source: `pack:${packName}@${manifest.version}`, pack_lang: lang }, note.body, {
+        reload: false,
+      });
+      written.add(note.id);
       counts.installed.push(note.id);
       installed.push(note.id);
     }
@@ -119,6 +134,7 @@ export function installPack(
   };
 
   install(name, opts.withRequires ?? true);
+  vault.reload();
   return { installed, skipped, byPack };
 }
 
@@ -127,6 +143,7 @@ function canonicalNote(data: NoteData): string {
   const rest: Record<string, unknown> = { ...data };
   delete rest.source;
   delete rest.updated;
+  delete rest.pack_lang;
   return JSON.stringify(sortKeys(rest));
 }
 
@@ -146,30 +163,69 @@ function sameNote(current: Note, next: { data: NoteData; body: string }): boolea
   return current.body.trim() === next.body.trim() && canonicalNote(current.data) === canonicalNote(next.data);
 }
 
-export function updatePack(vault: Vault, packsDir: string, name: string, opts: { lang?: string } = {}): PackUpdateResult {
+export function updatePack(vault: Vault, packsDir: string, name: string): PackUpdateResult {
   const installed = installedPacks(vault);
   const oldVersion = installed[name];
   if (!oldVersion) throw new Error(`pack not installed: ${name}`);
   const manifest = readPack(packsDir, name);
-  const notes = packNotes(packsDir, name, opts.lang);
+  const installedNotes = [...vault.notes.values()].filter((note) => note.data.source.startsWith(`pack:${name}@`));
+  const langOf = (note: Note): string => {
+    const stored = note.data.pack_lang;
+    const lang = typeof stored === "string" ? stored : manifest.languages[0];
+    return manifest.languages.includes(lang) ? lang : manifest.languages[0];
+  };
+
+  const counts = new Map<string, number>();
+  for (const note of installedNotes) counts.set(langOf(note), (counts.get(langOf(note)) ?? 0) + 1);
+  const majority = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? manifest.languages[0];
+
+  const byLang = new Map<string, Map<string, PackNote>>();
+  const notesFor = (lang: string): Map<string, PackNote> => {
+    let notes = byLang.get(lang);
+    if (!notes) {
+      notes = new Map(packNotes(packsDir, name, lang).map((note) => [note.id, note]));
+      byLang.set(lang, notes);
+    }
+    return notes;
+  };
+  const primary = notesFor(majority);
+  const ids = [...primary.keys()];
+  for (const lang of counts.keys()) {
+    for (const id of notesFor(lang).keys()) if (!ids.includes(id)) ids.push(id);
+  }
+
   if (compareVersions(manifest.version, oldVersion) <= 0) {
-    return { proposed: [], unchanged: notes.map((note) => note.id), upToDate: true };
+    return { proposed: [], unchanged: ids, skipped: [], upToDate: true };
   }
 
   const proposed: string[] = [];
   const unchanged: string[] = [];
+  const skipped: string[] = [];
   const meta = { proposed_by: `pack:${name}@${manifest.version}`, reason: `Pack ${name} ${oldVersion} → ${manifest.version}` };
 
-  for (const note of notes) {
-    const current = vault.get(note.id);
-    if (current && sameNote(current, note)) {
-      unchanged.push(note.id);
-      continue;
+  for (const id of ids) {
+    const current = vault.get(id);
+    let lang = majority;
+    if (current) {
+      const preferred = langOf(current);
+      if (notesFor(preferred).has(id)) lang = preferred;
     }
-    vault.propose(note.id, note.data, note.body, meta);
-    proposed.push(note.id);
+    const note = notesFor(lang).get(id);
+    if (!note) continue;
+    if (current) {
+      if (!current.data.source.startsWith(`pack:${name}@`)) {
+        skipped.push(id);
+        continue;
+      }
+      if (sameNote(current, note)) {
+        unchanged.push(id);
+        continue;
+      }
+    }
+    vault.propose(note.id, { ...note.data, pack_lang: lang }, note.body, meta);
+    proposed.push(id);
   }
-  return { proposed, unchanged, upToDate: false };
+  return { proposed, unchanged, skipped, upToDate: false };
 }
 
 /** Installed packs derived from note sources, keeping the highest version per pack. */

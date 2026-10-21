@@ -93,11 +93,14 @@ export interface PackInstallResult {
 export interface PackUpdateResult {
   proposed: string[];
   unchanged: string[];
+  /** Installed notes the pack no longer owns (their source belongs to something else). */
+  skipped: string[];
   upToDate: boolean;
 }
 
 export interface ApproveAllRequest {
-  from: string;
+  pack: string;
+  version?: string;
 }
 
 export interface ApproveAllResponse {
@@ -121,6 +124,8 @@ export interface ContextResponse {
 export interface ExportRequest {
   stack: string[];
   targets?: ExportTarget[];
+  /** Current file contents keyed by relative path, merged into agent files. */
+  existing?: Record<string, string>;
 }
 
 export interface ApiError {

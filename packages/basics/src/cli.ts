@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
 import fs from "node:fs";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { cancel, intro, isCancel, multiselect, outro, select, text } from "@clack/prompts";
 import {
@@ -15,6 +16,7 @@ import {
   NOTE_TYPES,
   type NoteData,
   type NoteType,
+  normalizeTechIds,
   type PackInstallResult,
   recommend,
   renderExport,
@@ -29,8 +31,11 @@ import {
 import { Command } from "commander";
 import { packsDir } from "./packs-dir.js";
 
+const { version } = createRequire(import.meta.url)("../package.json") as { version: string };
+
 const program = new Command("basics")
   .description("Personal tech-stack vault shared with coding agents")
+  .version(version)
   .option("-v, --vault <dir>", 'vault directory (default: $BASICS_DIR, config "vault", or ~/basics-vault)');
 
 const load = () => Vault.load(resolveVaultDir(program.opts().vault));
@@ -204,12 +209,14 @@ function runExport(dir: string | undefined, opts: ExportOptions, forcedTargets?:
     const file = path.join(root, relPath);
     return fs.existsSync(file) ? fs.readFileSync(file, "utf8") : null;
   };
-  const files = renderExport(load(), stack, targets, read);
+  const vault = load();
+  const ids = normalizeTechIds(vault, stack);
+  const files = renderExport(vault, ids, targets, read);
   const before = new Map(files.map((file) => [file.path, read(file.path)]));
 
   if (!opts.dryRun) {
     fs.mkdirSync(root, { recursive: true });
-    fs.writeFileSync(settingsFile, `${JSON.stringify({ stack, targets }, null, 2)}\n`);
+    fs.writeFileSync(settingsFile, `${JSON.stringify({ stack: ids, targets }, null, 2)}\n`);
     for (const file of files) {
       const target = path.join(root, file.path);
       fs.mkdirSync(path.dirname(target), { recursive: true });
@@ -311,15 +318,15 @@ pack
     const installed = installedPacks(vault);
     const names = name ? [name] : Object.keys(installed);
     if (!names.length) return console.log("no packs installed");
-    const language = loadConfig().language;
     let proposedAny = false;
     for (const packName of names) {
-      const result = updatePack(vault, packsDir(), packName, { lang: language });
+      const result = updatePack(vault, packsDir(), packName);
       if (result.upToDate) {
         console.log(`${packName}: up to date (${installed[packName]})`);
         continue;
       }
-      console.log(`${packName}: ${result.proposed.length} proposed, ${result.unchanged.length} unchanged`);
+      const skipped = result.skipped.length ? `, ${result.skipped.length} skipped` : "";
+      console.log(`${packName}: ${result.proposed.length} proposed, ${result.unchanged.length} unchanged${skipped}`);
       if (result.proposed.length) proposedAny = true;
     }
     if (proposedAny) console.log("Review with `basics inbox` or the UI.");
@@ -366,9 +373,12 @@ program
     if (v.issues.length) process.exitCode = 1;
   });
 
-program.command("search <query...>").action((query: string[]) => {
-  for (const h of search(load(), query.join(" "))) console.log(`${h.score}\t${h.type}\t${h.id}`);
-});
+program
+  .command("search <query...>")
+  .description("full-text search over the vault")
+  .action((query: string[]) => {
+    for (const h of search(load(), query.join(" "))) console.log(`${h.score}\t${h.type}\t${h.id}`);
+  });
 
 program
   .command("recommend <description...>")
@@ -422,10 +432,11 @@ inbox.command("show <id>").action((id: string) => {
 inbox.command("approve <id>").action((id: string) => console.log(`approved -> ${load().approve(id)}`));
 inbox
   .command("approve-all")
-  .description("approve every proposal from a proposed_by prefix")
-  .requiredOption("--from <prefix>", "proposed_by prefix, e.g. pack:python-api")
-  .action(({ from }: { from: string }) => {
-    const approved = load().approveAll({ proposedByPrefix: from });
+  .description("approve every proposal from a pack (optionally a specific version)")
+  .requiredOption("--pack <name>", "pack name, e.g. python-api")
+  .option("--version <version>", "only proposals from this pack version")
+  .action(({ pack, version }: { pack: string; version?: string }) => {
+    const approved = load().approveAll({ pack, version });
     console.log(approved.length ? `approved ${approved.length}: ${approved.join(", ")}` : "no matching proposals");
   });
 inbox.command("reject <id>").action((id: string) => {

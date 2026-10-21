@@ -31,6 +31,7 @@ import {
   search,
   title,
   toDetail,
+  UnknownTechError,
   updatePack,
   Vault,
   VaultNotFoundError,
@@ -61,9 +62,10 @@ const contextRequestSchema = z.object({ techIds: z.array(z.string()).min(1) });
 const exportRequestSchema = z.object({
   stack: z.array(z.string()).min(1),
   targets: z.array(z.enum(["agents", "claude", "cursor"])).optional(),
+  existing: z.record(z.string(), z.string()).optional(),
 });
 const packInstallRequestSchema = z.object({ lang: z.enum(["en", "es"]).optional() });
-const approveAllRequestSchema = z.object({ from: z.string().min(1) });
+const approveAllRequestSchema = z.object({ pack: z.string().min(1), version: z.string().min(1).optional() });
 
 /** A sessionless POST only creates a session when it carries the initialize request. */
 async function isInitializeRequest(req: Request): Promise<boolean> {
@@ -143,6 +145,9 @@ export function createApp(opts: { root: string; uiDir?: string; events?: EventHu
     }
     if (err instanceof ZodError) {
       return c.json({ error: "invalid", message: err.message, issues: err.issues } satisfies ApiError, 400);
+    }
+    if (err instanceof UnknownTechError) {
+      return c.json({ error: "invalid", message: err.message } satisfies ApiError, 400);
     }
     if (err instanceof NotFoundError) {
       return c.json({ error: "not_found", message: err.message } satisfies ApiError, 404);
@@ -229,14 +234,7 @@ export function createApp(opts: { root: string; uiDir?: string; events?: EventHu
 
   app.post("/api/export", async (c) => {
     const body = exportRequestSchema.parse(await c.req.json()) as ExportRequest;
-    try {
-      return c.json(renderExport(vault(), body.stack, body.targets ?? ["agents", "claude"], () => null));
-    } catch (err) {
-      if (err instanceof Error && err.message.startsWith("unknown tech ids")) {
-        return c.json({ error: "invalid", message: err.message } satisfies ApiError, 400);
-      }
-      throw err;
-    }
+    return c.json(renderExport(vault(), body.stack, body.targets ?? ["agents", "claude"], (relPath) => body.existing?.[relPath] ?? null));
   });
 
   app.get("/api/inbox", (c) => {
@@ -304,12 +302,12 @@ export function createApp(opts: { root: string; uiDir?: string; events?: EventHu
   });
 
   app.post("/api/packs/:name/update", (c) => {
-    return c.json(updatePack(vault(), packsDir(), c.req.param("name"), { lang: loadConfig().language }));
+    return c.json(updatePack(vault(), packsDir(), c.req.param("name")));
   });
 
   app.post("/api/inbox/approve-all", async (c) => {
     const body = approveAllRequestSchema.parse(await c.req.json());
-    return c.json({ approved: vault().approveAll({ proposedByPrefix: body.from }) } satisfies ApproveAllResponse);
+    return c.json({ approved: vault().approveAll(body) } satisfies ApproveAllResponse);
   });
 
   if (opts.events) {

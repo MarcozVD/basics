@@ -37,6 +37,15 @@ const EXPORT_TABS = [
   { value: "cursor", path: ".cursor/rules/stack.mdc", label: "Cursor" },
 ] as const;
 const EXPORT_TARGETS = ["agents", "claude", "cursor"] as const;
+const BLOCK_START = "<!-- basics:start -->";
+const BLOCK_END = "<!-- basics:end -->";
+
+/** The managed block of an agent file, without the user's surrounding text. */
+function markedBlock(content: string): string {
+  const start = content.indexOf(BLOCK_START);
+  const end = start >= 0 ? content.indexOf(BLOCK_END, start + BLOCK_START.length) : -1;
+  return start >= 0 && end >= 0 ? content.slice(start, end + BLOCK_END.length) : content;
+}
 
 function fileBasename(filePath: string): string {
   return filePath.split("/").pop() ?? filePath;
@@ -360,7 +369,8 @@ export function RecommendPage() {
 
   const activeTab = EXPORT_TABS.find((item) => item.value === exportTab) ?? EXPORT_TABS[0];
   const activeFile = files.find((file) => file.path === activeTab.path) ?? files[0];
-  const content = activeFile?.content ?? "";
+  const blockOnly = activeTab.value === "agents" || activeTab.value === "claude";
+  const content = blockOnly ? markedBlock(activeFile?.content ?? "") : (activeFile?.content ?? "");
   const filename = activeFile ? fileBasename(activeFile.path) : "STACK.md";
   const cli = `basics export --stack ${stackIds.join(",")} --targets ${EXPORT_TARGETS.join(",")}`;
 
@@ -571,6 +581,8 @@ export function RecommendPage() {
             className="mt-2"
           />
 
+          {blockOnly ? <p className="mt-2 text-[11px] text-muted-foreground">{t("recommend.mergeHint")}</p> : null}
+
           <div className="mt-3 flex min-w-0 items-center gap-2">
             <code className="min-w-0 flex-1 truncate rounded-md bg-muted/70 px-2 py-1 font-mono text-[10.5px] text-muted-foreground">
               {cli}
@@ -588,12 +600,14 @@ export function RecommendPage() {
 
           <div className="mt-4 flex justify-end gap-2">
             <Button variant="secondary" size="sm" pressScale={0.97} onClick={() => void copyText(content)}>
-              {t("recommend.copy")}
+              {blockOnly ? t("recommend.copyBlock") : t("recommend.copy")}
             </Button>
-            <Button size="sm" pressScale={0.97} onClick={download}>
-              <Download className="size-3.5" aria-hidden="true" />
-              {t("recommend.download")}
-            </Button>
+            {blockOnly ? null : (
+              <Button size="sm" pressScale={0.97} onClick={download}>
+                <Download className="size-3.5" aria-hidden="true" />
+                {t("recommend.download")}
+              </Button>
+            )}
           </div>
         </CenterMorphModalContent>
       </CenterMorphModal>

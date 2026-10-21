@@ -1,6 +1,7 @@
 import type {
   ActivityEvent,
   ApiError,
+  ApproveAllRequest,
   ApproveAllResponse,
   ApproveRequest,
   ContextResponse,
@@ -133,8 +134,8 @@ export function getContext(techIds: string[]): Promise<ContextResponse> {
   return request<ContextResponse>("/api/context", { method: "POST", body: JSON.stringify({ techIds }) });
 }
 
-export function exportStack(stack: string[], targets: ExportTarget[]): Promise<ExportFile[]> {
-  return request<ExportFile[]>("/api/export", { method: "POST", body: JSON.stringify({ stack, targets }) });
+export function exportStack(stack: string[], targets: ExportTarget[], existing?: Record<string, string>): Promise<ExportFile[]> {
+  return request<ExportFile[]>("/api/export", { method: "POST", body: JSON.stringify({ stack, targets, existing }) });
 }
 
 export function getPacks(): Promise<PackInfo[]> {
@@ -164,8 +165,8 @@ export function rejectProposal(id: string): Promise<void> {
   return request<void>(`${proposalPath(id)}/reject`, { method: "POST" });
 }
 
-export function approveAllProposals(from: string): Promise<ApproveAllResponse> {
-  return request<ApproveAllResponse>("/api/inbox/approve-all", { method: "POST", body: JSON.stringify({ from }) });
+export function approveAllProposals(body: ApproveAllRequest): Promise<ApproveAllResponse> {
+  return request<ApproveAllResponse>("/api/inbox/approve-all", { method: "POST", body: JSON.stringify(body) });
 }
 
 export function getConfig(): Promise<AppConfig> {

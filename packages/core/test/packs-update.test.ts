@@ -60,11 +60,12 @@ Batteries-included framework.
   assert.equal(proposal?.meta.proposed_by, "pack:python-api@1.1.0");
   assert.equal(proposal?.meta.reason, "Pack python-api 1.0.0 → 1.1.0");
 
-  const approved = vault.approveAll({ proposedByPrefix: "pack:python-api" });
+  const approved = vault.approveAll({ pack: "python-api" });
   assert.deepEqual(approved.sort(), ["django", "python"]);
   assert.equal(vault.get("python")?.data.source, "pack:python-api@1.1.0");
   assert.equal(vault.get("django")?.data.source, "pack:python-api@1.1.0");
   assert.equal(vault.get("fastapi")?.data.source, "pack:python-api@1.0.0");
+  assert.equal(vault.get("python")?.data.pack_lang, "en");
   assert.equal(vault.listProposals().length, 0);
 });
 
@@ -79,10 +80,60 @@ test("updatePack is a no-op when the bundled version is not newer", () => {
   assert.deepEqual(result, {
     proposed: [],
     unchanged: packNotes(PACKS, "python-api", "en").map((note) => note.id),
+    skipped: [],
     upToDate: true,
   });
   assert.equal(vault.listProposals().length, 0);
   assert.match(vault.get("python")?.body ?? "", /local edit/);
+});
+
+test("updatePack loads each note in its recorded pack_lang", () => {
+  const vault = tempVault();
+  installPack(vault, PACKS, "python-api", { lang: "es" });
+  const packs = tempPacks();
+  const manifestFile = path.join(packs, "python-api", "pack.json");
+  const manifest = JSON.parse(fs.readFileSync(manifestFile, "utf8"));
+  fs.writeFileSync(manifestFile, JSON.stringify({ ...manifest, version: "1.1.0" }, null, 2));
+  fs.appendFileSync(path.join(packs, "python-api", "notes", "es", "tech", "python.md"), "\nCambio en español.\n");
+
+  const result = updatePack(vault, packs, "python-api");
+  assert.ok(result.proposed.includes("python"));
+  assert.match(vault.getProposal("python")?.body ?? "", /Cambio en español/);
+  assert.equal(vault.getProposal("python")?.data.pack_lang, "es");
+});
+
+test("updatePack skips notes the pack does not own", () => {
+  const vault = tempVault();
+  installPack(vault, PACKS, "python-api");
+  const python = vault.get("python");
+  assert.ok(python);
+  vault.writeNote("python", { ...python.data, source: "manual" }, python.body);
+
+  const packs = tempPacks();
+  const manifestFile = path.join(packs, "python-api", "pack.json");
+  const manifest = JSON.parse(fs.readFileSync(manifestFile, "utf8"));
+  fs.writeFileSync(manifestFile, JSON.stringify({ ...manifest, version: "1.1.0" }, null, 2));
+  fs.appendFileSync(path.join(packs, "python-api", "notes", "en", "tech", "python.md"), "\nPack change.\n");
+
+  const result = updatePack(vault, packs, "python-api");
+  assert.deepEqual(result.proposed, []);
+  assert.deepEqual(result.skipped, ["python"]);
+  assert.equal(vault.listProposals().length, 0);
+});
+
+test("approveAll filters by pack version", () => {
+  const vault = tempVault();
+  installPack(vault, PACKS, "python-api");
+  const python = vault.get("python");
+  assert.ok(python);
+  vault.propose("python", python.data, `${python.body}\nproposed`, {
+    proposed_by: "pack:python-api@1.1.0",
+    reason: "test",
+  });
+
+  assert.deepEqual(vault.approveAll({ pack: "python-api", version: "1.0.0" }), []);
+  assert.deepEqual(vault.approveAll({ pack: "python-api", version: "1.1.0" }), ["python"]);
+  assert.equal(vault.listProposals().length, 0);
 });
 
 test("updatePack throws when the pack is not installed", () => {

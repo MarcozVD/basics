@@ -64,7 +64,7 @@ test("packs and approve-all routes", async () => {
     const approveRes = await request("/api/inbox/approve-all", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ from: "pack:core-layers" }),
+      body: JSON.stringify({ pack: "core-layers" }),
     });
     assert.equal(approveRes.status, 200);
     const approve = (await approveRes.json()) as { approved: string[] };

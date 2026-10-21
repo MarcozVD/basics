@@ -89,6 +89,29 @@ test("POST /api/context renders stack markdown", async () => {
   assert.match(body.markdown, /FastAPI/);
 });
 
+test("POST /api/export merges existing agent files", async () => {
+  const v = tempVault();
+  const app = createApp({ root: v.root });
+  const res = await app.request(
+    "/api/export",
+    jsonInit({ stack: ["fastapi"], targets: ["agents"], existing: { "AGENTS.md": "# Custom rules\n" } }),
+  );
+  assert.equal(res.status, 200);
+  const files = (await res.json()) as { path: string; content: string }[];
+  const agents = files.find((file) => file.path === "AGENTS.md")?.content;
+  assert.ok(agents?.startsWith("# Custom rules\n\n<!-- basics:start -->"));
+});
+
+test("POST /api/export maps non-tech ids to 400 invalid", async () => {
+  const v = tempVault();
+  const app = createApp({ root: v.root });
+  const res = await app.request("/api/export", jsonInit({ stack: ["backend"], targets: ["agents"] }));
+  assert.equal(res.status, 400);
+  const body = (await res.json()) as { error: string; message: string };
+  assert.equal(body.error, "invalid");
+  assert.match(body.message, /backend \(not a tech note\)/);
+});
+
 test("GET /api/notes filters tech notes by layer", async () => {
   const v = tempVault();
   const app = createApp({ root: v.root });

@@ -115,7 +115,7 @@ export function InboxPage() {
   });
 
   const approveAll = useMutation({
-    mutationFn: (from: string) => approveAllProposals(from),
+    mutationFn: (target: { pack: string; version?: string }) => approveAllProposals(target),
     onSuccess: (data) => {
       invalidate();
       toast.success(t("inbox.approveAllDone", { count: data.approved.length }));
@@ -139,15 +139,15 @@ export function InboxPage() {
     arm(id);
   };
 
-  const requestApproveAll = (from: string) => {
-    if (armedPack === from) {
+  const requestApproveAll = (pack: string, version: string, key: string) => {
+    if (armedPack === key) {
       window.clearTimeout(packTimer.current);
       setArmedPack(null);
-      approveAll.mutate(from);
+      approveAll.mutate({ pack, version });
       return;
     }
     window.clearTimeout(packTimer.current);
-    setArmedPack(from);
+    setArmedPack(key);
     packTimer.current = window.setTimeout(() => setArmedPack(null), 3000);
   };
 
@@ -227,7 +227,8 @@ export function InboxPage() {
       {packGroups.length > 0 ? (
         <div className="mt-4 flex flex-col gap-1.5">
           {packGroups.map((group) => {
-            const busy = approveAll.isPending && approveAll.variables === group.from;
+            const busy =
+              approveAll.isPending && approveAll.variables?.pack === group.name && approveAll.variables?.version === group.version;
             const confirms = armedPack === group.from;
             return (
               <div
@@ -249,7 +250,7 @@ export function InboxPage() {
                   size="sm"
                   pressScale={0.97}
                   disabled={busy}
-                  onClick={() => requestApproveAll(group.from)}
+                  onClick={() => requestApproveAll(group.name, group.version, group.from)}
                   className={confirms ? "ml-auto h-7 border-destructive/40 px-3 text-destructive" : "ml-auto h-7 px-3"}
                 >
                   {confirms ? t("inbox.approveAllConfirm") : t("inbox.approveAll")}

@@ -199,7 +199,7 @@ export class Vault {
   }
 
   /** Writes a note directly into the vault (used by humans / approvals). */
-  writeNote(id: string, data: NoteData, body: string, opts: { expectedHash?: string } = {}): string {
+  writeNote(id: string, data: NoteData, body: string, opts: { expectedHash?: string; reload?: boolean } = {}): string {
     const parsed = noteSchema.parse(data);
     const existing = this.get(id);
     const file = existing?.path ?? path.join(this.root, TYPE_DIRS[parsed.type], `${slugify(id)}.md`);
@@ -207,7 +207,7 @@ export class Vault {
     fs.mkdirSync(path.dirname(file), { recursive: true });
     const stamped = { ...parsed, updated: new Date().toISOString().slice(0, 10) };
     atomicWrite(file, serializeNote(stamped, body));
-    this.reload();
+    if (opts.reload !== false) this.reload();
     return file;
   }
 
@@ -249,22 +249,29 @@ export class Vault {
     return this.listProposals().find((x) => x.id === slug);
   }
 
-  approve(id: string, override: { data?: NoteData; body?: string } = {}): string {
-    const p = this.getProposal(id);
-    if (!p) throw new Error(`no proposal "${id}" in inbox`);
+  private acceptProposal(p: Proposal, override: { data?: NoteData; body?: string } = {}, reload = true): string {
     const source = p.meta.proposed_by.startsWith("pack:") ? p.meta.proposed_by : `agent:${p.meta.proposed_by}`;
     const data = { ...(override.data ?? p.data), source };
-    const file = this.writeNote(p.id, data, override.body ?? p.body);
+    const file = this.writeNote(p.id, data, override.body ?? p.body, { reload });
     fs.rmSync(p.path);
     return file;
   }
 
-  approveAll(filter: { proposedByPrefix: string }): string[] {
-    const ids = this.listProposals()
-      .filter((p) => p.meta.proposed_by.startsWith(filter.proposedByPrefix))
-      .map((p) => p.id);
-    for (const id of ids) this.approve(id);
-    return ids;
+  approve(id: string, override: { data?: NoteData; body?: string } = {}): string {
+    const p = this.getProposal(id);
+    if (!p) throw new Error(`no proposal "${id}" in inbox`);
+    return this.acceptProposal(p, override);
+  }
+
+  approveAll(filter: { pack: string; version?: string }): string[] {
+    const prefix = `pack:${filter.pack}@`;
+    const exact = filter.version === undefined ? undefined : `${prefix}${filter.version}`;
+    const proposals = this.listProposals().filter((p) =>
+      exact === undefined ? p.meta.proposed_by.startsWith(prefix) : p.meta.proposed_by === exact,
+    );
+    for (const p of proposals) this.acceptProposal(p, {}, false);
+    if (proposals.length) this.reload();
+    return proposals.map((p) => p.id);
   }
 
   reject(id: string): void {

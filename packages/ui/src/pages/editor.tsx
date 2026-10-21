@@ -518,7 +518,8 @@ export function EditorPage() {
         <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
           <TypeChip type={note.type} />
           <span className="min-w-0 truncate font-mono text-[11px] text-muted-foreground">
-            {note.id} · {data.source} · {t("editor.updated")} {data.updated ?? "—"}
+            {note.id} · {data.source}
+            {data.updated ? ` · ${t("editor.updated")} ${data.updated}` : ""}
           </span>
           {readers.length > 0 ? (
             <Tooltip

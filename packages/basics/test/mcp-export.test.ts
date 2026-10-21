@@ -42,6 +42,24 @@ test("export_project returns the ExportFile[] as JSON text", async () => {
   }
 });
 
+test("export_project returns a tool error for non-tech ids", async () => {
+  const root = tempVault();
+  const server = createMcpServer(() => root);
+  const client = new Client({ name: "test-agent", version: "0.0.0" });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+
+  try {
+    const result = await client.callTool({ name: "export_project", arguments: { stack: ["backend"] } });
+    assert.equal(result.isError, true);
+    const [first] = result.content as { type: string; text: string }[];
+    assert.equal(first.text, "unknown tech ids: backend (not a tech note)");
+  } finally {
+    await client.close();
+    await server.close();
+  }
+});
+
 test("export_project merges existing file contents", async () => {
   const root = tempVault();
   const server = createMcpServer(() => root);
