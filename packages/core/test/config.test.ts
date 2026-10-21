@@ -29,10 +29,11 @@ test("missing config file yields defaults", () => {
   const cfg = loadConfig();
   assert.equal(cfg.language, "en");
   assert.equal(cfg.embeddings, false);
+  assert.equal(cfg.embeddingsModel, "Xenova/multilingual-e5-small");
 });
 
 test("vault resolution follows explicit > BASICS_DIR > config > default", () => {
-  saveConfig({ language: "en", embeddings: false, vault: "~/from-config" });
+  saveConfig({ language: "en", embeddings: false, embeddingsModel: "Xenova/multilingual-e5-small", vault: "~/from-config" });
   process.env.BASICS_DIR = "~/from-env";
 
   assert.equal(resolveVaultDir("~/explicit"), path.join(os.homedir(), "explicit"));

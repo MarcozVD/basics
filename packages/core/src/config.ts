@@ -8,6 +8,7 @@ export const configSchema = z.object({
   vault: z.string().optional(),
   language: z.enum(["en", "es"]).default("en"),
   embeddings: z.boolean().default(false),
+  embeddingsModel: z.string().default("Xenova/multilingual-e5-small"),
 });
 export type Config = z.infer<typeof configSchema>;
 

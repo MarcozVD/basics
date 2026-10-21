@@ -3,13 +3,14 @@ import { spawn } from "node:child_process";
 import fs from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
-import { cancel, intro, isCancel, multiselect, outro, select, text } from "@clack/prompts";
+import { cancel, confirm, intro, isCancel, multiselect, outro, select, text } from "@clack/prompts";
 import {
   type CheckStatus,
   configPath,
   configSchema,
   detectStack,
   type ExportTarget,
+  embeddingPaths,
   expandHome,
   installedPacks,
   installPack,
@@ -17,6 +18,7 @@ import {
   type LastCheck,
   listPacks,
   loadConfig,
+  loadIndex,
   NOTE_TYPES,
   type NoteData,
   type NoteType,
@@ -30,6 +32,7 @@ import {
   slugify,
   stackContext,
   stackTemplates,
+  syncIndex,
   TYPE_DIRS,
   title,
   trust,
@@ -37,6 +40,17 @@ import {
   Vault,
 } from "@marcozvd/basics-core";
 import { Command } from "commander";
+import {
+  createEmbedder,
+  directorySize,
+  formatBytes,
+  installRuntime,
+  loadRuntime,
+  modelCached,
+  modelsDir,
+  runtimeDir,
+  runtimeInstalled,
+} from "./embeddings-runtime.js";
 import { packsDir } from "./packs-dir.js";
 
 const { version } = createRequire(import.meta.url)("../package.json") as { version: string };
@@ -508,6 +522,123 @@ config
     saveConfig(parsed);
     console.log(JSON.stringify(parsed, null, 2));
   });
+
+function indexSize(vault: Vault): number {
+  const files = embeddingPaths(vault);
+  return [files.json, files.bin].reduce((total, file) => total + (fs.existsSync(file) ? fs.statSync(file).size : 0), 0);
+}
+
+function progress(done: number, total: number): void {
+  if (total) process.stdout.write(`\rEmbedding ${done}/${total} texts`);
+}
+
+interface EmbeddingsEnableOptions {
+  yes?: boolean;
+}
+
+async function embeddingsEnable(opts: EmbeddingsEnableOptions): Promise<void> {
+  const cfg = loadConfig();
+  const model = cfg.embeddingsModel;
+  console.log("Embeddings need a one-time download:");
+  console.log("  runtime: ~375 MB (@huggingface/transformers 3)");
+  console.log(`  model:   ~130 MB (${model})`);
+  console.log("  total:   ~500 MB in the cache directory");
+  console.log(`  cache:   ${path.dirname(runtimeDir())}`);
+  if (!opts.yes) {
+    if (process.stdin.isTTY !== true) {
+      throw new Error("embeddings enable needs confirmation; re-run with --yes in a non-interactive terminal");
+    }
+    const answer = await confirm({ message: "Download and install now?", initialValue: true });
+    if (isCancel(answer) || !answer) {
+      cancel("Embeddings setup cancelled");
+      process.exit(1);
+    }
+  }
+
+  const start = Date.now();
+  if (!runtimeInstalled()) await installRuntime();
+  const runtime = await loadRuntime();
+  if (!runtime) throw new Error(`embeddings runtime missing at ${runtimeDir()}`);
+  console.log(`Loading model ${model} (first run downloads it under ${modelsDir()})`);
+  const embedder = await createEmbedder(runtime, model);
+  saveConfig(configSchema.parse({ ...cfg, embeddings: true, embeddingsModel: model }));
+
+  const vault = load();
+  const stats = await syncIndex(vault, embedder, progress);
+  if (stats.embedded) process.stdout.write("\n");
+  console.log(
+    `Indexed ${stats.notes} notes (${stats.embedded} vectors embedded, ${stats.reused} reused, ${stats.removed} removed) in ${((Date.now() - start) / 1000).toFixed(1)}s`,
+  );
+}
+
+function embeddingsDisable(opts: { purge?: boolean }): void {
+  const cfg = loadConfig();
+  saveConfig(configSchema.parse({ ...cfg, embeddings: false }));
+  console.log("embeddings: off");
+  if (opts.purge) {
+    fs.rmSync(runtimeDir(), { recursive: true, force: true });
+    fs.rmSync(modelsDir(), { recursive: true, force: true });
+    console.log(`Removed ${path.dirname(runtimeDir())}`);
+  }
+}
+
+function embeddingsStatus(): void {
+  const cfg = loadConfig();
+  console.log(`embeddings: ${cfg.embeddings ? "on" : "off"}`);
+  console.log(`model: ${cfg.embeddingsModel}`);
+  console.log(`runtime: ${runtimeInstalled() ? "installed" : "missing"} (${runtimeDir()})`);
+  console.log(`model cache: ${modelCached(cfg.embeddingsModel) ? "cached" : "missing"} (${modelsDir()})`);
+  console.log(`model cache size: ${formatBytes(directorySize(modelsDir()))}`);
+
+  let vault: Vault | undefined;
+  try {
+    vault = load();
+  } catch {
+    vault = undefined;
+  }
+  if (!vault) {
+    console.log(`index: no vault at ${resolveVaultDir(program.opts().vault)}`);
+    return;
+  }
+  const index = loadIndex(vault);
+  const stale = index.stale(vault);
+  console.log(`index: ${index.notes} notes, ${formatBytes(indexSize(vault))}, stale ${stale.length} (${embeddingPaths(vault).json})`);
+  if (index.model && index.model !== cfg.embeddingsModel) {
+    console.log(`index model: ${index.model} (configured ${cfg.embeddingsModel}; run embeddings reindex --full)`);
+  }
+}
+
+async function embeddingsReindex(opts: { full?: boolean }): Promise<void> {
+  const cfg = loadConfig();
+  if (!runtimeInstalled()) throw new Error("embeddings runtime not installed: run `basics embeddings enable` first");
+  const runtime = await loadRuntime();
+  if (!runtime) throw new Error(`embeddings runtime missing at ${runtimeDir()}`);
+  const embedder = await createEmbedder(runtime, cfg.embeddingsModel);
+  const start = Date.now();
+  const stats = await syncIndex(load(), embedder, progress, { full: opts.full });
+  if (stats.embedded) process.stdout.write("\n");
+  console.log(
+    `Indexed ${stats.notes} notes (${stats.embedded} vectors embedded, ${stats.reused} reused, ${stats.removed} removed) in ${((Date.now() - start) / 1000).toFixed(1)}s`,
+  );
+}
+
+const embeddings = program.command("embeddings").description("opt-in local embeddings and vector index");
+embeddings
+  .command("enable")
+  .description("download the runtime and model, then index the vault")
+  .option("--yes", "skip the download confirmation")
+  .action((opts: EmbeddingsEnableOptions) => embeddingsEnable(opts));
+embeddings
+  .command("disable")
+  .description("turn embeddings off (keeps the downloaded files)")
+  .option("--purge", "also delete the runtime and model cache")
+  .action((opts: { purge?: boolean }) => embeddingsDisable(opts));
+embeddings.command("status").description("show config, runtime, model cache and index state").action(embeddingsStatus);
+embeddings
+  .command("reindex")
+  .description("sync the vector index with the current vault")
+  .option("--full", "re-embed every note")
+  .action((opts: { full?: boolean }) => embeddingsReindex(opts));
 
 program
   .command("init [dir]")
