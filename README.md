@@ -15,6 +15,7 @@ Monorepo con npm/pnpm workspaces:
 packages/core/     @marcozvd/basics-core: schema, vault y query (librería + tests)
 packages/basics/   @marcozvd/basics: CLI (cli.ts), servidor HTTP/MCP (server/, mcp/)
 packages/ui/       @marcozvd/basics-ui: UI web (React + Vite; se sirve desde basics ui)
+packs/             packs oficiales de notas (core-layers, web-typescript, python-api, profiles)
 examples/vault/    vault semilla de ejemplo
 ```
 
@@ -45,6 +46,48 @@ npm install -g @marcozvd/basics     # o: pnpm add -g @marcozvd/basics
 basics --help
 ```
 
+## Primeros pasos
+
+```bash
+basics init                       # interactivo: carpeta del vault, idioma y packs
+basics init ~/mi-vault --yes      # sin preguntas: instala todos los packs
+```
+
+`basics init` crea la carpeta del vault (una por tipo de nota más `inbox/`), pregunta el idioma y qué packs instalar,
+y guarda `vault` y `language` en la config global. Flags: `--lang en|es`, `--packs a,b` (o `--packs none`) y `--yes`
+(acepta los valores por defecto e instala todos los packs). Sin terminal interactiva se comporta como `--yes`.
+
+Packs oficiales incluidos:
+
+| Pack | Contenido | Requiere |
+| --- | --- | --- |
+| `core-layers` | las 5 capas base (frontend, backend, data, infra, testing) | — |
+| `web-typescript` | TypeScript, React, Next.js, Vitest, Playwright + prácticas y checks | `core-layers` |
+| `python-api` | Python, FastAPI, pytest, PostgreSQL + prácticas y checks | `core-layers` |
+| `profiles` | perfiles `ml-api` y `saas-web` | `web-typescript`, `python-api` |
+
+Cada pack viene en inglés y en español (`notes/en` y `notes/es`) con los mismos ids de nota.
+
+## Packs
+
+```bash
+basics pack list                              # packs, versión, versión instalada y nº de notas
+basics pack install core-layers python-api    # instala con sus dependencias
+basics pack install web-typescript --lang es  # notas en español
+basics pack update                            # propone actualizaciones en el inbox
+```
+
+`basics pack update` nunca escribe en el vault: crea propuestas en `inbox/` (`proposed_by: pack:<nombre>@<versión>`)
+con las notas nuevas o modificadas del pack; las notas que el pack ya no incluye se ignoran. Se revisan y aprueban
+como cualquier propuesta de agente:
+
+```bash
+basics inbox list
+basics inbox approve-all --from pack:python-api   # aprueba todas las propuestas de ese pack
+```
+
+En la UI, el Inbox agrupa las propuestas de un pack y ofrece "Approve all" por pack.
+
 ## Interfaz web
 
 ```bash
@@ -55,7 +98,7 @@ basics ui --no-open                  # sin abrir el navegador
 
 Pantallas:
 
-- **Home**: la sala de control del ciclo con agentes — propuestas pendientes aprobables inline, timeline de actividad de los agentes, salud y forma del vault (notas por tipo, links rotos, huérfanas, recientes).
+- **Home**: la sala de control del ciclo con agentes — propuestas pendientes aprobables inline, timeline de actividad de los agentes, salud y forma del vault (notas por tipo, links rotos, huérfanas, recientes). Con el vault vacío muestra el onboarding de packs iniciales ("Start with a starter pack"): elegirlos e instalarlos sin salir de la pantalla.
 - **Explorar**: filtros por capa y tipo con conteos, búsqueda, vista lista o grid, navegación por teclado y diálogo para crear notas.
 - **Editor**: formulario de frontmatter generado por cada tipo de nota, cuerpo markdown (editar / vista previa / dividido) con
   autocompletado de `[[wikilinks]]`, conexiones (links, backlinks, sin resolver) y grafo local; guarda con `Ctrl+S`;
@@ -63,7 +106,7 @@ Pantallas:
 - **Grafo**: todas las notas y sus links, filtros por tipo y capa en una barra flotante, búsqueda de nodos, links rotos y foco en el vecindario de un nodo.
 - **Inbox**: propuestas con diff lado a lado o unificado; Aprobar, Editar y aprobar o Rechazar con los atajos `a` / `e` / `r`.
 - **Recomendar**: descripción del proyecto y capas → perfiles y candidatos por capa (`use_when`, `performs_best`, `avoid_when`),
-  selección de candidatos y generación de `STACK.md` (copiar o descargar).
+  selección de candidatos y modal de export con pestañas **STACK.md | AGENTS.md | CLAUDE.md | Cursor**, cada una con copiar o descargar.
 
 La UI se actualiza en vivo cuando cambian los archivos del vault (SSE) y trae selector de idioma EN/ES y tema claro/oscuro.
 
@@ -140,13 +183,32 @@ basics new tech django -l backend
 basics recommend "API REST para servir modelos de ML"
 basics inbox                        # propuestas de agentes
 basics inbox approve django
-basics init-project ../mi-app -s fastapi,postgresql,pytest
+basics export ../mi-app --stack fastapi,postgresql,pytest
 basics ui                            # servidor local: API REST + UI web (http://127.0.0.1:4747)
 ```
 
 Desde el repo sin instalar: `npm run cli -- --vault examples/vault <comando>` o `pnpm cli ...`.
 
-`init-project` escribe `STACK.md` (prácticas + checks del stack elegido) y añade un puntero en `AGENTS.md`.
+## Exportar a un proyecto
+
+```bash
+basics export ../mi-app --stack fastapi,postgresql,pytest --targets agents,claude,cursor
+basics export ../mi-app --dry-run
+```
+
+Genera en el proyecto:
+
+- `STACK.md`: prácticas y checks del stack elegido (archivo completo).
+- `AGENTS.md` y `CLAUDE.md`: un bloque marcado `<!-- basics:start -->` … `<!-- basics:end -->`; el texto fuera del bloque no se toca.
+- `.cursor/rules/stack.mdc`: archivo completo con `alwaysApply: true`.
+
+El stack y los targets se guardan en `basics.json` en la raíz del proyecto, así que la siguiente vez basta con
+`basics export ../mi-app`; los flags sobrescriben lo guardado. `--dry-run` muestra cada archivo y si cambiaría, sin escribir nada.
+
+`init-project` queda como alias oculto y deprecado (equivale a `basics export --targets agents`).
+
+Por MCP, la tool `export_project` devuelve el contenido de esos archivos (JSON) sin tocar el disco: el agente los
+escribe en la raíz del proyecto.
 
 ## Conectar agentes (MCP)
 
@@ -174,6 +236,7 @@ Es un log local, la carpeta `.basics/` se añade al `.gitignore` del vault autom
 | `get_stack_context` | prácticas + checks del stack elegido, en markdown |
 | `propose_note` | agente propone nota nueva o cambio, va a `inbox/` |
 | `list_proposals` | propuestas pendientes |
+| `export_project` | devuelve los archivos de export (STACK.md, AGENTS.md, CLAUDE.md, Cursor) para que los escriba el agente |
 
 Los agentes nunca escriben directo en el vault: todo pasa por `inbox/` hasta que lo apruebas.
 

@@ -1,5 +1,23 @@
 # @marcozvd/basics
 
+## 0.2.0
+
+### Minor Changes
+
+- M3 content and export:
+  
+  - Official note packs (`packs/`) with `core-layers`, `web-typescript`, `python-api` and `profiles`, in English and Spanish, shipped with the package.
+  - `basics init` creates a vault and installs the starter packs, interactively with `@clack/prompts` or with the `--lang`, `--packs` and `--yes` flags.
+  - `basics pack list | install | update` manages the packs; pack updates always arrive in the inbox as proposals (`pack:<name>@<version>`) and can be approved in bulk with `basics inbox approve-all --from`.
+  - Export adapters: `STACK.md`, marked `<!-- basics:start -->` blocks in `AGENTS.md` and `CLAUDE.md`, and a full Cursor `.cursor/rules/stack.mdc` with `alwaysApply`; `basics export` remembers the stack and targets in `basics.json` and `init-project` is now a deprecated alias.
+  - New `export_project` MCP tool returns the files to write without touching the filesystem.
+  - Web UI: starter pack onboarding on an empty vault, approve-all bar for pack proposals in the inbox, and an export modal with STACK.md / AGENTS.md / CLAUDE.md / Cursor tabs.
+
+### Patch Changes
+
+- Updated dependencies
+  - @marcozvd/basics-core@0.2.0
+
 ## 0.1.0
 
 ### Minor Changes
