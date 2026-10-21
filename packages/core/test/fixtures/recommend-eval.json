@@ -1,0 +1,223 @@
+[
+  {
+    "description": "REST API in Python with Postgres, no UI",
+    "lang": "en",
+    "expect": {
+      "backend": { "top1": "fastapi", "forbid": ["nextjs"] },
+      "data": { "top1": "postgresql" }
+    }
+  },
+  {
+    "description": "Interactive React dashboard with lots of client state in TypeScript",
+    "lang": "en",
+    "expect": {
+      "frontend": { "top1": "react", "top3": ["react", "typescript"] }
+    }
+  },
+  {
+    "description": "SEO landing page built with Next.js",
+    "lang": "en",
+    "expect": {
+      "frontend": { "top1": "nextjs" }
+    }
+  },
+  {
+    "description": "Static content site without much interactivity",
+    "lang": "en",
+    "expect": {
+      "frontend": { "top3": ["nextjs", "typescript"] }
+    }
+  },
+  {
+    "description": "Async API without a UI, avoid heavy server-side HTML",
+    "lang": "en",
+    "expect": {
+      "backend": { "top1": "fastapi", "forbid": ["nextjs"] }
+    }
+  },
+  {
+    "description": "Web app with SEO and server-side rendering",
+    "lang": "en",
+    "expect": {
+      "frontend": { "top1": "nextjs" },
+      "backend": { "top3": ["nextjs"] }
+    }
+  },
+  {
+    "description": "Mobile app backend in Python with unit tests",
+    "lang": "en",
+    "expect": {
+      "backend": { "top1": "fastapi" },
+      "testing": { "top1": "pytest" }
+    }
+  },
+  {
+    "description": "E-commerce checkout with relational data and transactions",
+    "lang": "en",
+    "expect": {
+      "data": { "top1": "postgresql" }
+    }
+  },
+  {
+    "description": "Browser end-to-end tests for a critical login flow",
+    "lang": "en",
+    "expect": {
+      "testing": { "top1": "playwright", "top3": ["playwright"] }
+    }
+  },
+  {
+    "description": "Unit tests for React components using Vitest",
+    "lang": "en",
+    "expect": {
+      "testing": { "top1": "vitest" },
+      "frontend": { "top3": ["react"] }
+    }
+  },
+  {
+    "description": "CLI tool and MCP server in TypeScript",
+    "lang": "en",
+    "expect": {
+      "frontend": { "top3": ["typescript"] },
+      "backend": { "top3": ["typescript"] }
+    }
+  },
+  {
+    "description": "Internal SPA behind login with no need for SEO",
+    "lang": "en",
+    "expect": {
+      "frontend": { "top1": "react" }
+    }
+  },
+  {
+    "description": "Async FastAPI microservice exposing machine learning models",
+    "lang": "en",
+    "expect": {
+      "backend": { "top1": "fastapi" }
+    }
+  },
+  {
+    "description": "PostgreSQL full-text search with JSONB queries",
+    "lang": "en",
+    "expect": {
+      "data": { "top1": "postgresql" }
+    }
+  },
+  {
+    "description": "React SPA with end-to-end tests in Playwright",
+    "lang": "en",
+    "expect": {
+      "frontend": { "top1": "react" },
+      "testing": { "top1": "playwright" }
+    }
+  },
+  {
+    "description": "API REST en Python con Postgres, sin interfaz",
+    "lang": "es",
+    "expect": {
+      "backend": { "top1": "fastapi", "forbid": ["nextjs"] },
+      "data": { "top1": "postgresql" }
+    }
+  },
+  {
+    "description": "Panel React interactivo con mucho estado de cliente en TypeScript",
+    "lang": "es",
+    "expect": {
+      "frontend": { "top1": "react", "top3": ["react", "typescript"] }
+    }
+  },
+  {
+    "description": "Landing con SEO hecha con Next.js",
+    "lang": "es",
+    "expect": {
+      "frontend": { "top1": "nextjs" }
+    }
+  },
+  {
+    "description": "Sitio estático de contenido sin interactividad",
+    "lang": "es",
+    "expect": {
+      "frontend": { "top3": ["nextjs", "typescript"] }
+    }
+  },
+  {
+    "description": "API async sin interfaz y sin renderizado HTML pesado",
+    "lang": "es",
+    "expect": {
+      "backend": { "top1": "fastapi", "forbid": ["nextjs"] }
+    }
+  },
+  {
+    "description": "Web con SEO y renderizado server-side",
+    "lang": "es",
+    "expect": {
+      "frontend": { "top1": "nextjs" }
+    }
+  },
+  {
+    "description": "Backend para app móvil en Python con tests unitarios",
+    "lang": "es",
+    "expect": {
+      "backend": { "top1": "fastapi" },
+      "testing": { "top1": "pytest" }
+    }
+  },
+  {
+    "description": "Ecommerce con datos relacionales y transacciones",
+    "lang": "es",
+    "expect": {
+      "data": { "top1": "postgresql" }
+    }
+  },
+  {
+    "description": "Tests end-to-end de navegador para el flujo de login",
+    "lang": "es",
+    "expect": {
+      "testing": { "top1": "playwright" }
+    }
+  },
+  {
+    "description": "Tests unitarios de componentes React con Vitest",
+    "lang": "es",
+    "expect": {
+      "testing": { "top3": ["vitest"] },
+      "frontend": { "top3": ["react"] }
+    }
+  },
+  {
+    "description": "Herramienta CLI y servidor MCP en TypeScript",
+    "lang": "es",
+    "expect": {
+      "frontend": { "top3": ["typescript"] },
+      "backend": { "top3": ["typescript"] }
+    }
+  },
+  {
+    "description": "SPA interna detrás de login sin necesidad de SEO",
+    "lang": "es",
+    "expect": {
+      "frontend": { "top1": "react" }
+    }
+  },
+  {
+    "description": "Microservicio async FastAPI que expone modelos de machine learning",
+    "lang": "es",
+    "expect": {
+      "backend": { "top1": "fastapi" }
+    }
+  },
+  {
+    "description": "Búsqueda full-text con PostgreSQL y consultas JSONB",
+    "lang": "es",
+    "expect": {
+      "data": { "top1": "postgresql" }
+    }
+  },
+  {
+    "description": "SPA React con tests end-to-end en Playwright",
+    "lang": "es",
+    "expect": {
+      "frontend": { "top1": "react" },
+      "testing": { "top1": "playwright" }
+    }
+  }
+]

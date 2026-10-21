@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { GraphData, GraphEdge, GraphNode, NoteDetail, NoteSummary, ProposalDetail, VaultStats } from "./api.js";
 import { inRange } from "./detect.js";
+import { splitNegations } from "./negation.js";
 import { NOTE_TYPES, type Note, type NoteData, type NoteType, type Proposal, type TechData } from "./schema.js";
 import { serializeNote, toId, type Vault } from "./vault.js";
 
@@ -220,6 +221,10 @@ export interface Candidate {
   matched_use_when: string[];
   matched_performs_best: string[];
   matched_avoid_when: string[];
+  negated_use_when: string[];
+  negated_avoid_when: string[];
+  language_boost: number;
+  score_breakdown: { keywords: number; negation: number; language: number };
 }
 
 export interface Recommendation {
@@ -229,14 +234,51 @@ export interface Recommendation {
   note: string;
 }
 
+function techLayers(d: TechData): string[] {
+  return [d.layer].flat().map(toId);
+}
+
 /**
  * Keyword-based shortlist. Deliberately simple: it gives the agent ranked candidates
  * plus the reasons they matched; the agent makes the final judgement.
  */
 export function recommend(vault: Vault, description: string, opts: { layers?: string[]; perLayer?: number } = {}): Recommendation {
-  const q = new Set(tokens(description));
+  const { positive, negated } = splitNegations(description);
+  const q = new Set(tokens(positive));
   const hits = (phrases: string[]) => phrases.filter((p) => overlap(q, p) > 0);
   const layerIds = opts.layers?.map(toId) ?? vault.byType("layer").map((n) => n.id);
+
+  const negatedTokenSets = negated.map((span) => new Set(tokens(span)));
+  const negatedHits = (phrases: string[]): { phrases: string[]; count: number } => {
+    const matched = new Set<string>();
+    let count = 0;
+    for (const span of negatedTokenSets) {
+      for (const phrase of phrases) {
+        if (overlap(span, phrase) > 0) {
+          matched.add(phrase);
+          count += 1;
+        }
+      }
+    }
+    return { phrases: [...matched], count };
+  };
+
+  // Language techs named in the positive text: their implementation techs get a boost.
+  const mentionedLanguages = vault.byType("tech").filter((n) => {
+    const d = n.data as TechData;
+    if (d.kind !== "language") return false;
+    return [...tokens(n.id), ...tokens(title(n))].some((t) => q.has(t));
+  });
+  const languageBoost = (d: TechData): number => {
+    const layers = techLayers(d);
+    let boost = 0;
+    for (const language of mentionedLanguages) {
+      const same = d.language !== undefined && toId(d.language) === language.id;
+      if (same) boost += 3;
+      else if (d.language !== undefined && techLayers(language.data as TechData).some((l) => layers.includes(l))) boost -= 2;
+    }
+    return boost;
+  };
 
   const layers: Record<string, Candidate[]> = {};
   for (const layer of layerIds) {
@@ -247,8 +289,23 @@ export function recommend(vault: Vault, description: string, opts: { layers?: st
         const use = hits(d.use_when);
         const best = hits(d.performs_best);
         const avoid = hits(d.avoid_when);
-        const score = use.length * 3 + best.length * 2 + overlap(q, [...d.tags, n.id].join(" ")) - avoid.length * 4;
-        return { id: n.id, kind: d.kind, score, matched_use_when: use, matched_performs_best: best, matched_avoid_when: avoid };
+        const negUse = negatedHits(d.use_when);
+        const negAvoid = negatedHits(d.avoid_when);
+        const keywords = use.length * 3 + best.length * 2 + overlap(q, [...d.tags, n.id].join(" ")) - avoid.length * 4;
+        const negation = negUse.count * -3 + negAvoid.count * 2;
+        const language = languageBoost(d);
+        return {
+          id: n.id,
+          kind: d.kind,
+          score: keywords + negation + language,
+          matched_use_when: use,
+          matched_performs_best: best,
+          matched_avoid_when: avoid,
+          negated_use_when: negUse.phrases,
+          negated_avoid_when: negAvoid.phrases,
+          language_boost: language,
+          score_breakdown: { keywords, negation, language },
+        };
       })
       .sort((a, b) => b.score - a.score)
       .slice(0, opts.perLayer ?? 3);
@@ -268,7 +325,7 @@ export function recommend(vault: Vault, description: string, opts: { layers?: st
     description,
     profiles,
     layers,
-    note: "Scores are keyword overlap only. Read candidate notes (get_note) and decide; negative scores matched avoid_when.",
+    note: "Scores combine keyword overlap, explicit negations and language fit; score_breakdown shows each part. Read candidate notes (get_note) and decide.",
   };
 }
 
