@@ -28,6 +28,14 @@ test("init --yes creates the vault, installs every pack and saves the config", (
 
   const result = runCli(["init", vaultDir, "--yes", "--lang", "es"], configFile);
   assert.equal(result.status, 0, result.stderr);
+  for (const pack of listPacks(PACKS)) {
+    const lines = result.stdout.split("\n").filter((line) => line.startsWith(`${pack.name}:`));
+    assert.equal(lines.length, 1, `expected one install line for ${pack.name}`);
+  }
+
+  const update = runCli(["pack", "update"], configFile);
+  assert.equal(update.status, 0, update.stderr);
+  for (const pack of listPacks(PACKS)) assert.ok(update.stdout.includes(`${pack.name}: up to date (${pack.version})`));
 
   const vault = Vault.load(vaultDir);
   for (const pack of listPacks(PACKS)) {

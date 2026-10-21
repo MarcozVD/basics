@@ -2,7 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import matter from "gray-matter";
 import { z } from "zod";
-import { type NoteData, type NoteType, noteSchema } from "./schema.js";
+import type { PackInstallResult, PackUpdateResult } from "./api.js";
+import { type Note, type NoteData, type NoteType, noteSchema } from "./schema.js";
 import { NotFoundError, slugify, type Vault } from "./vault.js";
 
 export interface PackManifest {
@@ -88,9 +89,10 @@ export function installPack(
   packsDir: string,
   name: string,
   opts: { lang?: string; withRequires?: boolean } = {},
-): { installed: string[]; skipped: string[] } {
+): PackInstallResult {
   const installed: string[] = [];
   const skipped: string[] = [];
+  const byPack: Record<string, { installed: string[]; skipped: string[] }> = {};
   const done = new Set<string>();
   const stack: string[] = [];
 
@@ -100,12 +102,16 @@ export function installPack(
     stack.push(packName);
     const manifest = readPack(packsDir, packName);
     if (withRequires) for (const required of manifest.requires) install(required, true);
+    const counts: { installed: string[]; skipped: string[] } = { installed: [], skipped: [] };
+    byPack[packName] = counts;
     for (const note of packNotes(packsDir, packName, opts.lang)) {
       if (vault.get(note.id)) {
+        counts.skipped.push(note.id);
         skipped.push(note.id);
         continue;
       }
       vault.writeNote(note.id, { ...note.data, source: `pack:${packName}@${manifest.version}` }, note.body);
+      counts.installed.push(note.id);
       installed.push(note.id);
     }
     stack.pop();
@@ -113,7 +119,57 @@ export function installPack(
   };
 
   install(name, opts.withRequires ?? true);
-  return { installed, skipped };
+  return { installed, skipped, byPack };
+}
+
+/** Stable JSON for frontmatter comparison, ignoring the fields the vault stamps. */
+function canonicalNote(data: NoteData): string {
+  const rest: Record<string, unknown> = { ...data };
+  delete rest.source;
+  delete rest.updated;
+  return JSON.stringify(sortKeys(rest));
+}
+
+function sortKeys(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sortKeys);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.keys(value as Record<string, unknown>)
+        .sort()
+        .map((key) => [key, sortKeys((value as Record<string, unknown>)[key])]),
+    );
+  }
+  return value;
+}
+
+function sameNote(current: Note, next: { data: NoteData; body: string }): boolean {
+  return current.body.trim() === next.body.trim() && canonicalNote(current.data) === canonicalNote(next.data);
+}
+
+export function updatePack(vault: Vault, packsDir: string, name: string, opts: { lang?: string } = {}): PackUpdateResult {
+  const installed = installedPacks(vault);
+  const oldVersion = installed[name];
+  if (!oldVersion) throw new Error(`pack not installed: ${name}`);
+  const manifest = readPack(packsDir, name);
+  const notes = packNotes(packsDir, name, opts.lang);
+  if (compareVersions(manifest.version, oldVersion) <= 0) {
+    return { proposed: [], unchanged: notes.map((note) => note.id), upToDate: true };
+  }
+
+  const proposed: string[] = [];
+  const unchanged: string[] = [];
+  const meta = { proposed_by: `pack:${name}@${manifest.version}`, reason: `Pack ${name} ${oldVersion} → ${manifest.version}` };
+
+  for (const note of notes) {
+    const current = vault.get(note.id);
+    if (current && sameNote(current, note)) {
+      unchanged.push(note.id);
+      continue;
+    }
+    vault.propose(note.id, note.data, note.body, meta);
+    proposed.push(note.id);
+  }
+  return { proposed, unchanged, upToDate: false };
 }
 
 /** Installed packs derived from note sources, keeping the highest version per pack. */

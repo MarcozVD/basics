@@ -7,12 +7,14 @@ import {
   configPath,
   configSchema,
   expandHome,
+  installedPacks,
   installPack,
   listPacks,
   loadConfig,
   NOTE_TYPES,
   type NoteData,
   type NoteType,
+  type PackInstallResult,
   recommend,
   renderContext,
   resolveVaultDir,
@@ -20,6 +22,7 @@ import {
   search,
   TYPE_DIRS,
   title,
+  updatePack,
   Vault,
 } from "@marcozvd/basics-core";
 import { Command } from "commander";
@@ -49,6 +52,18 @@ function parsePackList(value: string | undefined, available: string[]): string[]
 function printTable(rows: string[][]): void {
   const widths = rows[0].map((_, i) => Math.max(...rows.map((row) => row[i].length)));
   for (const row of rows) console.log(row.map((cell, i) => (i === row.length - 1 ? cell : cell.padEnd(widths[i]))).join("  "));
+}
+
+/** One line per pack, keeping the first (install) order across several installPack calls. */
+function printPackResults(results: PackInstallResult[]): void {
+  const seen = new Set<string>();
+  for (const result of results) {
+    for (const [name, counts] of Object.entries(result.byPack)) {
+      if (seen.has(name)) continue;
+      seen.add(name);
+      console.log(`${name}: ${counts.installed.length} installed, ${counts.skipped.length} skipped`);
+    }
+  }
 }
 
 function cancelInit(): never {
@@ -118,10 +133,7 @@ async function init(dir: string | undefined, opts: InitOptions): Promise<void> {
   fs.mkdirSync(path.join(vaultDir, "inbox"), { recursive: true });
 
   const vault = Vault.load(vaultDir);
-  for (const name of selected) {
-    const result = installPack(vault, packsDir(), name, { lang: language });
-    console.log(`${name}: ${result.installed.length} installed, ${result.skipped.length} skipped`);
-  }
+  printPackResults(selected.map((name) => installPack(vault, packsDir(), name, { lang: language })));
 
   saveConfig(configSchema.parse({ ...cfg, vault: vaultDir, language }));
   console.log(`Vault: ${vaultDir}`);
@@ -209,17 +221,28 @@ pack
   .action((names: string[], { lang }: { lang?: string }) => {
     const language = parseLang(lang, loadConfig().language);
     const vault = load();
-    for (const name of names) {
-      const result = installPack(vault, packsDir(), name, { lang: language });
-      console.log(`${name}: ${result.installed.length} installed, ${result.skipped.length} skipped`);
-    }
+    printPackResults(names.map((name) => installPack(vault, packsDir(), name, { lang: language })));
   });
 pack
   .command("update [name]")
-  .description("update installed packs")
-  .action(() => {
-    console.log("not implemented yet");
-    process.exit(1);
+  .description("propose pack updates for review in the inbox")
+  .action((name: string | undefined) => {
+    const vault = load();
+    const installed = installedPacks(vault);
+    const names = name ? [name] : Object.keys(installed);
+    if (!names.length) return console.log("no packs installed");
+    const language = loadConfig().language;
+    let proposedAny = false;
+    for (const packName of names) {
+      const result = updatePack(vault, packsDir(), packName, { lang: language });
+      if (result.upToDate) {
+        console.log(`${packName}: up to date (${installed[packName]})`);
+        continue;
+      }
+      console.log(`${packName}: ${result.proposed.length} proposed, ${result.unchanged.length} unchanged`);
+      if (result.proposed.length) proposedAny = true;
+    }
+    if (proposedAny) console.log("Review with `basics inbox` or the UI.");
   });
 
 program
@@ -317,6 +340,14 @@ inbox.command("show <id>").action((id: string) => {
   console.log(fs.readFileSync(p.path, "utf8"));
 });
 inbox.command("approve <id>").action((id: string) => console.log(`approved -> ${load().approve(id)}`));
+inbox
+  .command("approve-all")
+  .description("approve every proposal from a proposed_by prefix")
+  .requiredOption("--from <prefix>", "proposed_by prefix, e.g. pack:python-api")
+  .action(({ from }: { from: string }) => {
+    const approved = load().approveAll({ proposedByPrefix: from });
+    console.log(approved.length ? `approved ${approved.length}: ${approved.join(", ")}` : "no matching proposals");
+  });
 inbox.command("reject <id>").action((id: string) => {
   load().reject(id);
   console.log(`rejected ${id}`);

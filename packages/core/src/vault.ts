@@ -252,10 +252,19 @@ export class Vault {
   approve(id: string, override: { data?: NoteData; body?: string } = {}): string {
     const p = this.getProposal(id);
     if (!p) throw new Error(`no proposal "${id}" in inbox`);
-    const data = { ...(override.data ?? p.data), source: `agent:${p.meta.proposed_by}` };
+    const source = p.meta.proposed_by.startsWith("pack:") ? p.meta.proposed_by : `agent:${p.meta.proposed_by}`;
+    const data = { ...(override.data ?? p.data), source };
     const file = this.writeNote(p.id, data, override.body ?? p.body);
     fs.rmSync(p.path);
     return file;
+  }
+
+  approveAll(filter: { proposedByPrefix: string }): string[] {
+    const ids = this.listProposals()
+      .filter((p) => p.meta.proposed_by.startsWith(filter.proposedByPrefix))
+      .map((p) => p.id);
+    for (const id of ids) this.approve(id);
+    return ids;
   }
 
   reject(id: string): void {

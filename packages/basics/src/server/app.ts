@@ -5,14 +5,17 @@ import path from "node:path";
 import { serveStatic } from "@hono/node-server/serve-static";
 import {
   type ApiError,
+  type ApproveAllResponse,
   type ApproveRequest,
   buildGraph,
   ConflictError,
   type ContextResponse,
   type CreateNoteRequest,
   configSchema,
+  installPack,
   type LayerSummary,
   listNotes,
+  listPacks,
   loadConfig,
   type NoteType,
   NotFoundError,
@@ -26,6 +29,7 @@ import {
   search,
   title,
   toDetail,
+  updatePack,
   Vault,
   VaultNotFoundError,
   vaultStats,
@@ -36,6 +40,7 @@ import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { ZodError, z } from "zod";
 import { createMcpServer } from "../mcp/tools.js";
+import { packsDir } from "../packs-dir.js";
 import type { EventHub } from "./events.js";
 
 const { version } = createRequire(import.meta.url)("../../package.json") as { version: string };
@@ -51,6 +56,8 @@ interface McpSession {
 }
 
 const contextRequestSchema = z.object({ techIds: z.array(z.string()).min(1) });
+const packInstallRequestSchema = z.object({ lang: z.enum(["en", "es"]).optional() });
+const approveAllRequestSchema = z.object({ from: z.string().min(1) });
 
 /** A sessionless POST only creates a session when it carries the initialize request. */
 async function isInitializeRequest(req: Request): Promise<boolean> {
@@ -268,6 +275,23 @@ export function createApp(opts: { root: string; uiDir?: string; events?: EventHu
     const config = configSchema.parse({ ...loadConfig(), language: body.language });
     saveConfig(config);
     return c.json({ language: config.language });
+  });
+
+  app.get("/api/packs", (c) => c.json(listPacks(packsDir(), vault())));
+
+  app.post("/api/packs/:name/install", async (c) => {
+    const body = packInstallRequestSchema.parse(await c.req.json().catch(() => ({})));
+    const lang = body.lang ?? loadConfig().language;
+    return c.json(installPack(vault(), packsDir(), c.req.param("name"), { lang }));
+  });
+
+  app.post("/api/packs/:name/update", (c) => {
+    return c.json(updatePack(vault(), packsDir(), c.req.param("name"), { lang: loadConfig().language }));
+  });
+
+  app.post("/api/inbox/approve-all", async (c) => {
+    const body = approveAllRequestSchema.parse(await c.req.json());
+    return c.json({ approved: vault().approveAll({ proposedByPrefix: body.from }) } satisfies ApproveAllResponse);
   });
 
   if (opts.events) {

@@ -78,6 +78,31 @@ export interface ApproveRequest {
   body?: string;
 }
 
+export interface PackInstallRequest {
+  lang?: "en" | "es";
+}
+
+export interface PackInstallResult {
+  installed: string[];
+  skipped: string[];
+  /** Per-pack note ids, in install order. */
+  byPack: Record<string, { installed: string[]; skipped: string[] }>;
+}
+
+export interface PackUpdateResult {
+  proposed: string[];
+  unchanged: string[];
+  upToDate: boolean;
+}
+
+export interface ApproveAllRequest {
+  from: string;
+}
+
+export interface ApproveAllResponse {
+  approved: string[];
+}
+
 export interface RecommendRequest {
   description: string;
   layers?: string[];
