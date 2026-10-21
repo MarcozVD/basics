@@ -1,0 +1,10 @@
+{
+  "name": "profiles",
+  "version": "1.0.0",
+  "description": {
+    "en": "Ready-made profiles for common products.",
+    "es": "Perfiles listos para productos comunes."
+  },
+  "requires": ["web-typescript", "python-api"],
+  "languages": ["es"]
+}

@@ -1,0 +1,10 @@
+{
+  "name": "web-typescript",
+  "version": "1.0.0",
+  "description": {
+    "en": "TypeScript web stack: React, Next.js, Vitest and Playwright.",
+    "es": "Stack web TypeScript: React, Next.js, Vitest y Playwright."
+  },
+  "requires": ["core-layers"],
+  "languages": ["es"]
+}
