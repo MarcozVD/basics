@@ -2,12 +2,18 @@
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import { createRequire } from "node:module";
+import net from "node:net";
 import path from "node:path";
 import { cancel, confirm, intro, isCancel, multiselect, outro, select, text } from "@clack/prompts";
 import {
+  basicsDir,
   type CheckStatus,
+  type Config,
+  CURRENT_SCHEMA_VERSION,
+  checkVaultMeta,
   configPath,
   configSchema,
+  DEFAULT_VAULT,
   detectStack,
   type ExportTarget,
   embeddingPaths,
@@ -22,9 +28,11 @@ import {
   NOTE_TYPES,
   type NoteData,
   type NoteType,
+  NotFoundError,
   normalizeTechIds,
   type PackInstallResult,
   type Recommendation,
+  readVaultMeta,
   renderExport,
   resolveVaultDir,
   saveConfig,
@@ -36,8 +44,11 @@ import {
   TYPE_DIRS,
   title,
   trust,
+  UnknownTechError,
   updatePack,
   Vault,
+  VaultNotFoundError,
+  writeVaultMeta,
 } from "@marcozvd/basics-core";
 import { Command } from "commander";
 import {
@@ -63,9 +74,24 @@ const program = new Command("basics")
 
 const load = () => Vault.load(resolveVaultDir(program.opts().vault));
 
+/** User-facing failure: prints one `error:` line (plus a hint) and exits 1. */
+class CliError extends Error {
+  constructor(
+    message: string,
+    readonly hint?: string,
+  ) {
+    super(message);
+    this.name = "CliError";
+  }
+}
+
+function fail(message: string, hint?: string): never {
+  throw new CliError(message, hint);
+}
+
 function parseLang(value: string | undefined, fallback: "en" | "es"): "en" | "es" {
   if (value === undefined) return fallback;
-  if (value !== "en" && value !== "es") throw new Error("language must be en or es");
+  if (value !== "en" && value !== "es") fail("language must be en or es", "use --lang en or --lang es");
   return value;
 }
 
@@ -104,7 +130,11 @@ function assertInitTarget(dir: string): void {
   if (!fs.existsSync(dir)) return;
   if (fs.readdirSync(dir).length === 0) return;
   const looksLikeVault = Object.values(TYPE_DIRS).some((typeDir) => fs.existsSync(path.join(dir, typeDir)));
-  if (!looksLikeVault) throw new Error(`refusing to init ${dir}: directory is not empty and is not a basics vault`);
+  if (!looksLikeVault)
+    fail(
+      `refusing to init ${dir}: directory is not empty and is not a basics vault`,
+      "choose an empty directory or an existing basics vault",
+    );
 }
 
 interface InitOptions {
@@ -155,11 +185,13 @@ async function init(dir: string | undefined, opts: InitOptions): Promise<void> {
     selected = answer;
   }
   for (const name of selected) {
-    if (!available.some((p) => p.name === name)) throw new Error(`unknown pack "${name}"`);
+    if (!available.some((p) => p.name === name)) fail(`unknown pack "${name}"`, "run `basics pack list` to see the available packs");
   }
 
   for (const typeDir of Object.values(TYPE_DIRS)) fs.mkdirSync(path.join(vaultDir, typeDir), { recursive: true });
   fs.mkdirSync(path.join(vaultDir, "inbox"), { recursive: true });
+  basicsDir(vaultDir);
+  writeVaultMeta(vaultDir);
 
   const vault = Vault.load(vaultDir);
   printPackResults(selected.map((name) => installPack(vault, packsDir(), name, { lang: language })));
@@ -193,7 +225,7 @@ function parseTargets(value: string | undefined): ExportTarget[] | undefined {
     .map((s) => s.trim())
     .filter(Boolean);
   const unknown = names.filter((name) => !isExportTarget(name));
-  if (unknown.length) throw new Error(`unknown targets: ${unknown.join(", ")} (expected ${EXPORT_TARGETS.join(", ")})`);
+  if (unknown.length) fail(`unknown targets: ${unknown.join(", ")}`, `use --targets ${EXPORT_TARGETS.join(",")}`);
   return [...new Set(names)] as ExportTarget[];
 }
 
@@ -292,7 +324,7 @@ function runExport(dir: string | undefined, opts: ExportOptions, forcedTargets?:
     for (const tech of detected.techs) if (tech.version) versions[tech.id] = tech.version;
   }
   if (!stack.length) {
-    throw new Error('no stack configured: pass --stack <ids> or create basics.json with { "stack": [...] }');
+    fail("no stack configured", 'pass --stack <ids> or create basics.json with { "stack": [...] }');
   }
   const targets: ExportTarget[] =
     parseTargets(opts.targets) ?? forcedTargets ?? (saved?.targets.length ? saved.targets : ["agents", "claude"]);
@@ -392,9 +424,9 @@ function runCommand(command: string, cwd: string, timeoutMs: number, verbose: bo
 async function runChecks(dir: string | undefined, opts: CheckOptions): Promise<void> {
   const root = path.resolve(expandHome(dir ?? "."));
   const settings = readExportSettings(path.join(root, "basics.json"));
-  if (!settings) throw new Error(`no basics.json in ${root}: run \`basics export\` first`);
+  if (!settings) fail(`no basics.json in ${root}`, "run `basics export --stack <ids>` in the project first");
   const seconds = Number(opts.timeout ?? "600");
-  if (!Number.isFinite(seconds) || seconds <= 0) throw new Error("--timeout must be a positive number of seconds");
+  if (!Number.isFinite(seconds) || seconds <= 0) fail("--timeout must be a positive number of seconds", "pass --timeout <seconds>");
 
   const vault = load();
   const checks = stackContext(vault, settings.stack, { versions: settings.versions }).checks.flatMap((note) =>
@@ -513,12 +545,12 @@ config
     const next: Record<string, unknown> = { ...loadConfig() };
     if (key === "vault") next.vault = path.resolve(expandHome(value));
     else if (key === "language") {
-      if (value !== "en" && value !== "es") throw new Error("language must be en or es");
+      if (value !== "en" && value !== "es") fail("language must be en or es", "use en or es");
       next.language = value;
     } else if (key === "embeddings") {
-      if (value !== "true" && value !== "false") throw new Error("embeddings must be true or false");
+      if (value !== "true" && value !== "false") fail("embeddings must be true or false", "use true or false");
       next.embeddings = value === "true";
-    } else throw new Error(`unknown config key "${key}" (expected vault, language or embeddings)`);
+    } else fail(`unknown config key "${key}"`, "expected vault, language or embeddings");
     const parsed = configSchema.parse(next);
     saveConfig(parsed);
     console.log(JSON.stringify(parsed, null, 2));
@@ -547,7 +579,7 @@ async function embeddingsEnable(opts: EmbeddingsEnableOptions): Promise<void> {
   console.log(`  cache:   ${path.dirname(runtimeDir())}`);
   if (!opts.yes) {
     if (process.stdin.isTTY !== true) {
-      throw new Error("embeddings enable needs confirmation; re-run with --yes in a non-interactive terminal");
+      fail("embeddings enable needs confirmation", "re-run with --yes in a non-interactive terminal");
     }
     const answer = await confirm({ message: "Download and install now?", initialValue: true });
     if (isCancel(answer) || !answer) {
@@ -559,7 +591,7 @@ async function embeddingsEnable(opts: EmbeddingsEnableOptions): Promise<void> {
   const start = Date.now();
   if (!runtimeInstalled()) await installRuntime();
   const runtime = await loadRuntime();
-  if (!runtime) throw new Error(`embeddings runtime missing at ${runtimeDir()}`);
+  if (!runtime) fail(`embeddings runtime missing at ${runtimeDir()}`, "run `basics embeddings enable`");
   console.log(`Loading model ${model} (first run downloads it under ${modelsDir()})`);
   const embedder = await createEmbedder(runtime, model);
   saveConfig(configSchema.parse({ ...cfg, embeddings: true, embeddingsModel: model }));
@@ -611,9 +643,9 @@ function embeddingsStatus(): void {
 
 async function embeddingsReindex(opts: { full?: boolean }): Promise<void> {
   const cfg = loadConfig();
-  if (!runtimeInstalled()) throw new Error("embeddings runtime not installed: run `basics embeddings enable` first");
+  if (!runtimeInstalled()) fail("embeddings runtime not installed", "run `basics embeddings enable` first");
   const runtime = await loadRuntime();
-  if (!runtime) throw new Error(`embeddings runtime missing at ${runtimeDir()}`);
+  if (!runtime) fail(`embeddings runtime missing at ${runtimeDir()}`, "run `basics embeddings enable`");
   const embedder = await createEmbedder(runtime, cfg.embeddingsModel);
   const start = Date.now();
   const stats = await syncIndex(load(), embedder, progress, { full: opts.full });
@@ -640,6 +672,249 @@ embeddings
   .description("sync the vector index with the current vault")
   .option("--full", "re-embed every note")
   .action((opts: { full?: boolean }) => embeddingsReindex(opts));
+
+type DoctorStatus = "ok" | "warn" | "fail";
+
+interface DoctorCheck {
+  id: string;
+  status: DoctorStatus;
+  message: string;
+  hint?: string;
+}
+
+interface DoctorOptions {
+  fix?: boolean;
+  json?: boolean;
+}
+
+/** Numeric comparison of dot-separated versions. */
+function versionAtLeast(actual: string, minimum: string): boolean {
+  const a = actual.split(".").map((n) => Number.parseInt(n, 10) || 0);
+  const b = minimum.split(".").map((n) => Number.parseInt(n, 10) || 0);
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    const diff = (a[i] ?? 0) - (b[i] ?? 0);
+    if (diff !== 0) return diff > 0;
+  }
+  return true;
+}
+
+function configOrUndefined(): Config | undefined {
+  try {
+    return loadConfig();
+  } catch {
+    return undefined;
+  }
+}
+
+function safeVaultRoot(explicit: string | undefined): string {
+  const configured = configOrUndefined()?.vault;
+  return path.resolve(expandHome(explicit ?? process.env.BASICS_DIR ?? configured ?? DEFAULT_VAULT));
+}
+
+function vaultSource(explicit: string | undefined): string {
+  if (explicit) return "flag";
+  if (process.env.BASICS_DIR) return "BASICS_DIR";
+  if (configOrUndefined()?.vault) return "config";
+  return "default";
+}
+
+function portFree(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const server = net.createServer();
+    server.once("error", () => resolve(false));
+    server.once("listening", () => server.close(() => resolve(true)));
+    server.listen(port, "127.0.0.1");
+  });
+}
+
+function nodeCheck(): DoctorCheck {
+  const version = process.versions.node;
+  return versionAtLeast(version, "20.11")
+    ? { id: "node", status: "ok", message: version }
+    : { id: "node", status: "fail", message: `${version} is older than 20.11`, hint: "upgrade Node.js to 20.11 or newer" };
+}
+
+function configCheck(cfg: Config | undefined): DoctorCheck {
+  const file = configPath();
+  if (!cfg) {
+    return {
+      id: "config",
+      status: "fail",
+      message: `${file} does not parse`,
+      hint: "fix or delete the file, then run `basics config get`",
+    };
+  }
+  if (!fs.existsSync(file)) {
+    return {
+      id: "config",
+      status: "warn",
+      message: `${file} (missing, defaults: language ${cfg.language})`,
+      hint: "run `basics config set vault <dir>` to create it",
+    };
+  }
+  return { id: "config", status: "ok", message: `${file} (language ${cfg.language})` };
+}
+
+function vaultMetaCheck(root: string): DoctorCheck {
+  const meta = checkVaultMeta(root);
+  if (meta.status === "error") {
+    return { id: "vault schema", status: "fail", message: meta.message, hint: "upgrade basics: npm install -g @marcozvd/basics" };
+  }
+  if (meta.status === "warn") return { id: "vault schema", status: "warn", message: meta.message, hint: "run `basics doctor --fix`" };
+  return { id: "vault schema", status: "ok", message: meta.message };
+}
+
+function gitignoreCheck(root: string): DoctorCheck {
+  const file = path.join(root, ".basics", ".gitignore");
+  return fs.existsSync(file)
+    ? { id: ".basics", status: "ok", message: `${file} present` }
+    : { id: ".basics", status: "warn", message: `${file} missing`, hint: "run `basics doctor --fix`" };
+}
+
+function inboxCheck(vault: Vault | undefined): DoctorCheck {
+  const pending = vault ? vault.listProposals().length : 0;
+  if (!vault) return { id: "inbox", status: "ok", message: "no vault loaded" };
+  return pending
+    ? {
+        id: "inbox",
+        status: "warn",
+        message: `${pending} pending proposal${pending === 1 ? "" : "s"}`,
+        hint: "run `basics inbox` or review them in the UI",
+      }
+    : { id: "inbox", status: "ok", message: "inbox empty" };
+}
+
+function packsCheck(vault: Vault | undefined): DoctorCheck {
+  if (!vault) return { id: "packs", status: "ok", message: "no vault loaded" };
+  const installed = installedPacks(vault);
+  const outdated = listPacks(packsDir(), vault).filter(
+    (pack) => pack.installed !== null && pack.installed !== pack.version && versionAtLeast(pack.version, pack.installed),
+  );
+  if (!outdated.length) return { id: "packs", status: "ok", message: `${Object.keys(installed).length} installed, up to date` };
+  return {
+    id: "packs",
+    status: "warn",
+    message: outdated.map((pack) => `${pack.name} ${pack.installed} -> ${pack.version}`).join(", "),
+    hint: "run `basics pack update`",
+  };
+}
+
+function embeddingsCheck(cfg: Config | undefined, vault: Vault | undefined): DoctorCheck {
+  if (!cfg) return { id: "embeddings", status: "warn", message: "unknown (config does not parse)" };
+  if (!cfg.embeddings) return { id: "embeddings", status: "ok", message: "off" };
+  const runtime = runtimeInstalled();
+  const cached = modelCached(cfg.embeddingsModel);
+  const stale = vault ? loadIndex(vault).stale(vault).length : 0;
+  const parts = ["on", `runtime ${runtime ? "installed" : "missing"}`, `model ${cached ? "cached" : "missing"}`];
+  if (vault) parts.push(`${stale} stale`);
+  if (!runtime || !cached) return { id: "embeddings", status: "warn", message: parts.join("; "), hint: "run `basics embeddings enable`" };
+  if (stale) return { id: "embeddings", status: "warn", message: parts.join("; "), hint: "run `basics embeddings reindex`" };
+  return { id: "embeddings", status: "ok", message: parts.join("; ") };
+}
+
+/** Apply the fixes doctor knows how to make; returns one line per change. */
+async function applyDoctorFixes(root: string, cfg: Config | undefined): Promise<string[]> {
+  const changes: string[] = [];
+  if (!fs.existsSync(root) || !fs.statSync(root).isDirectory()) return changes;
+
+  const meta = readVaultMeta(root);
+  if (!meta || meta.schemaVersion < CURRENT_SCHEMA_VERSION) {
+    changes.push(`wrote ${writeVaultMeta(root)} (schema v${CURRENT_SCHEMA_VERSION})`);
+  }
+  const gitignore = path.join(root, ".basics", ".gitignore");
+  if (!fs.existsSync(gitignore)) {
+    basicsDir(root);
+    changes.push(`created ${gitignore}`);
+  }
+  if (!cfg?.embeddings || !runtimeInstalled() || !modelCached(cfg.embeddingsModel)) return changes;
+
+  try {
+    const vault = Vault.load(root);
+    if (!loadIndex(vault).stale(vault).length) return changes;
+    const runtime = await loadRuntime();
+    if (!runtime) return changes;
+    const stats = await syncIndex(vault, await createEmbedder(runtime, cfg.embeddingsModel), progress);
+    if (stats.embedded) process.stdout.write("\n");
+    changes.push(`reindexed ${stats.notes} notes (${stats.embedded} embedded)`);
+  } catch (err) {
+    changes.push(`could not reindex: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  return changes;
+}
+
+async function collectDoctorChecks(explicit: string | undefined, root: string, cfg: Config | undefined): Promise<DoctorCheck[]> {
+  const checks: DoctorCheck[] = [nodeCheck(), configCheck(cfg)];
+  const source = vaultSource(explicit);
+  const exists = fs.existsSync(root) && fs.statSync(root).isDirectory();
+  let vault: Vault | undefined;
+  let loadError: string | undefined;
+  if (exists) {
+    try {
+      vault = Vault.load(root);
+    } catch (err) {
+      loadError = err instanceof Error ? err.message : String(err);
+    }
+  }
+
+  if (!exists) {
+    checks.push({ id: "vault", status: "fail", message: `${root} (${source}) not found`, hint: "run `basics init` or pass --vault <dir>" });
+  } else if (!vault) {
+    checks.push({
+      id: "vault",
+      status: "fail",
+      message: `${root} (${source}) did not load: ${loadError}`,
+      hint: "run `basics validate` for details",
+    });
+  } else {
+    checks.push({
+      id: "vault",
+      status: vault.issues.length ? "warn" : "ok",
+      message: `${vault.root} (${source}), ${vault.notes.size} notes, ${vault.issues.length} issues`,
+      ...(vault.issues.length ? { hint: "run `basics validate`" } : {}),
+    });
+  }
+
+  checks.push(exists ? vaultMetaCheck(root) : { id: "vault schema", status: "fail", message: "no vault" });
+  checks.push(exists ? gitignoreCheck(root) : { id: ".basics", status: "fail", message: "no vault" });
+  checks.push(inboxCheck(vault));
+  checks.push(packsCheck(vault));
+  checks.push(embeddingsCheck(cfg, vault));
+  const free = await portFree(4747);
+  checks.push({ id: "port", status: "ok", message: free ? "4747 free" : "4747 in use (fine if basics ui is running)" });
+  return checks;
+}
+
+async function doctor(opts: DoctorOptions): Promise<void> {
+  const explicit = program.opts().vault as string | undefined;
+  const root = safeVaultRoot(explicit);
+  const cfg = configOrUndefined();
+  const changes = opts.fix ? await applyDoctorFixes(root, cfg) : [];
+  const checks = await collectDoctorChecks(explicit, root, cfg);
+
+  if (opts.json) {
+    console.log(JSON.stringify(checks, null, 2));
+  } else {
+    for (const change of changes) console.log(`fixed: ${change}`);
+    if (changes.length) console.log("");
+    const width = Math.max(...checks.map((check) => check.id.length));
+    for (const check of checks) {
+      console.log(`${check.status.padEnd(4)}  ${check.id.padEnd(width)}  ${check.message}`);
+      if (check.hint) console.log(`${" ".repeat(8 + width)}hint: ${check.hint}`);
+    }
+    const counts = { ok: 0, warn: 0, fail: 0 };
+    for (const check of checks) counts[check.status]++;
+    console.log(`\n${counts.ok} ok, ${counts.warn} warn, ${counts.fail} fail`);
+  }
+
+  if (checks.some((check) => check.status === "fail")) process.exitCode = 1;
+}
+
+program
+  .command("doctor")
+  .description("check Node, config, vault, packs and embeddings")
+  .option("--fix", "apply the fixes doctor knows how to make")
+  .option("--json", "print the checks as JSON")
+  .action((opts: DoctorOptions) => doctor(opts));
 
 program
   .command("init [dir]")
@@ -677,6 +952,10 @@ pack
   .action((names: string[], { lang }: { lang?: string }) => {
     const language = parseLang(lang, loadConfig().language);
     const vault = load();
+    const available = new Set(listPacks(packsDir()).map((p) => p.name));
+    for (const name of names) {
+      if (!available.has(name)) fail(`unknown pack "${name}"`, "run `basics pack list` to see the available packs");
+    }
     printPackResults(names.map((name) => installPack(vault, packsDir(), name, { lang: language })));
   });
 pack
@@ -738,6 +1017,13 @@ program
   .action(() => {
     const v = load();
     console.log(`${v.notes.size} notes loaded`);
+    const meta = checkVaultMeta(v.root);
+    if (meta.status === "ok") console.log(meta.message);
+    else if (meta.status === "warn") console.log(`warning: ${meta.message}`);
+    else {
+      console.error(`error: ${meta.message}`);
+      process.exitCode = 1;
+    }
     for (const i of v.issues) console.log(`  ${path.relative(v.root, i.path)}: ${i.message}`);
     if (v.issues.length) process.exitCode = 1;
   });
@@ -788,9 +1074,9 @@ program
   .description("create a note from a template")
   .option("-l, --layer <layer>", "layer for tech notes", "backend")
   .action((type: NoteType, id: string, { layer }) => {
-    if (!NOTE_TYPES.includes(type)) throw new Error(`type must be one of ${NOTE_TYPES.join(", ")}`);
+    if (!NOTE_TYPES.includes(type)) fail(`unknown note type "${type}"`, `use one of ${NOTE_TYPES.join(", ")}`);
     const v = load();
-    if (v.get(id)) throw new Error(`note "${id}" already exists`);
+    if (v.get(id)) fail(`note "${id}" already exists`, "pick another id or edit it in the UI");
     const templates: Record<NoteType, NoteData> = {
       layer: { type: "layer", tags: [], source: "manual" },
       tech: {
@@ -824,7 +1110,7 @@ inbox.command("show <id>").action((id: string) => {
   const p = load()
     .listProposals()
     .find((x) => x.id === id);
-  if (!p) throw new Error(`no proposal "${id}"`);
+  if (!p) fail(`no proposal "${id}"`, "run `basics inbox` to list pending proposals");
   console.log(fs.readFileSync(p.path, "utf8"));
 });
 inbox.command("approve <id>").action((id: string) => console.log(`approved -> ${load().approve(id)}`));
@@ -851,7 +1137,14 @@ program
     const root = resolveVaultDir(program.opts().vault);
     Vault.load(root);
     const { startServer } = await import("./server/index.js");
-    const server = await startServer({ root, port: Number(port) });
+    let server: Awaited<ReturnType<typeof startServer>>;
+    try {
+      server = await startServer({ root, port: Number(port) });
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "EADDRINUSE")
+        fail(`port ${port} is already in use`, "pass --port <n> to listen on another port");
+      throw err;
+    }
     console.log(`Basics UI: ${server.url}  (vault: ${root})`);
     console.log(`MCP over HTTP: ${server.url}/mcp`);
     if (open) openBrowser(server.url);
@@ -889,7 +1182,7 @@ program
   .option("--json", "print the full detection result as JSON")
   .action((dir: string | undefined, { json }: { json?: boolean }) => {
     const root = path.resolve(expandHome(dir ?? "."));
-    if (!fs.existsSync(root) || !fs.statSync(root).isDirectory()) throw new Error(`not a directory: ${root}`);
+    if (!fs.existsSync(root) || !fs.statSync(root).isDirectory()) fail(`not a directory: ${root}`, "pass a project directory");
     const result = detectStack(load(), root);
     if (json) return console.log(JSON.stringify(result, null, 2));
     if (!result.files.length) console.log("no manifests found");
@@ -913,7 +1206,21 @@ program
     runExport(dir, opts, ["agents"]);
   });
 
+function errorHint(err: unknown): string | undefined {
+  if (err instanceof CliError) return err.hint;
+  if (err instanceof VaultNotFoundError) return "run `basics init` or pass --vault <dir>";
+  if (err instanceof NotFoundError) {
+    return String(err.id).startsWith("pack:") ? "run `basics pack list` to see the available packs" : "run `basics list` to see note ids";
+  }
+  if (err instanceof UnknownTechError) return "run `basics list --type tech` to see tech ids";
+  return undefined;
+}
+
 program.parseAsync().catch((err) => {
-  console.error(err instanceof Error ? err.message : err);
+  const message = err instanceof Error ? err.message : String(err);
+  console.error(`error: ${message}`);
+  const hint = errorHint(err);
+  if (hint) console.error(`hint: ${hint}`);
+  if (process.env.BASICS_DEBUG === "1" && err instanceof Error && err.stack) console.error(err.stack);
   process.exit(1);
 });

@@ -109,7 +109,7 @@ export class NotFoundError extends Error {
 /** Thrown when the vault directory does not exist. */
 export class VaultNotFoundError extends Error {
   constructor(readonly root: string) {
-    super(`Vault not found at ${root}. Pass --vault <dir>, set BASICS_DIR, or run: basics config set vault <dir>`);
+    super(`Vault not found at ${root}`);
     this.name = "VaultNotFoundError";
   }
 }
