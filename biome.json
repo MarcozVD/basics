@@ -10,6 +10,8 @@
     "includes": [
       "**",
       "!**/dist",
+      "!site/.vitepress/cache",
+      "!site/.vitepress/dist",
       "!packages/ui/dist",
       "!packages/ui/src/components/ui",
       "!packages/ui/src/components/motion",

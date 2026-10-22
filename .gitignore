@@ -4,6 +4,8 @@ dist/
 docs/
 pnpm-lock.yaml
 *.tsbuildinfo
+site/.vitepress/cache/
+site/.vitepress/dist/
 packages/ui/test-results/
 packages/ui/playwright-report/
 packages/ui/e2e/.vault-path

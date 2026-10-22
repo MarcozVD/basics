@@ -1,0 +1,71 @@
+:root {
+  --vp-font-family-base: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
+  --vp-font-family-mono: "Geist Mono Variable", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --vp-c-bg: #fafafa;
+  --vp-c-bg-alt: #f4f4f5;
+  --vp-c-bg-elv: #ffffff;
+  --vp-c-bg-soft: #f4f4f5;
+  --vp-c-text-1: #111113;
+  --vp-c-text-2: #6b6b72;
+  --vp-c-divider: rgba(0, 0, 0, 0.08);
+  --vp-c-border: rgba(0, 0, 0, 0.08);
+  --vp-c-gutter: rgba(0, 0, 0, 0.08);
+
+  --vp-c-brand-1: #0068d6;
+  --vp-c-brand-2: #007aff;
+  --vp-c-brand-3: #0a6fdb;
+  --vp-c-brand-soft: rgba(10, 132, 255, 0.14);
+}
+
+.dark {
+  --vp-c-bg: #151515;
+  --vp-c-bg-alt: #1c1c1e;
+  --vp-c-bg-elv: #232326;
+  --vp-c-bg-soft: #1c1c1e;
+  --vp-c-text-1: #f2f2f2;
+  --vp-c-text-2: #9a9aa0;
+  --vp-c-divider: rgba(255, 255, 255, 0.08);
+  --vp-c-border: rgba(255, 255, 255, 0.08);
+  --vp-c-gutter: rgba(255, 255, 255, 0.08);
+
+  --vp-c-brand-1: #0a84ff;
+  --vp-c-brand-2: #3f9dff;
+  --vp-c-brand-3: #0a6fdb;
+  --vp-c-brand-soft: rgba(10, 132, 255, 0.16);
+}
+
+.VPHero .tagline {
+  max-width: 640px;
+  margin-inline: 0;
+}
+
+.VPFeature {
+  border-radius: 16px;
+  border-color: var(--vp-c-border);
+  background-color: var(--vp-c-bg-alt);
+}
+
+.vp-doc h1,
+.vp-doc h2,
+.vp-doc h3 {
+  letter-spacing: -0.02em;
+}
+
+.vp-doc div[class*="language-"],
+.vp-doc .custom-block {
+  border-radius: 12px;
+}
+
+.vp-doc a {
+  text-underline-offset: 2px;
+}
+
+.vp-doc table {
+  font-size: 14px;
+}
+
+.VPNavBar .title {
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}

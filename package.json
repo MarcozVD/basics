@@ -16,6 +16,9 @@
     "test:watch": "vitest",
     "e2e": "npm run e2e -w @marcozvd/basics-ui",
     "eval": "node scripts/eval.mjs",
+    "docs:dev": "vitepress dev site",
+    "docs:build": "vitepress build site",
+    "docs:preview": "vitepress preview site",
     "gen:reference": "node scripts/gen-reference.mjs",
     "check:reference": "node scripts/check-reference.mjs",
     "lint": "biome check .",
@@ -29,9 +32,12 @@
   "devDependencies": {
     "@biomejs/biome": "^2.5.15",
     "@changesets/cli": "^3.0.3",
+    "@fontsource-variable/geist": "^5.3.0",
+    "@fontsource-variable/geist-mono": "^5.3.0",
     "@types/node": "^22.20.5",
     "tsx": "^4.23.15",
     "typescript": "^5.9.3",
+    "vitepress": "^1.6.4",
     "vitest": "^5.0.5"
   }
 }
