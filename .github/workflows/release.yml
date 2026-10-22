@@ -1,0 +1,80 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+          cache: npm
+
+      - name: Upgrade npm for trusted publishing
+        run: npm install -g npm@latest
+
+      - run: npm ci
+
+      - run: npm run build
+
+      - run: npm test
+
+      - name: Publish @marcozvd/basics-core
+        working-directory: packages/core
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          if npm view "@marcozvd/basics-core@${version}" version >/dev/null 2>&1; then
+            echo "@marcozvd/basics-core@${version} is already on npm, skipping"
+          else
+            npm publish --provenance --access public
+          fi
+
+      - name: Publish @marcozvd/basics
+        working-directory: packages/basics
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          if npm view "@marcozvd/basics@${version}" version >/dev/null 2>&1; then
+            echo "@marcozvd/basics@${version} is already on npm, skipping"
+          else
+            npm publish --provenance --access public
+          fi
+
+      - name: Build release notes from the CHANGELOGs
+        run: |
+          node --input-type=module - "$GITHUB_REF_NAME" > release-notes.md <<'NODE'
+          import fs from "node:fs";
+
+          const version = process.argv[2].replace(/^v/, "");
+          const packages = [
+            ["@marcozvd/basics", "packages/basics/CHANGELOG.md"],
+            ["@marcozvd/basics-core", "packages/core/CHANGELOG.md"],
+          ];
+          const sections = [];
+
+          for (const [name, file] of packages) {
+            const lines = fs.readFileSync(file, "utf8").split(/\r?\n/);
+            const start = lines.findIndex((line) => line.trim() === `## ${version}`);
+            if (start === -1) continue;
+            let end = lines.findIndex((line, index) => index > start && line.startsWith("## "));
+            if (end === -1) end = lines.length;
+            sections.push(`## ${name}\n\n${lines.slice(start + 1, end).join("\n").trim()}`);
+          }
+
+          process.stdout.write(`${sections.join("\n\n") || `Release ${version}`}\n`);
+          NODE
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" --title "Basics $GITHUB_REF_NAME" --notes-file release-notes.md

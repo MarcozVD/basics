@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation
+    url: https://marcozvd.github.io/basics/
+    about: Guides, CLI and MCP reference, and troubleshooting before opening an issue.
+  - name: Report a security vulnerability
+    url: https://github.com/MarcozVD/basics/security/advisories/new
+    about: Report vulnerabilities privately through GitHub security advisories; do not open a public issue.

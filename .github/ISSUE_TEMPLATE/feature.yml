@@ -1,0 +1,64 @@
+name: Feature request
+description: Suggest a capability or an improvement for Basics.
+title: "[feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Describe the problem before the solution. Check the [documentation](https://marcozvd.github.io/basics/) and
+        existing issues first.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What are you trying to do, and what gets in the way today?
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: How would you like Basics to behave? Commands, flags, UI or MCP tool ideas are welcome.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Workarounds or other approaches you tried or considered.
+    validations:
+      required: false
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - CLI
+        - Web UI
+        - MCP server / HTTP API
+        - Core library
+        - Packs
+        - Docs
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Does this change the note schema or a public interface?
+      description: This helps decide whether it needs a changeset and a stability review.
+      options:
+        - "No"
+        - "Yes — note schema or frontmatter"
+        - "Yes — CLI command, flag or MCP tool"
+        - "Not sure"
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Examples, sketches or links to related issues.
+    validations:
+      required: false

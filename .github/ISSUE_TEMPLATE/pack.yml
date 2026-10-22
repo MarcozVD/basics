@@ -1,0 +1,73 @@
+name: Pack proposal
+description: Propose a new note pack or a substantial change to an official pack.
+title: "[pack]: "
+labels: ["pack"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Read the [packs guide](https://marcozvd.github.io/basics/guide/packs.html) before proposing. A pack is a
+        versioned bundle of notes with the same ids in every declared language.
+  - type: input
+    id: pack-name
+    attributes:
+      label: Pack name
+      description: Lowercase letters, digits and dashes; it must match the folder name.
+      placeholder: rust-api
+    validations:
+      required: true
+  - type: textarea
+    id: summary
+    attributes:
+      label: What does the pack cover?
+      description: The stack, layers, technologies, practices and checks it would add.
+    validations:
+      required: true
+  - type: input
+    id: requires
+    attributes:
+      label: Required packs
+      description: Existing packs it depends on, comma separated (for example `core-layers`).
+      placeholder: core-layers
+    validations:
+      required: false
+  - type: dropdown
+    id: languages
+    attributes:
+      label: Languages
+      description: Every declared language needs the same note ids under `notes/<lang>/`.
+      multiple: true
+      options:
+        - English (en)
+        - Spanish (es)
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Note list
+      description: Proposed note ids per type (layer, tech, practice, check, profile) or a link to a branch or fork.
+      placeholder: |
+        tech: rust, axum, sqlx
+        practices: rust-error-handling
+        checks: cargo-test
+    validations:
+      required: true
+  - type: textarea
+    id: maintenance
+    attributes:
+      label: Maintenance
+      description: Who will maintain the pack, and how will versions be bumped when the stack changes?
+    validations:
+      required: true
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: The notes pass `basics validate`.
+          required: true
+        - label: Every declared language has the same note ids.
+          required: true
+        - label: I read the pack format and authoring rules.
+          required: true
