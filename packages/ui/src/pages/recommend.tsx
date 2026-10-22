@@ -3,6 +3,7 @@ import { useMutation } from "@tanstack/react-query";
 import { AlertTriangle, Ban, Check, Copy, Download, FileDown, type LucideIcon, Star, X } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Link } from "react-router";
 import { CodeBlock } from "@/components/agents/code-block";
 import { PromptInput } from "@/components/agents/prompt-input";
@@ -19,6 +20,7 @@ import { CenterMorphModal, CenterMorphModalContent } from "@/components/motion/c
 import { Checkbox } from "@/components/motion/checkbox";
 import { Loader } from "@/components/motion/loader";
 import { Tabs, TabsList, TabsTrigger } from "@/components/motion/tabs";
+import { Tooltip } from "@/components/motion/tooltip";
 import { ErrorState } from "@/components/state";
 import { type TranslationKey, useT } from "@/i18n";
 import { exportStack, recommend } from "@/lib/api";
@@ -39,6 +41,7 @@ const EXPORT_TABS = [
 const EXPORT_TARGETS = ["agents", "claude", "cursor"] as const;
 const BLOCK_START = "<!-- basics:start -->";
 const BLOCK_END = "<!-- basics:end -->";
+const EMBEDDINGS_CLI = "basics embeddings enable";
 
 /** The managed block of an agent file, without the user's surrounding text. */
 function markedBlock(content: string): string {
@@ -116,10 +119,36 @@ interface CandidateCardProps {
 
 function ModeIndicator({ mode }: { mode: Recommendation["mode"] }) {
   const t = useT();
+  const hybrid = mode === "hybrid";
   return (
-    <span className="rounded-full border border-border px-2 py-0.5 font-mono text-[10px] text-muted-foreground">
-      {t(mode === "hybrid" ? "recommend.mode.hybrid" : "recommend.mode.keywords")}
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-2 py-0.5 font-mono text-[10.5px] text-muted-foreground">
+      <span aria-hidden="true" className={cn("size-1.5 rounded-full", hybrid ? "bg-primary" : "bg-muted-foreground/60")} />
+      {t(hybrid ? "recommend.mode.hybrid" : "recommend.mode.keywords")}
     </span>
+  );
+}
+
+function ScoreValue({ value, detail, className }: { value: number | string; detail?: string; className?: string }) {
+  const t = useT();
+  return (
+    <Tooltip
+      side="top"
+      align="center"
+      arrow
+      sideOffset={6}
+      content={<span className="block max-w-72 whitespace-normal font-mono text-[11px] leading-4">{detail ?? t("recommend.score")}</span>}
+    >
+      <button
+        type="button"
+        aria-label={`${t("recommend.score")}: ${value}`}
+        className={cn(
+          "relative z-10 -mx-2 -my-1 inline-flex min-h-6 min-w-6 cursor-help items-center justify-center rounded-sm px-2 py-1 font-mono text-[11px] text-muted-foreground tabular-nums transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+          className,
+        )}
+      >
+        {value}
+      </button>
+    </Tooltip>
   );
 }
 
@@ -161,12 +190,11 @@ function CandidateCard({ candidate, maxScore, selected, reduce, onToggle }: Cand
             {candidate.id}
           </Link>
           <span className="truncate text-[11px] text-muted-foreground">{t(`option.${candidate.kind}` as TranslationKey)}</span>
-          <span
-            className="ml-auto font-mono text-[11px] text-muted-foreground tabular-nums"
-            title={hybrid === undefined ? t("recommend.score") : detail}
-          >
-            {hybrid === undefined ? candidate.score : hybrid.toFixed(3)}
-          </span>
+          <ScoreValue
+            value={hybrid === undefined ? candidate.score : hybrid.toFixed(3)}
+            detail={hybrid === undefined ? undefined : detail}
+            className="ml-auto"
+          />
         </div>
         <ScoreBar value={hybrid ?? candidate.score} max={hybrid === undefined ? maxScore : 1} reduce={reduce} />
       </CardHeader>
@@ -183,7 +211,7 @@ function CandidateCard({ candidate, maxScore, selected, reduce, onToggle }: Cand
         </CardContent>
       )}
       {negated.length > 0 && (
-        <CardContent>
+        <CardContent className="border-t border-border/60 pt-2">
           <PhraseList icon={Ban} label={t("recommend.negated")} className="text-destructive/70" phrases={negated} />
         </CardContent>
       )}
@@ -223,9 +251,7 @@ function RecommendationResults({ recommendation, layerTitle, selected, reduce, o
                       >
                         {profile.id}
                       </Link>
-                      <span className="font-mono text-[11px] text-muted-foreground tabular-nums" title={t("recommend.score")}>
-                        {profile.hybrid === undefined ? profile.score : profile.hybrid.toFixed(3)}
-                      </span>
+                      <ScoreValue value={profile.hybrid === undefined ? profile.score : profile.hybrid.toFixed(3)} />
                       <Button
                         variant="secondary"
                         size="sm"
@@ -422,16 +448,17 @@ export function RecommendPage() {
             {run.data ? <ModeIndicator mode={run.data.mode} /> : null}
           </div>
           {run.data?.mode === "keywords" ? (
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
               <span>{t("recommend.enableHybrid")}</span>
               <button
                 type="button"
-                aria-label={t("recommend.copyCli")}
+                aria-label={`${t("recommend.copyCli")}: ${EMBEDDINGS_CLI}`}
                 title={t("recommend.copyCli")}
-                onClick={() => void copyText("basics embeddings enable")}
-                className="grid size-5 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                onClick={() => void copyText(EMBEDDINGS_CLI)}
+                className="inline-flex h-6 max-w-full items-center gap-1.5 rounded-md border border-border bg-card px-2 font-mono text-[10.5px] text-foreground transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
               >
-                <Copy className="size-3" aria-hidden="true" />
+                <span className="truncate">{EMBEDDINGS_CLI}</span>
+                <Copy className="size-3 shrink-0 text-muted-foreground" aria-hidden="true" />
               </button>
             </div>
           ) : null}
@@ -505,10 +532,11 @@ export function RecommendPage() {
                   max={10}
                   fill="var(--muted)"
                   aria-label={t("recommend.perLayer")}
+                  formatLegend={(valueText) => t("recommend.perLayerLegend", { value: valueText })}
                 >
-                  <AdaptiveStepperDecrement />
+                  <AdaptiveStepperDecrement aria-label={t("recommend.decreasePerLayer")} />
                   <AdaptiveStepperValue />
-                  <AdaptiveStepperIncrement />
+                  <AdaptiveStepperIncrement aria-label={t("recommend.increasePerLayer")} />
                 </AdaptiveStepper>
               </div>
             </div>
@@ -554,48 +582,53 @@ export function RecommendPage() {
         </div>
       </div>
 
-      <AnimatePresence>
-        {selected.size > 0 && (
-          <motion.div
-            role="region"
-            aria-label={t("recommend.selectedBar")}
-            initial={{ opacity: 0, y: reduce ? 0 : 8, x: "-50%" }}
-            animate={{ opacity: 1, y: 0, x: "-50%" }}
-            exit={{ opacity: 0, y: reduce ? 0 : 8, x: "-50%", transition: { duration: 0.12, ease: EASE_OUT } }}
-            transition={reduce ? { duration: 0.12 } : SPRING_PANEL}
-            style={{ bottom: DOCK_BOTTOM + DOCK_HEIGHT + BAR_GAP }}
-            className="fixed left-1/2 z-40 flex items-center gap-1 rounded-full border bg-background/70 py-1 pr-1 pl-1 shadow-[0_8px_30px_rgba(0,0,0,0.25)] backdrop-blur-xl"
-          >
-            <button
-              type="button"
-              aria-label={t("recommend.clear")}
-              onClick={() => setSelected(new Set())}
-              className="grid size-7 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
-            >
-              <X className="size-3.5" aria-hidden="true" />
-            </button>
-            <span className="pr-2 text-[13px] font-medium tabular-nums">{t("recommend.selected", { count: selected.size })}</span>
-            <span aria-hidden="true" className="text-muted-foreground/60">
-              ·
-            </span>
-            <Button
-              ref={generateRef}
-              size="sm"
-              pressScale={0.97}
-              className="ml-1"
-              disabled={exportFiles.isPending}
-              onClick={() => exportFiles.mutate([...selected])}
-            >
-              {exportFiles.isPending ? (
-                <Loader variant="spinner" size={14} label={t("state.loading")} />
-              ) : (
-                <FileDown className="size-3.5" aria-hidden="true" />
+      {typeof document === "undefined"
+        ? null
+        : createPortal(
+            <AnimatePresence>
+              {selected.size > 0 && (
+                <motion.div
+                  role="region"
+                  aria-label={t("recommend.selectedBar")}
+                  initial={{ opacity: 0, y: reduce ? 0 : 8, x: "-50%" }}
+                  animate={{ opacity: 1, y: 0, x: "-50%" }}
+                  exit={{ opacity: 0, y: reduce ? 0 : 8, x: "-50%", transition: { duration: 0.12, ease: EASE_OUT } }}
+                  transition={reduce ? { duration: 0.12 } : SPRING_PANEL}
+                  style={{ bottom: DOCK_BOTTOM + DOCK_HEIGHT + BAR_GAP }}
+                  className="fixed left-1/2 z-40 flex items-center gap-1 rounded-full border bg-background/70 py-1 pr-1 pl-1 shadow-[0_8px_30px_rgba(0,0,0,0.25)] backdrop-blur-xl"
+                >
+                  <button
+                    type="button"
+                    aria-label={t("recommend.clear")}
+                    onClick={() => setSelected(new Set())}
+                    className="grid size-7 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+                  >
+                    <X className="size-3.5" aria-hidden="true" />
+                  </button>
+                  <span className="pr-2 text-[13px] font-medium tabular-nums">{t("recommend.selected", { count: selected.size })}</span>
+                  <span aria-hidden="true" className="text-muted-foreground/60">
+                    ·
+                  </span>
+                  <Button
+                    ref={generateRef}
+                    size="sm"
+                    pressScale={0.97}
+                    className="ml-1"
+                    disabled={exportFiles.isPending}
+                    onClick={() => exportFiles.mutate([...selected])}
+                  >
+                    {exportFiles.isPending ? (
+                      <Loader variant="spinner" size={14} label={t("state.loading")} />
+                    ) : (
+                      <FileDown className="size-3.5" aria-hidden="true" />
+                    )}
+                    {t("recommend.generate")}
+                  </Button>
+                </motion.div>
               )}
-              {t("recommend.generate")}
-            </Button>
-          </motion.div>
-        )}
-      </AnimatePresence>
+            </AnimatePresence>,
+            document.body,
+          )}
 
       <CenterMorphModal open={dialogOpen} onOpenChange={setDialogOpen}>
         <CenterMorphModalContent
@@ -609,7 +642,7 @@ export function RecommendPage() {
           <Tabs value={exportTab} onValueChange={setExportTab} variant="segment" className="mt-4">
             <TabsList aria-label={t("recommend.exportFiles")}>
               {EXPORT_TABS.map((tab) => (
-                <TabsTrigger key={tab.value} value={tab.value} className="px-3 py-1 text-xs">
+                <TabsTrigger key={tab.value} value={tab.value} className="px-2 py-1 text-xs sm:px-3">
                   {tab.label}
                 </TabsTrigger>
               ))}

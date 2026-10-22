@@ -19,7 +19,7 @@ import { toast } from "@/lib/toast";
 
 type Filter = "all" | "create" | "update";
 
-const README_PROPOSE = "https://github.com/MarcozVD/basics#conectar-agentes-mcp";
+const README_PROPOSE = "https://marcozvd.github.io/basics/guide/mcp-clients.html";
 
 function createdTime(value: string): number {
   const parsed = Date.parse(value);
@@ -234,24 +234,24 @@ export function InboxPage() {
               <div
                 key={group.from}
                 data-pack={group.name}
-                className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-border/70 bg-card/50 px-3 py-1.5"
+                className="flex min-w-0 items-center gap-2 rounded-xl border border-border/70 bg-card/50 px-3 py-1.5"
               >
-                <Package className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-                <span className="min-w-0 truncate text-xs">
+                <Package className="hidden size-3.5 shrink-0 text-muted-foreground sm:block" aria-hidden="true" />
+                <span className="min-w-0 flex-1 truncate text-xs">
                   <span className="font-mono font-medium">{group.name}</span>{" "}
-                  <span className="font-mono text-muted-foreground">{group.version}</span>
+                  <span className="hidden font-mono text-muted-foreground sm:inline">{group.version}</span>
+                  <span aria-hidden="true" className="text-muted-foreground/60">
+                    {" · "}
+                  </span>
+                  <span className="text-muted-foreground">{t("inbox.updates", { count: group.proposals.length })}</span>
                 </span>
-                <span aria-hidden="true" className="text-muted-foreground/60">
-                  ·
-                </span>
-                <span className="text-xs text-muted-foreground">{t("inbox.updates", { count: group.proposals.length })}</span>
                 <Button
                   variant="secondary"
                   size="sm"
                   pressScale={0.97}
                   disabled={busy}
                   onClick={() => requestApproveAll(group.name, group.version, group.from)}
-                  className={confirms ? "ml-auto h-7 border-destructive/40 px-3 text-destructive" : "ml-auto h-7 px-3"}
+                  className={confirms ? "h-7 shrink-0 border-destructive/40 px-3 text-destructive" : "h-7 shrink-0 px-3"}
                 >
                   {confirms ? t("inbox.approveAllConfirm") : t("inbox.approveAll")}
                 </Button>
@@ -336,7 +336,7 @@ export function InboxPage() {
                     action={proposal.meta.action}
                     typeLabel={typeLabel}
                     typeColor={`var(--type-${proposal.type})`}
-                    agentName={t("inbox.by", { name })}
+                    agentName={pack ? t("inbox.byPack", { name: pack.name, version: pack.version }) : t("inbox.by", { name })}
                     agentInitial={agentInitial(name)}
                     agentColor={agentColor(name)}
                     agentForeground="#111113"

@@ -258,7 +258,7 @@ function StackField({ value, onChange }: { value: unknown; onChange: (value: unk
           </span>
           <div className="min-w-0 flex-1">
             <MultiSelect value={Array.isArray(ids) ? ids : []} onValueChange={(next) => setLayer(layer, next)}>
-              <MultiSelectTrigger className={TRIGGER_CLASS}>
+              <MultiSelectTrigger className={cn(TRIGGER_CLASS, "min-w-0")}>
                 <MultiSelectValue placeholder="—" chipClassName={CHIP_CLASS}>
                   {(item) => {
                     const tech = techs.data?.find((note) => note.id === item);

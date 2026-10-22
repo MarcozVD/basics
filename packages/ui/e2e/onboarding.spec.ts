@@ -64,9 +64,11 @@ test("an empty vault installs the starter packs and Home shows counts", async ({
   await expect(page.locator('[data-stat="practice"]')).toContainText(String(stats.counts.practice));
 
   await page.goto("/?packs=1");
-  await expect(page.getByRole("heading", { name: "Start with a starter pack" })).toBeVisible();
-  const first = page.getByRole("checkbox", { name: packs[0].name, exact: true });
-  await expect(first).toBeDisabled();
-  await expect(first).not.toBeChecked();
-  await expect(page.getByText(`installed v${packs[0].version}`).first()).toBeVisible();
+  await expect(page.getByRole("heading", { name: "All starter packs are installed" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Install \d+ packs/ })).toHaveCount(0);
+  for (const pack of packs) {
+    await expect(page.getByRole("checkbox", { name: pack.name, exact: true })).toHaveCount(0);
+    await expect(page.getByText(`installed v${pack.version}`).first()).toBeVisible();
+  }
+  await expect(page.getByRole("link", { name: "Back to Home" })).toBeVisible();
 });

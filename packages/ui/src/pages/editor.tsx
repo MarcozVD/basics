@@ -143,31 +143,38 @@ function LastChecks({ checks }: { checks: Record<string, LastCheck> }) {
     <ul aria-label={t("editor.lastChecks")} className="mt-2 flex flex-wrap items-center gap-1.5">
       {chips.map(({ id, check, tone }) => {
         const output = tailLines(check.output_tail);
+        const status = t(`editor.checkStatus.${check.status}` as TranslationKey);
+        const at = formatRelativeTime(check.at, language);
         return (
-          <Tooltip
-            key={id}
-            side="top"
-            align="start"
-            content={
-              <div className="flex flex-col gap-1 font-mono text-[11px]">
-                {check.duration_ms !== undefined ? <span>{t("editor.checkDuration", { ms: check.duration_ms })}</span> : null}
-                {output.length ? (
-                  <pre className="max-w-80 overflow-auto whitespace-pre-wrap text-[10.5px] leading-relaxed">{output.join("\n")}</pre>
-                ) : null}
-              </div>
-            }
-          >
-            <li
-              className={cn(
-                "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-0.5 font-mono text-[10.5px]",
-                CHECK_TONE[tone],
-              )}
+          <li key={id} className="flex min-w-0 max-w-full shrink-0">
+            <Tooltip
+              side="top"
+              align="start"
+              arrow
+              sideOffset={6}
+              content={
+                <div className="flex flex-col gap-1 font-mono text-[11px]">
+                  {check.duration_ms !== undefined ? <span>{t("editor.checkDuration", { ms: check.duration_ms })}</span> : null}
+                  {output.length ? (
+                    <pre className="max-w-80 overflow-auto whitespace-pre-wrap text-[10.5px] leading-relaxed">{output.join("\n")}</pre>
+                  ) : null}
+                </div>
+              }
             >
-              <span>{id}</span>
-              <span className="text-[10px] tracking-wide uppercase">{t(`editor.checkStatus.${check.status}` as TranslationKey)}</span>
-              <span className="text-muted-foreground">{formatRelativeTime(check.at, language)}</span>
-            </li>
-          </Tooltip>
+              <button
+                type="button"
+                aria-label={`${id}, ${status}, ${at}`}
+                className={cn(
+                  "inline-flex min-h-6 min-w-0 max-w-full items-center gap-1.5 rounded-full border px-2 py-0.5 font-mono text-[10.5px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+                  CHECK_TONE[tone],
+                )}
+              >
+                <span className="truncate">{id}</span>
+                <span className="shrink-0 text-[10px] tracking-wide uppercase">{status}</span>
+                <span className="shrink-0 text-muted-foreground">{at}</span>
+              </button>
+            </Tooltip>
+          </li>
         );
       })}
     </ul>

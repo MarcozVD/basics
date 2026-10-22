@@ -1,6 +1,6 @@
 import type { ActivityEvent, NoteType, PackInfo, ProposalSummary } from "@marcozvd/basics-core";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, Copy, Package } from "lucide-react";
+import { ArrowRight, Check, Copy, Package } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
@@ -209,15 +209,22 @@ function StarterPacks({
   onInstall,
 }: StarterPacksProps) {
   const { t } = useI18n();
+  const canInstall = Boolean(packs?.some((pack) => !pack.installed));
+  const allInstalled = Boolean(packs?.length) && !canInstall;
+
   return (
     <div className="flex min-h-[calc(100dvh-12rem)] items-center justify-center px-4">
-      <section aria-label={t("home.packs.title")} className="w-full max-w-[560px]">
+      <section aria-label={t(allInstalled ? "home.packs.installedTitle" : "home.packs.title")} className="w-full max-w-[560px]">
         <div className="flex flex-col items-center text-center">
           <span className="grid size-10 place-items-center rounded-full bg-muted/60 text-muted-foreground">
-            <Package className="size-5" aria-hidden="true" />
+            {allInstalled ? <Check className="size-5" aria-hidden="true" /> : <Package className="size-5" aria-hidden="true" />}
           </span>
-          <h2 className="mt-3 text-lg font-semibold tracking-tight">{t("home.packs.title")}</h2>
-          <p className="mt-1 max-w-md text-xs leading-5 text-muted-foreground">{t("home.packs.description")}</p>
+          <h2 className="mt-3 text-lg font-semibold tracking-tight">
+            {t(allInstalled ? "home.packs.installedTitle" : "home.packs.title")}
+          </h2>
+          <p className="mt-1 max-w-md text-xs leading-5 text-muted-foreground">
+            {t(allInstalled ? "home.packs.installedDescription" : "home.packs.description")}
+          </p>
         </div>
 
         {pending ? (
@@ -231,20 +238,33 @@ function StarterPacks({
         ) : packs && packs.length > 0 ? (
           <div className="mt-5 flex flex-col gap-1">
             {packs.map((pack) => (
-              <div key={pack.name} className="flex items-start gap-3 rounded-xl border border-border/70 bg-card/40 px-3 py-2.5">
-                <Checkbox
-                  checked={selected.has(pack.name)}
-                  disabled={Boolean(pack.installed)}
-                  onCheckedChange={() => onToggle(pack.name)}
-                  aria-label={pack.name}
-                  className="mt-0.5"
-                />
+              <div key={pack.name} className="relative flex items-start gap-3 rounded-xl border border-border/70 bg-card/40 px-3 py-2.5">
+                {!pack.installed && !installing ? (
+                  <label htmlFor={`pack-${pack.name}`} aria-label={pack.name} className="absolute inset-0 cursor-pointer rounded-xl" />
+                ) : null}
+                {pack.installed ? (
+                  <span
+                    aria-hidden="true"
+                    className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-[6px] border border-border bg-muted/50 text-muted-foreground"
+                  >
+                    <Check className="size-3" strokeWidth={2.5} />
+                  </span>
+                ) : (
+                  <Checkbox
+                    id={`pack-${pack.name}`}
+                    checked={selected.has(pack.name)}
+                    disabled={installing}
+                    onCheckedChange={() => onToggle(pack.name)}
+                    aria-label={pack.name}
+                    className="-mx-1 -my-0.5 rounded-lg p-1 transition-colors hover:bg-muted/40"
+                  />
+                )}
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                     <span className="text-sm font-medium">{pack.name}</span>
                     <span className="font-mono text-[10.5px] text-muted-foreground">{t("home.packs.notes", { count: pack.notes })}</span>
                     {pack.installed ? (
-                      <span className="font-mono text-[10.5px] text-muted-foreground">
+                      <span className="basis-full font-mono text-[10.5px] text-muted-foreground sm:basis-auto">
                         {t("home.packs.installed", { version: pack.installed })}
                       </span>
                     ) : null}
@@ -263,42 +283,61 @@ function StarterPacks({
           <p className="mt-5 text-center text-sm text-muted-foreground">{t("home.packs.none")}</p>
         )}
 
-        <div className="mt-4 flex justify-center">
-          <fieldset className="m-0 min-w-0 border-0 p-0" aria-label={t("home.packs.language")}>
-            <Tabs value={packLanguage} onValueChange={(value) => onLanguageChange(value as Language)} variant="segment">
-              <TabsList>
-                {(["en", "es"] as const).map((option) => (
-                  <TabsTrigger key={option} value={option} className="px-2.5 py-1 text-[11px] font-medium uppercase">
-                    {option}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-            </Tabs>
-          </fieldset>
-        </div>
+        {canInstall ? (
+          <div className="mt-4 flex justify-center">
+            <fieldset className="m-0 min-w-0 border-0 p-0" aria-label={t("home.packs.language")}>
+              <Tabs value={packLanguage} onValueChange={(value) => onLanguageChange(value as Language)} variant="segment">
+                <TabsList>
+                  {(["en", "es"] as const).map((option) => (
+                    <TabsTrigger key={option} value={option} className="px-2.5 py-1 text-[11px] font-medium uppercase">
+                      {option}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </Tabs>
+            </fieldset>
+          </div>
+        ) : null}
 
-        <div className="mt-3 flex flex-col items-center gap-2">
-          <Button
-            size="sm"
-            pressScale={0.97}
-            disabled={selected.size === 0 || installing || Boolean(error)}
-            onClick={onInstall}
-            className="h-8 px-4"
-          >
-            {installing ? (
-              <Loader variant="spinner" size={14} label={t("home.packs.installing")} />
-            ) : (
-              <Package className="size-3.5" aria-hidden="true" />
-            )}
-            {t(selected.size === 1 ? "home.packs.installOne" : "home.packs.install", { count: selected.size })}
-          </Button>
-          <button
-            type="button"
-            onClick={() => window.dispatchEvent(new Event("basics:new-note"))}
-            className="rounded-sm text-xs text-muted-foreground underline decoration-border underline-offset-2 transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-          >
-            {t("home.packs.createNote")}
-          </button>
+        <div className="mt-4 flex flex-col items-center gap-2">
+          {canInstall ? (
+            <Button
+              size="sm"
+              pressScale={0.97}
+              disabled={selected.size === 0 || installing || Boolean(error)}
+              onClick={onInstall}
+              className="h-8 px-4"
+            >
+              {installing ? (
+                <Loader variant="spinner" size={14} label={t("home.packs.installing")} />
+              ) : (
+                <Package className="size-3.5" aria-hidden="true" />
+              )}
+              {t(selected.size === 1 ? "home.packs.installOne" : "home.packs.install", { count: selected.size })}
+            </Button>
+          ) : null}
+          <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
+            <button
+              type="button"
+              onClick={() => window.dispatchEvent(new Event("basics:new-note"))}
+              className="rounded-sm text-xs text-muted-foreground underline decoration-border underline-offset-2 transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            >
+              {t("home.packs.createNote")}
+            </button>
+            {allInstalled ? (
+              <>
+                <span aria-hidden="true" className="text-border">
+                  ·
+                </span>
+                <Link
+                  to="/"
+                  className="rounded-sm text-xs text-muted-foreground underline decoration-border underline-offset-2 transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                >
+                  {t("home.packs.backHome")}
+                </Link>
+              </>
+            ) : null}
+          </div>
         </div>
       </section>
     </div>
@@ -524,7 +563,11 @@ export function HomePage() {
                             action={proposal.meta.action}
                             typeLabel={t(`type.${proposal.type}` as TranslationKey)}
                             typeColor={`var(--type-${proposal.type})`}
-                            agentName={t("inbox.by", { name: proposal.meta.proposed_by })}
+                            agentName={
+                              pack
+                                ? t("inbox.byPack", { name: pack.name, version: pack.version })
+                                : t("inbox.by", { name: proposal.meta.proposed_by })
+                            }
                             agentInitial={agentInitial(proposal.meta.proposed_by)}
                             agentColor={agentColor(proposal.meta.proposed_by)}
                             agentForeground="#111113"

@@ -113,6 +113,8 @@ export interface AdaptiveStepperProps {
   disabled?: boolean;
   name?: string;
   formatValueText?: (value: number) => string;
+  /** Localized screen-reader text for the fieldset legend. */
+  formatLegend?: (valueText: string) => string;
   className?: string;
   /** Liquid surface color. Default var(--background). */
   fill?: string;
@@ -130,6 +132,7 @@ export function AdaptiveStepper({
   disabled = false,
   name,
   formatValueText,
+  formatLegend,
   className,
   fill = "var(--background)",
   "aria-label": ariaLabel = "Quantity",
@@ -202,6 +205,8 @@ export function AdaptiveStepper({
   );
 
   const valueText = formatValueText?.(currentValue) ?? String(currentValue);
+  const legendText =
+    formatLegend?.(valueText) ?? `${ariaLabel}. Current value: ${valueText}`;
   const context = useMemo<AdaptiveStepperContextValue>(
     () => ({
       value: currentValue,
@@ -239,7 +244,7 @@ export function AdaptiveStepper({
         )}
       >
         <legend id={labelId} className="sr-only">
-          {ariaLabel}. Current value: {valueText}
+          {legendText}
         </legend>
         <Liquid
           blur={8}
