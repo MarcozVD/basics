@@ -27,3 +27,25 @@ test("recommends fastapi and exports the project files", async ({ page }) => {
   await dialog.getByRole("tab", { name: "Cursor", exact: true }).click();
   await expect(dialog).toContainText("alwaysApply: true");
 });
+
+test("recommend keeps its state across navigation and clears it", async ({ page }) => {
+  await page.goto("/recommend");
+  await expect(page.getByRole("button", { name: "Backend", exact: true })).toBeVisible();
+
+  const description = "API REST para servir modelos de machine learning";
+  await page.getByLabel("Describe the project", { exact: true }).fill(description);
+  await page.getByRole("button", { name: "Recommend", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Backend", exact: true })).toBeVisible();
+
+  await page.getByRole("link", { name: "Explore", exact: true }).click();
+  await expect(page).toHaveURL(/\/explore/);
+  await page.getByRole("link", { name: "Recommend", exact: true }).click();
+
+  await expect(page.getByLabel("Describe the project", { exact: true })).toHaveValue(description);
+  await expect(page.getByRole("heading", { name: "Backend", exact: true })).toBeVisible();
+
+  await page.getByRole("button", { name: "Clear", exact: true }).click();
+  await expect(page.getByLabel("Describe the project", { exact: true })).toHaveValue("");
+  await expect(page.getByRole("heading", { name: "Backend", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Clear", exact: true })).toHaveCount(0);
+});

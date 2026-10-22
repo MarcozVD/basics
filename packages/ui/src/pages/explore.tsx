@@ -2,7 +2,7 @@ import type { NoteType } from "@marcozvd/basics-core";
 import { ArrowDownUp, Layers, LayoutGrid, LayoutList, Plus, Search, SearchX } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router";
+import { useLocation, useNavigate, useSearchParams } from "react-router";
 import { AnimatedNumber } from "@/components/motion/animated-number";
 import { Button } from "@/components/motion/button/base";
 import { CARD_TARGET_CLASS, Card, CardContent, CardFooter, CardHeader } from "@/components/motion/card";
@@ -53,6 +53,50 @@ function pick<T extends string>(value: string | null, options: readonly T[], fal
   return value && (options as readonly string[]).includes(value) ? (value as T) : fallback;
 }
 
+const STORAGE_KEY = "basics:explore";
+
+interface ExplorePrefs {
+  view: View;
+  sort: Sort;
+  type?: NoteType;
+  layer?: string;
+}
+
+/** Saved Explore controls; malformed or missing data falls back to the defaults. */
+function readPrefs(): ExplorePrefs | null {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "null") as Partial<ExplorePrefs> | null;
+    if (!parsed || typeof parsed !== "object") return null;
+    const layer = parsed.layer;
+    return {
+      view: pick(parsed.view ?? null, VIEWS, DEFAULT_VIEW),
+      sort: pick(parsed.sort ?? null, SORTS, DEFAULT_SORT),
+      type: parsed.type && TYPE_ORDER.includes(parsed.type) ? parsed.type : undefined,
+      layer: typeof layer === "string" && layer ? layer : undefined,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function writePrefs(prefs: ExplorePrefs): void {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(prefs));
+  } catch {
+    // Storage can be unavailable in private or restricted contexts.
+  }
+}
+
+/** Only non-default values go in the URL, matching how the controls build it. */
+function prefsToParams(prefs: ExplorePrefs): URLSearchParams {
+  const next = new URLSearchParams();
+  if (prefs.type) next.set("type", prefs.type);
+  if (prefs.layer) next.set("layer", prefs.layer);
+  if (prefs.sort !== DEFAULT_SORT) next.set("sort", prefs.sort);
+  if (prefs.view !== DEFAULT_VIEW) next.set("view", prefs.view);
+  return next;
+}
+
 function sortRows(rows: Row[], sort: Sort): Row[] {
   const byTitle = (a: Row, b: Row) => a.title.localeCompare(b.title);
   const sorted = [...rows];
@@ -64,6 +108,7 @@ function sortRows(rows: Row[], sort: Sort): Row[] {
 export function ExplorePage() {
   const t = useT();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const reduce = useReducedMotion() ?? false;
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -75,12 +120,17 @@ export function ExplorePage() {
   const view = pick(searchParams.get("view"), VIEWS, DEFAULT_VIEW);
   const [searchText, setSearchText] = useState("");
   const [query, setQuery] = useState("");
+  // Keyboard selection scrolls; pointer hover only moves the highlight.
   const [selected, setSelected] = useState(0);
+  const [hovered, setHovered] = useState<number | null>(null);
+  const previousPath = useRef<string | null>(null);
+  const persisted = useRef(false);
 
   useEffect(() => {
     const timer = setTimeout(() => {
       setQuery(searchText.trim());
       setSelected(0);
+      setHovered(null);
     }, 200);
     return () => clearTimeout(timer);
   }, [searchText]);
@@ -145,6 +195,32 @@ export function ExplorePage() {
     return result;
   }, [grouped, rows]);
 
+  // Entering /explore without query params restores the saved controls; explicit params always win.
+  useEffect(() => {
+    const entering = previousPath.current !== "/explore" && pathname === "/explore";
+    previousPath.current = pathname;
+    if (!entering) return;
+    if (searchParams.toString()) {
+      writePrefs({ view, sort, type, layer });
+      return;
+    }
+    const saved = readPrefs();
+    if (!saved) return;
+    const next = prefsToParams(saved);
+    if (next.toString()) setSearchParams(next, { replace: true });
+  }, [pathname, searchParams, setSearchParams, view, sort, type, layer]);
+
+  useEffect(() => {
+    if (pathname !== "/explore") return;
+    if (!persisted.current) {
+      persisted.current = true;
+      return;
+    }
+    writePrefs({ view, sort, type, layer });
+  }, [pathname, view, sort, type, layer]);
+
+  const highlighted = Math.min(hovered ?? selected, Math.max(0, rows.length - 1));
+
   useEffect(() => {
     if (selected >= rows.length) setSelected(Math.max(0, rows.length - 1));
   }, [rows.length, selected]);
@@ -165,6 +241,7 @@ export function ExplorePage() {
     }
     setSearchParams(next, { replace: true });
     setSelected(0);
+    setHovered(null);
   };
 
   const hasFilters = Boolean(type || layer || query || searchText);
@@ -181,16 +258,23 @@ export function ExplorePage() {
       return;
     }
     if (!rows.length) return;
+    const moveTo = (index: number) => {
+      setHovered(null);
+      setSelected(Math.max(0, Math.min(index, rows.length - 1)));
+    };
     const next = event.key === "ArrowDown" || (view === "grid" && event.key === "ArrowRight");
     const previous = event.key === "ArrowUp" || (view === "grid" && event.key === "ArrowLeft");
-    if (next) {
+    if (event.key === "Home" || event.key === "End") {
       event.preventDefault();
-      setSelected((index) => Math.min(index + 1, rows.length - 1));
+      moveTo(event.key === "Home" ? 0 : rows.length - 1);
+    } else if (next) {
+      event.preventDefault();
+      moveTo(highlighted + 1);
     } else if (previous) {
       event.preventDefault();
-      setSelected((index) => Math.max(index - 1, 0));
+      moveTo(highlighted - 1);
     } else if (event.key === "Enter") {
-      const row = rows[selected];
+      const row = rows[highlighted];
       if (!row) return;
       event.preventDefault();
       openNote(row.id);
@@ -216,10 +300,10 @@ export function ExplorePage() {
     const props = {
       row,
       index,
-      selected: index === selected,
+      selected: index === highlighted,
       reduce,
       layerTitles,
-      onHover: () => setSelected(index),
+      onHover: () => setHovered(index),
       onOpen: () => openNote(row.id),
     };
     return (
@@ -392,8 +476,9 @@ export function ExplorePage() {
             role="listbox"
             tabIndex={0}
             aria-label={t("explore.notes")}
-            aria-activedescendant={`note-row-${selected}`}
+            aria-activedescendant={`note-row-${highlighted}`}
             onKeyDown={handleKeyDown}
+            onMouseLeave={() => setHovered(null)}
             className="flex flex-col gap-4 rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
           >
             {groups.map((group) => {

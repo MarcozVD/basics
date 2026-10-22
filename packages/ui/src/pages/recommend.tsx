@@ -26,6 +26,7 @@ import { type TranslationKey, useT } from "@/i18n";
 import { exportStack, recommend } from "@/lib/api";
 import { EASE_OUT, SPRING_PANEL } from "@/lib/ease";
 import { useLayers } from "@/lib/queries";
+import { clearRecommend, updateRecommend, useRecommendStore } from "@/lib/recommend-store";
 import { useReturnFocus } from "@/lib/return-focus";
 import { toast } from "@/lib/toast";
 import { tintStyle } from "@/lib/type-color";
@@ -351,16 +352,18 @@ export function RecommendPage() {
   const reduce = useReducedMotion() ?? false;
   const layersQuery = useLayers();
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const [description, setDescription] = useState("");
-  const [selectedLayers, setSelectedLayers] = useState<string[] | null>(null);
-  const [perLayer, setPerLayer] = useState(3);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const store = useRecommendStore();
   const [files, setFiles] = useState<ExportFile[]>([]);
   const [stackIds, setStackIds] = useState<string[]>([]);
-  const [exportTab, setExportTab] = useState<string>("stack");
   const [dialogOpen, setDialogOpen] = useState(false);
   const generateRef = useRef<HTMLButtonElement>(null);
   useReturnFocus(dialogOpen, generateRef);
+
+  const { description, selectedLayers, perLayer, exportTab, recommendation } = store;
+  const selected = useMemo(() => new Set(store.selected), [store.selected]);
+  const setDescription = (value: string) => updateRecommend({ description: value });
+  const setPerLayer = (value: number) => updateRecommend({ perLayer: value });
+  const setExportTab = (value: string) => updateRecommend({ exportTab: value });
 
   const layerIds = useMemo(() => (layersQuery.data ?? []).map((layer) => layer.id), [layersQuery.data]);
   const layerTitles = useMemo(
@@ -371,7 +374,7 @@ export function RecommendPage() {
 
   const run = useMutation({
     mutationFn: recommend,
-    onSuccess: () => setSelected(new Set()),
+    onSuccess: (data) => updateRecommend({ recommendation: data, selected: [] }),
   });
 
   const exportFiles = useMutation({
@@ -386,20 +389,29 @@ export function RecommendPage() {
   });
 
   const toggleLayer = (id: string) => {
-    setSelectedLayers(activeLayers.includes(id) ? activeLayers.filter((layer) => layer !== id) : [...activeLayers, id]);
-  };
-
-  const toggleTech = (id: string) => {
-    setSelected((current) => {
-      const next = new Set(current);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
+    updateRecommend({
+      selectedLayers: activeLayers.includes(id) ? activeLayers.filter((layer) => layer !== id) : [...activeLayers, id],
     });
   };
 
+  const toggleTech = (id: string) => {
+    const next = new Set(selected);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    updateRecommend({ selected: [...next] });
+  };
+
   const useProfile = (stack: Record<string, string[]>) => {
-    setSelected(new Set(Object.values(stack).flat()));
+    updateRecommend({ selected: [...new Set(Object.values(stack).flat())] });
+  };
+
+  const clear = () => {
+    run.reset();
+    exportFiles.reset();
+    setFiles([]);
+    setStackIds([]);
+    setDialogOpen(false);
+    clearRecommend();
   };
 
   const submit = (value: string) => {
@@ -445,9 +457,14 @@ export function RecommendPage() {
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-2">
             <h1 className="text-xl font-semibold tracking-tight">{t("page.recommend.title")}</h1>
-            {run.data ? <ModeIndicator mode={run.data.mode} /> : null}
+            {recommendation ? <ModeIndicator mode={recommendation.mode} /> : null}
+            {(description.trim() || recommendation) && (
+              <Button variant="ghost" size="sm" pressScale={0.97} className="h-7 px-2.5" onClick={clear}>
+                {t("recommend.reset")}
+              </Button>
+            )}
           </div>
-          {run.data?.mode === "keywords" ? (
+          {recommendation?.mode === "keywords" ? (
             <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
               <span>{t("recommend.enableHybrid")}</span>
               <button
@@ -548,9 +565,9 @@ export function RecommendPage() {
             <ResultsSkeleton layers={activeLayers} perLayer={Math.min(perLayer, 4)} label={t("recommend.loading")} />
           ) : run.error ? (
             <ErrorState error={run.error} />
-          ) : run.data ? (
+          ) : recommendation ? (
             <RecommendationResults
-              recommendation={run.data}
+              recommendation={recommendation}
               layerTitle={layerTitle}
               selected={selected}
               reduce={reduce}
@@ -600,7 +617,7 @@ export function RecommendPage() {
                   <button
                     type="button"
                     aria-label={t("recommend.clear")}
-                    onClick={() => setSelected(new Set())}
+                    onClick={() => updateRecommend({ selected: [] })}
                     className="grid size-7 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
                   >
                     <X className="size-3.5" aria-hidden="true" />

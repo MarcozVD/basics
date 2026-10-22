@@ -254,6 +254,7 @@ export const en = {
   "recommend.loading": "Ranking candidates…",
   "recommend.selectedBar": "Selection",
   "recommend.clear": "Clear selection",
+  "recommend.reset": "Clear",
   "recommend.close": "Close",
   "home.title": "Your stack memory",
   "home.summary": "{total} notes · {inbox} pending · {agents} agents today",

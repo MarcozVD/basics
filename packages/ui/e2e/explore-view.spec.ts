@@ -21,3 +21,28 @@ test("explore keeps filters, sort and view in the URL and clears them from the e
   await expect(page).toHaveURL(/\/explore\?sort=title$/);
   await expect(page.getByRole("option").first()).toBeVisible();
 });
+
+test("explore remembers the view across navigation and hover does not scroll", async ({ page }) => {
+  await page.goto("/explore");
+  await page.getByRole("tab", { name: "Grid", exact: true }).click();
+  await expect(page.getByRole("tab", { name: "Grid", exact: true })).toHaveAttribute("aria-selected", "true");
+
+  await page.getByRole("link", { name: "Home", exact: true }).click();
+  await expect(page).toHaveURL(/\/$/);
+  await page.getByRole("link", { name: "Explore", exact: true }).click();
+
+  await expect(page.getByRole("tab", { name: "Grid", exact: true })).toHaveAttribute("aria-selected", "true");
+  await expect(page).toHaveURL(/view=grid/);
+
+  const main = page.locator("main");
+  const last = page.locator("[data-note-row]").last();
+  await last.scrollIntoViewIfNeeded();
+  const box = await last.boundingBox();
+  expect(box).not.toBeNull();
+  const before = await main.evaluate((element) => element.scrollTop);
+  expect(before).toBeGreaterThan(0);
+
+  await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
+  await page.waitForTimeout(100);
+  expect(await main.evaluate((element) => element.scrollTop)).toBe(before);
+});

@@ -256,6 +256,7 @@ export const es: typeof en = {
   "recommend.loading": "Ordenando candidatas…",
   "recommend.selectedBar": "Selección",
   "recommend.clear": "Quitar selección",
+  "recommend.reset": "Limpiar",
   "recommend.close": "Cerrar",
   "home.title": "Tu memoria de stack",
   "home.summary": "{total} notas · {inbox} pendientes · {agents} agentes hoy",
