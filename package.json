@@ -16,6 +16,8 @@
     "test:watch": "vitest",
     "e2e": "npm run e2e -w @marcozvd/basics-ui",
     "eval": "node scripts/eval.mjs",
+    "gen:reference": "node scripts/gen-reference.mjs",
+    "check:reference": "node scripts/check-reference.mjs",
     "lint": "biome check .",
     "format": "biome check --write .",
     "changeset": "changeset",

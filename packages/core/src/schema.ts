@@ -21,7 +21,7 @@ const base = z
     title: z.string().optional(),
     tags: list,
     // "manual" for human-written notes, "agent:<name>" for notes approved from the inbox.
-    source: z.string().default("manual"),
+    source: z.string().default("manual").describe('"manual" for human-written notes, "agent:<name>" for notes approved from the inbox.'),
     updated: z.string().optional(),
   })
   .loose();
@@ -37,9 +37,9 @@ export const techSchema = base.extend({
   layer: z.union([z.string(), z.array(z.string())]),
   language: z.string().optional(),
   // Version of the tech the user's notes target, e.g. "19" or "2.7".
-  version: z.string().optional(),
+  version: z.string().optional().describe('Version of the tech the user\'s notes target, e.g. "19" or "2.7".'),
   // Package names that identify this tech in manifests.
-  packages: z.object({ npm: list, pypi: list }).partial().optional(),
+  packages: z.object({ npm: list, pypi: list }).partial().optional().describe("Package names that identify this tech in manifests."),
   use_when: list,
   avoid_when: list,
   performs_best: list,
@@ -52,8 +52,8 @@ export const practiceSchema = base.extend({
   type: z.literal("practice"),
   applies_to: list,
   // Version range the note is valid for: since inclusive, until exclusive.
-  since: z.string().optional(),
-  until: z.string().optional(),
+  since: z.string().optional().describe("Start of the version range the note is valid for (inclusive)."),
+  until: z.string().optional().describe("End of the version range the note is valid for (exclusive)."),
 });
 
 export const checkSchema = base.extend({
@@ -61,9 +61,9 @@ export const checkSchema = base.extend({
   applies_to: list,
   kind: z.enum(["test", "lint", "review", "build"]).default("test"),
   // Optional shell command an agent can run to perform the check.
-  command: z.string().optional(),
-  since: z.string().optional(),
-  until: z.string().optional(),
+  command: z.string().optional().describe("Optional shell command an agent can run to perform the check."),
+  since: z.string().optional().describe("Start of the version range the check is valid for (inclusive)."),
+  until: z.string().optional().describe("End of the version range the check is valid for (exclusive)."),
 });
 
 export const profileSchema = base.extend({
@@ -71,7 +71,7 @@ export const profileSchema = base.extend({
   description: z.string().optional(),
   use_when: list,
   // layer id -> list of tech ids
-  stack: z.record(z.string(), z.array(z.string())).default({}),
+  stack: z.record(z.string(), z.array(z.string())).default({}).describe("layer id -> list of tech ids"),
 });
 
 export const checkStatusSchema = z.enum(["pass", "fail", "skip", "untrusted"]);
@@ -89,17 +89,17 @@ export const projectSchema = base.extend({
   type: z.literal("project"),
   description: z.string().optional(),
   // Absolute path of the project on disk.
-  path: z.string().optional(),
+  path: z.string().optional().describe("Absolute path of the project on disk."),
   status: z.enum(["active", "paused", "archived"]).default("active"),
   // Profile id it started from.
-  profile: z.string().optional(),
+  profile: z.string().optional().describe("Profile id it started from."),
   // layer id -> tech ids
-  stack: z.record(z.string(), z.array(z.string())).default({}),
+  stack: z.record(z.string(), z.array(z.string())).default({}).describe("layer id -> tech ids"),
   reason: z.string().optional(),
   // Short learnings for the vault.
-  lessons: list,
+  lessons: list.describe("Short learnings for the vault."),
   // Results of the last `basics check` run, keyed by check id.
-  last_checks: z.record(z.string(), lastCheckSchema).optional(),
+  last_checks: z.record(z.string(), lastCheckSchema).optional().describe("Results of the last `basics check` run, keyed by check id."),
 });
 
 export const noteSchema = z.discriminatedUnion("type", [
@@ -110,6 +110,18 @@ export const noteSchema = z.discriminatedUnion("type", [
   profileSchema,
   projectSchema,
 ]);
+
+/** JSON Schema per note type, for generated reference docs. */
+export function noteJsonSchemas(): Record<NoteType, Record<string, unknown>> {
+  return {
+    layer: z.toJSONSchema(layerSchema) as Record<string, unknown>,
+    tech: z.toJSONSchema(techSchema) as Record<string, unknown>,
+    practice: z.toJSONSchema(practiceSchema) as Record<string, unknown>,
+    check: z.toJSONSchema(checkSchema) as Record<string, unknown>,
+    profile: z.toJSONSchema(profileSchema) as Record<string, unknown>,
+    project: z.toJSONSchema(projectSchema) as Record<string, unknown>,
+  };
+}
 
 export type NoteData = z.infer<typeof noteSchema>;
 export type TechData = z.infer<typeof techSchema>;

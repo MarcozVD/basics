@@ -22,6 +22,8 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run build
+      - if: matrix.os == 'ubuntu-latest' && matrix.node == 22
+        run: npm run check:reference
       - run: npm test
       - run: node packages/basics/dist/cli.js --vault examples/vault validate
 
