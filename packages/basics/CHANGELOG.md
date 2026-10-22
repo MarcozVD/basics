@@ -1,5 +1,16 @@
 # @marcozvd/basics
 
+## 1.0.0
+
+### Major Changes
+
+- First stable release. The note format and frontmatter, MCP tool names and inputs, CLI commands and flags, basics.json, pack format and basics.vault.json are now covered by semver (see the stability guide). Adds basics doctor, generated references, the documentation site, and the release workflow.
+
+### Patch Changes
+
+- Updated dependencies
+  - @marcozvd/basics-core@1.0.0
+
 ## 0.4.0
 
 ### Minor Changes
