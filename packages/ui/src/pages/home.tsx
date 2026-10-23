@@ -12,6 +12,7 @@ import { Loader } from "@/components/motion/loader";
 import { MorphPopover, MorphPopoverContent, MorphPopoverTrigger } from "@/components/motion/popover-morph";
 import { Tabs, TabsList, TabsTrigger } from "@/components/motion/tabs";
 import { TextReveal } from "@/components/motion/text-reveal";
+import { Page } from "@/components/page";
 import { ErrorState, Loading } from "@/components/state";
 import { type TranslationKey, useI18n } from "@/i18n";
 import { agentColor, agentInitial } from "@/lib/agent-color";
@@ -213,78 +214,81 @@ function StarterPacks({
   const allInstalled = Boolean(packs?.length) && !canInstall;
 
   return (
-    <div className="flex min-h-[calc(100dvh-12rem)] items-center justify-center px-4">
-      <section aria-label={t(allInstalled ? "home.packs.installedTitle" : "home.packs.title")} className="w-full max-w-[560px]">
-        <div className="flex flex-col items-center text-center">
-          <span className="grid size-10 place-items-center rounded-full bg-muted/60 text-muted-foreground">
-            {allInstalled ? <Check className="size-5" aria-hidden="true" /> : <Package className="size-5" aria-hidden="true" />}
-          </span>
-          <h2 className="mt-3 text-lg font-semibold tracking-tight">
-            {t(allInstalled ? "home.packs.installedTitle" : "home.packs.title")}
-          </h2>
-          <p className="mt-1 max-w-md text-xs leading-5 text-muted-foreground">
+    <section aria-label={t(allInstalled ? "home.packs.installedTitle" : "home.packs.title")} className="mt-6 w-full min-w-0">
+      <div className="flex items-start gap-3">
+        <span className="grid size-10 shrink-0 place-items-center rounded-full bg-muted/60 text-muted-foreground">
+          {allInstalled ? <Check className="size-5" aria-hidden="true" /> : <Package className="size-5" aria-hidden="true" />}
+        </span>
+        <div className="min-w-0">
+          <h2 className="text-lg font-semibold tracking-tight">{t(allInstalled ? "home.packs.installedTitle" : "home.packs.title")}</h2>
+          <p className="mt-1 max-w-[72ch] text-xs leading-5 text-muted-foreground">
             {t(allInstalled ? "home.packs.installedDescription" : "home.packs.description")}
           </p>
         </div>
+      </div>
 
-        {pending ? (
-          <div className="py-8">
-            <Loading />
-          </div>
-        ) : error ? (
-          <div className="py-8">
-            <ErrorState error={error} />
-          </div>
-        ) : packs && packs.length > 0 ? (
-          <div className="mt-5 flex flex-col gap-1">
-            {packs.map((pack) => (
-              <div key={pack.name} className="relative flex items-start gap-3 rounded-xl border border-border/70 bg-card/40 px-3 py-2.5">
-                {!pack.installed && !installing ? (
-                  <label htmlFor={`pack-${pack.name}`} aria-label={pack.name} className="absolute inset-0 cursor-pointer rounded-xl" />
-                ) : null}
-                {pack.installed ? (
-                  <span
-                    aria-hidden="true"
-                    className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-[6px] border border-border bg-muted/50 text-muted-foreground"
-                  >
-                    <Check className="size-3" strokeWidth={2.5} />
-                  </span>
-                ) : (
-                  <Checkbox
-                    id={`pack-${pack.name}`}
-                    checked={selected.has(pack.name)}
-                    disabled={installing}
-                    onCheckedChange={() => onToggle(pack.name)}
-                    aria-label={pack.name}
-                    className="-mx-1 -my-0.5 rounded-lg p-1 transition-colors hover:bg-muted/40"
-                  />
-                )}
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                    <span className="text-sm font-medium">{pack.name}</span>
-                    <span className="font-mono text-[10.5px] text-muted-foreground">{t("home.packs.notes", { count: pack.notes })}</span>
-                    {pack.installed ? (
-                      <span className="basis-full font-mono text-[10.5px] text-muted-foreground sm:basis-auto">
-                        {t("home.packs.installed", { version: pack.installed })}
-                      </span>
-                    ) : null}
-                  </div>
-                  <p className="mt-0.5 text-xs leading-4 text-muted-foreground">{packDescription(pack, language)}</p>
-                  {pack.requires.length > 0 ? (
-                    <p className="mt-1 font-mono text-[10px] text-muted-foreground">
-                      {t("home.packs.requires", { packs: pack.requires.join(", ") })}
-                    </p>
+      {pending ? (
+        <div className="py-8">
+          <Loading />
+        </div>
+      ) : error ? (
+        <div className="py-8">
+          <ErrorState error={error} />
+        </div>
+      ) : packs && packs.length > 0 ? (
+        <div className="mt-5 grid grid-cols-[repeat(auto-fill,minmax(min(320px,100%),1fr))] gap-2">
+          {packs.map((pack) => (
+            <div
+              key={pack.name}
+              className="relative flex h-full items-start gap-3 rounded-xl border border-border/70 bg-card/40 px-3 py-2.5"
+            >
+              {!pack.installed && !installing ? (
+                <label htmlFor={`pack-${pack.name}`} aria-label={pack.name} className="absolute inset-0 cursor-pointer rounded-xl" />
+              ) : null}
+              {pack.installed ? (
+                <span
+                  aria-hidden="true"
+                  className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-[6px] border border-border bg-muted/50 text-muted-foreground"
+                >
+                  <Check className="size-3" strokeWidth={2.5} />
+                </span>
+              ) : (
+                <Checkbox
+                  id={`pack-${pack.name}`}
+                  checked={selected.has(pack.name)}
+                  disabled={installing}
+                  onCheckedChange={() => onToggle(pack.name)}
+                  aria-label={pack.name}
+                  className="-mx-1 -my-0.5 rounded-lg p-1 transition-colors hover:bg-muted/40"
+                />
+              )}
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                  <span className="text-sm font-medium">{pack.name}</span>
+                  <span className="font-mono text-[10.5px] text-muted-foreground">{t("home.packs.notes", { count: pack.notes })}</span>
+                  {pack.installed ? (
+                    <span className="basis-full font-mono text-[10.5px] text-muted-foreground sm:basis-auto">
+                      {t("home.packs.installed", { version: pack.installed })}
+                    </span>
                   ) : null}
                 </div>
+                <p className="mt-0.5 text-xs leading-4 text-muted-foreground">{packDescription(pack, language)}</p>
+                {pack.requires.length > 0 ? (
+                  <p className="mt-1 font-mono text-[10px] text-muted-foreground">
+                    {t("home.packs.requires", { packs: pack.requires.join(", ") })}
+                  </p>
+                ) : null}
               </div>
-            ))}
-          </div>
-        ) : (
-          <p className="mt-5 text-center text-sm text-muted-foreground">{t("home.packs.none")}</p>
-        )}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="mt-5 text-sm text-muted-foreground">{t("home.packs.none")}</p>
+      )}
 
+      <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
         {canInstall ? (
-          <div className="mt-4 flex justify-center">
+          <>
             <fieldset className="m-0 min-w-0 border-0 p-0" aria-label={t("home.packs.language")}>
               <Tabs value={packLanguage} onValueChange={(value) => onLanguageChange(value as Language)} variant="segment">
                 <TabsList>
@@ -296,11 +300,6 @@ function StarterPacks({
                 </TabsList>
               </Tabs>
             </fieldset>
-          </div>
-        ) : null}
-
-        <div className="mt-4 flex flex-col items-center gap-2">
-          {canInstall ? (
             <Button
               size="sm"
               pressScale={0.97}
@@ -315,32 +314,25 @@ function StarterPacks({
               )}
               {t(selected.size === 1 ? "home.packs.installOne" : "home.packs.install", { count: selected.size })}
             </Button>
-          ) : null}
-          <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
-            <button
-              type="button"
-              onClick={() => window.dispatchEvent(new Event("basics:new-note"))}
-              className="rounded-sm text-xs text-muted-foreground underline decoration-border underline-offset-2 transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-            >
-              {t("home.packs.createNote")}
-            </button>
-            {allInstalled ? (
-              <>
-                <span aria-hidden="true" className="text-border">
-                  ·
-                </span>
-                <Link
-                  to="/"
-                  className="rounded-sm text-xs text-muted-foreground underline decoration-border underline-offset-2 transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-                >
-                  {t("home.packs.backHome")}
-                </Link>
-              </>
-            ) : null}
-          </div>
-        </div>
-      </section>
-    </div>
+          </>
+        ) : null}
+        <button
+          type="button"
+          onClick={() => window.dispatchEvent(new Event("basics:new-note"))}
+          className="rounded-sm text-xs text-muted-foreground underline decoration-border underline-offset-2 transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        >
+          {t("home.packs.createNote")}
+        </button>
+        {allInstalled ? (
+          <Link
+            to="/"
+            className="rounded-sm text-xs text-muted-foreground underline decoration-border underline-offset-2 transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          >
+            {t("home.packs.backHome")}
+          </Link>
+        ) : null}
+      </div>
+    </section>
   );
 }
 
@@ -487,7 +479,7 @@ export function HomePage() {
   const pending = stats.data?.inbox ?? 0;
 
   return (
-    <div className="mx-auto w-full max-w-[1200px] px-5 pt-4 pb-8">
+    <Page>
       <header>
         {reveal ? (
           <TextReveal
@@ -520,176 +512,174 @@ export function HomePage() {
           onInstall={() => install.mutate([...selectedPacks])}
         />
       ) : (
-        <>
-          <div className="mt-5 grid gap-6 min-[1200px]:grid-cols-[3fr_2fr]">
-            <section aria-label={t("home.waiting")} className="min-w-0">
-              <div className="flex items-baseline justify-between gap-3">
-                <SectionLabel>{t("home.waiting")}</SectionLabel>
-                <Link
-                  to="/inbox"
-                  className="inline-flex items-center gap-1 rounded-sm text-[11px] text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-                >
-                  {t("home.allProposals")}
-                  <ArrowRight className="size-3" aria-hidden="true" />
-                </Link>
-              </div>
+        <div className="mt-5 grid gap-6 min-[1024px]:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] min-[1440px]:grid-cols-[minmax(0,40fr)_minmax(0,35fr)_minmax(0,25fr)] min-[1440px]:gap-5">
+          <section aria-label={t("home.waiting")} className="min-w-0">
+            <div className="flex items-baseline justify-between gap-3">
+              <SectionLabel>{t("home.waiting")}</SectionLabel>
+              <Link
+                to="/inbox"
+                className="inline-flex items-center gap-1 rounded-sm text-[11px] text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              >
+                {t("home.allProposals")}
+                <ArrowRight className="size-3" aria-hidden="true" />
+              </Link>
+            </div>
 
-              <div className="mt-2 flex flex-col gap-2">
-                {inbox.isPending ? (
-                  <Loading />
-                ) : inbox.error ? (
-                  <ErrorState error={inbox.error} />
-                ) : proposals.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">{t("home.nothingToReview")}</p>
-                ) : (
-                  <AnimatePresence initial={false} mode="popLayout">
-                    {proposals.map((proposal) => {
-                      const pack = packProposer(proposal.meta.proposed_by);
-                      const busy =
-                        (approve.isPending && approve.variables === proposal.id) || (reject.isPending && reject.variables === proposal.id);
-                      return (
-                        <motion.div
-                          key={proposal.id}
-                          layout={!reduce}
-                          initial={reduce ? { opacity: 0 } : { opacity: 0, y: 6 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.98 }}
-                          transition={reduce ? { duration: 0 } : SPRING_LAYOUT}
-                        >
-                          <ApprovalCard
-                            title={proposal.title || proposal.id}
-                            subtitle={proposal.id}
-                            actionLabel={t(proposal.meta.action === "create" ? "proposal.action.create" : "proposal.action.update")}
-                            action={proposal.meta.action}
-                            typeLabel={t(`type.${proposal.type}` as TranslationKey)}
-                            typeColor={`var(--type-${proposal.type})`}
-                            agentName={
-                              pack
-                                ? t("inbox.byPack", { name: pack.name, version: pack.version })
-                                : t("inbox.by", { name: proposal.meta.proposed_by })
-                            }
-                            agentInitial={agentInitial(proposal.meta.proposed_by)}
-                            agentColor={agentColor(proposal.meta.proposed_by)}
-                            agentForeground="#111113"
-                            agentKind={pack ? "pack" : "agent"}
-                            reason={proposal.meta.reason}
-                            time={
-                              <time dateTime={proposal.meta.created} title={proposal.meta.created}>
-                                {formatRelativeTime(proposal.meta.created, language)}
-                              </time>
-                            }
-                            status={busy ? "submitting" : "pending"}
-                            busy={busy}
-                            approveLabel={t("proposal.approve")}
-                            rejectLabel={t("proposal.reject")}
-                            rejectConfirmLabel={t("proposal.rejectConfirm")}
-                            rejectArmed={armed === proposal.id}
-                            onOpen={() => navigate(`/inbox/${encodeURIComponent(proposal.id)}`)}
-                            onApprove={() => approve.mutate(proposal.id)}
-                            onReject={() => requestReject(proposal.id)}
-                          />
-                        </motion.div>
-                      );
-                    })}
-                  </AnimatePresence>
-                )}
-              </div>
-            </section>
-
-            <section aria-label={t("home.activity")} className="min-w-0">
-              <SectionLabel>{t("home.activity")}</SectionLabel>
-
-              {timeline.isPending ? (
-                <div className="mt-2">
-                  <Loading />
-                </div>
-              ) : timeline.error ? (
-                <div className="mt-2">
-                  <ErrorState error={timeline.error} />
-                </div>
-              ) : groups.length === 0 ? (
-                <div className="mt-2">
-                  <p className="text-sm text-muted-foreground">{t("home.noAgents")}</p>
-                  <div className="mt-2 flex items-start gap-1.5">
-                    <code className="min-w-0 rounded-md bg-muted/70 px-2 py-1 font-mono text-[10.5px] leading-4 break-all text-muted-foreground">
-                      claude mcp add --transport http basics {window.location.origin}/mcp
-                    </code>
-                    <button
-                      type="button"
-                      aria-label={t("home.copy")}
-                      title={t("home.copy")}
-                      onClick={() => void copyMcp()}
-                      className="grid size-7 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-                    >
-                      <Copy className="size-3.5" aria-hidden="true" />
-                    </button>
-                  </div>
-                </div>
+            <div className="mt-2 flex flex-col gap-2">
+              {inbox.isPending ? (
+                <Loading />
+              ) : inbox.error ? (
+                <ErrorState error={inbox.error} />
+              ) : proposals.length === 0 ? (
+                <p className="text-sm text-muted-foreground">{t("home.nothingToReview")}</p>
               ) : (
-                <ul className="mt-1 flex flex-col">
-                  <AnimatePresence initial={false}>
-                    {groups.map((group) => (
-                      <motion.li
-                        key={group.key}
+                <AnimatePresence initial={false} mode="popLayout">
+                  {proposals.map((proposal) => {
+                    const pack = packProposer(proposal.meta.proposed_by);
+                    const busy =
+                      (approve.isPending && approve.variables === proposal.id) || (reject.isPending && reject.variables === proposal.id);
+                    return (
+                      <motion.div
+                        key={proposal.id}
                         layout={!reduce}
-                        initial={reduce ? { opacity: 0 } : { opacity: 0, y: -6 }}
+                        initial={reduce ? { opacity: 0 } : { opacity: 0, y: 6 }}
                         animate={{ opacity: 1, y: 0 }}
-                        exit={reduce ? { opacity: 0 } : { opacity: 0 }}
-                        transition={reduce ? { duration: 0 } : { type: "spring", stiffness: 420, damping: 34 }}
-                        className="flex items-start gap-2 border-b border-border/50 py-1.5 last:border-0"
+                        exit={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.98 }}
+                        transition={reduce ? { duration: 0 } : SPRING_LAYOUT}
                       >
-                        <time
-                          className="w-10 shrink-0 pt-0.5 text-right font-mono text-[10px] whitespace-nowrap text-muted-foreground"
-                          dateTime={group.event.ts}
-                          title={formatFullDateTime(group.event.ts, language)}
-                        >
-                          {formatCompactRelativeTime(group.event.ts)}
-                        </time>
-                        <span
-                          aria-hidden="true"
-                          className="mt-0.5 grid size-[18px] shrink-0 place-items-center rounded-md font-mono text-[10px] font-semibold text-[#111113]"
-                          style={{ backgroundColor: agentColor(group.event.agent) }}
-                        >
-                          {agentInitial(group.event.agent)}
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 text-xs">
-                            <span className="font-medium">{group.event.agent}</span>
-                            <span className="text-muted-foreground">{verbFor(group)}</span>
-                            {group.count > 1 && group.event.tool !== "get_note" ? (
-                              <span className="font-mono text-[11px] text-muted-foreground">×{group.count}</span>
-                            ) : null}
-                            {group.event.tool === "search_vault" && group.detail ? (
-                              <span className="font-mono text-[11px] text-muted-foreground">“{group.detail}”</span>
-                            ) : null}
-                          </div>
-                          {group.noteIds.length > 0 ? (
-                            <div className="mt-1 flex flex-wrap gap-1">
-                              {group.noteIds.slice(0, 6).map((id) => (
-                                <TypeChip key={id} id={id} type={typeById.get(id)} />
-                              ))}
-                              {group.noteIds.length > 6 ? (
-                                <span className="self-center font-mono text-[10px] text-muted-foreground">+{group.noteIds.length - 6}</span>
-                              ) : null}
-                            </div>
+                        <ApprovalCard
+                          title={proposal.title || proposal.id}
+                          subtitle={proposal.id}
+                          actionLabel={t(proposal.meta.action === "create" ? "proposal.action.create" : "proposal.action.update")}
+                          action={proposal.meta.action}
+                          typeLabel={t(`type.${proposal.type}` as TranslationKey)}
+                          typeColor={`var(--type-${proposal.type})`}
+                          agentName={
+                            pack
+                              ? t("inbox.byPack", { name: pack.name, version: pack.version })
+                              : t("inbox.by", { name: proposal.meta.proposed_by })
+                          }
+                          agentInitial={agentInitial(proposal.meta.proposed_by)}
+                          agentColor={agentColor(proposal.meta.proposed_by)}
+                          agentForeground="#111113"
+                          agentKind={pack ? "pack" : "agent"}
+                          reason={proposal.meta.reason}
+                          time={
+                            <time dateTime={proposal.meta.created} title={proposal.meta.created}>
+                              {formatRelativeTime(proposal.meta.created, language)}
+                            </time>
+                          }
+                          status={busy ? "submitting" : "pending"}
+                          busy={busy}
+                          approveLabel={t("proposal.approve")}
+                          rejectLabel={t("proposal.reject")}
+                          rejectConfirmLabel={t("proposal.rejectConfirm")}
+                          rejectArmed={armed === proposal.id}
+                          onOpen={() => navigate(`/inbox/${encodeURIComponent(proposal.id)}`)}
+                          onApprove={() => approve.mutate(proposal.id)}
+                          onReject={() => requestReject(proposal.id)}
+                        />
+                      </motion.div>
+                    );
+                  })}
+                </AnimatePresence>
+              )}
+            </div>
+          </section>
+
+          <section aria-label={t("home.activity")} className="min-w-0">
+            <SectionLabel>{t("home.activity")}</SectionLabel>
+
+            {timeline.isPending ? (
+              <div className="mt-2">
+                <Loading />
+              </div>
+            ) : timeline.error ? (
+              <div className="mt-2">
+                <ErrorState error={timeline.error} />
+              </div>
+            ) : groups.length === 0 ? (
+              <div className="mt-2">
+                <p className="text-sm text-muted-foreground">{t("home.noAgents")}</p>
+                <div className="mt-2 flex items-start gap-1.5">
+                  <code className="min-w-0 rounded-md bg-muted/70 px-2 py-1 font-mono text-[10.5px] leading-4 break-all text-muted-foreground">
+                    claude mcp add --transport http basics {window.location.origin}/mcp
+                  </code>
+                  <button
+                    type="button"
+                    aria-label={t("home.copy")}
+                    title={t("home.copy")}
+                    onClick={() => void copyMcp()}
+                    className="grid size-7 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                  >
+                    <Copy className="size-3.5" aria-hidden="true" />
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <ul className="mt-1 flex flex-col">
+                <AnimatePresence initial={false}>
+                  {groups.map((group) => (
+                    <motion.li
+                      key={group.key}
+                      layout={!reduce}
+                      initial={reduce ? { opacity: 0 } : { opacity: 0, y: -6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={reduce ? { opacity: 0 } : { opacity: 0 }}
+                      transition={reduce ? { duration: 0 } : { type: "spring", stiffness: 420, damping: 34 }}
+                      className="flex items-start gap-2 border-b border-border/50 py-1.5 last:border-0"
+                    >
+                      <time
+                        className="w-10 shrink-0 pt-0.5 text-right font-mono text-[10px] whitespace-nowrap text-muted-foreground"
+                        dateTime={group.event.ts}
+                        title={formatFullDateTime(group.event.ts, language)}
+                      >
+                        {formatCompactRelativeTime(group.event.ts)}
+                      </time>
+                      <span
+                        aria-hidden="true"
+                        className="mt-0.5 grid size-[18px] shrink-0 place-items-center rounded-md font-mono text-[10px] font-semibold text-[#111113]"
+                        style={{ backgroundColor: agentColor(group.event.agent) }}
+                      >
+                        {agentInitial(group.event.agent)}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 text-xs">
+                          <span className="font-medium">{group.event.agent}</span>
+                          <span className="text-muted-foreground">{verbFor(group)}</span>
+                          {group.count > 1 && group.event.tool !== "get_note" ? (
+                            <span className="font-mono text-[11px] text-muted-foreground">×{group.count}</span>
+                          ) : null}
+                          {group.event.tool === "search_vault" && group.detail ? (
+                            <span className="font-mono text-[11px] text-muted-foreground">“{group.detail}”</span>
                           ) : null}
                         </div>
-                      </motion.li>
-                    ))}
-                  </AnimatePresence>
-                </ul>
-              )}
-            </section>
-          </div>
+                        {group.noteIds.length > 0 ? (
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {group.noteIds.slice(0, 6).map((id) => (
+                              <TypeChip key={id} id={id} type={typeById.get(id)} />
+                            ))}
+                            {group.noteIds.length > 6 ? (
+                              <span className="self-center font-mono text-[10px] text-muted-foreground">+{group.noteIds.length - 6}</span>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </div>
+                    </motion.li>
+                  ))}
+                </AnimatePresence>
+              </ul>
+            )}
+          </section>
 
-          <section aria-label={t("home.health")} className="mt-7 min-w-0">
+          <section aria-label={t("home.health")} className="min-w-0 min-[1024px]:col-span-2 min-[1440px]:col-span-1">
             <SectionLabel>{t("home.health")}</SectionLabel>
             {stats.error ? (
               <div className="mt-2">
                 <ErrorState error={stats.error} />
               </div>
             ) : null}
-            <div className="mt-2 grid grid-cols-[repeat(auto-fit,minmax(120px,1fr))] gap-2">
+            <div className="mt-2 grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-2 min-[1440px]:grid-cols-2">
               {TYPE_ORDER.map((type) => (
                 <StatTile
                   key={type}
@@ -732,26 +722,51 @@ export function HomePage() {
                 </ul>
               </StatTile>
 
-              <StatTile stat="recent" label={t("home.recent")} value={stats.data?.recent.length ?? 0}>
-                <ul className="flex flex-col gap-0.5 p-1">
-                  {(stats.data?.recent ?? []).map((note) => (
-                    <li key={note.id}>
-                      <button
-                        type="button"
-                        onClick={() => navigate(`/notes/${encodeURIComponent(note.id)}`)}
-                        className="flex w-full items-baseline gap-2 rounded-md px-1.5 py-1 text-left transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
-                      >
-                        <span className="min-w-0 flex-1 truncate text-xs">{note.title || note.id}</span>
-                        <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{note.updated}</span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </StatTile>
+              <div className="min-[1440px]:hidden">
+                <StatTile stat="recent" label={t("home.recent")} value={stats.data?.recent.length ?? 0}>
+                  <ul className="flex flex-col gap-0.5 p-1">
+                    {(stats.data?.recent ?? []).map((note) => (
+                      <li key={note.id}>
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/notes/${encodeURIComponent(note.id)}`)}
+                          className="flex w-full items-baseline gap-2 rounded-md px-1.5 py-1 text-left transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
+                        >
+                          <span className="min-w-0 flex-1 truncate text-xs">{note.title || note.id}</span>
+                          <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{note.updated}</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </StatTile>
+              </div>
+            </div>
+
+            <div className="mt-5 hidden min-w-0 min-[1440px]:block">
+              <SectionLabel>{t("home.recent")}</SectionLabel>
+              <ul className="mt-1 flex flex-col">
+                {(stats.data?.recent ?? []).map((note) => (
+                  <li key={note.id} className="border-b border-border/50 last:border-0">
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/notes/${encodeURIComponent(note.id)}`)}
+                      className="flex w-full min-w-0 items-baseline gap-2 py-1.5 text-left transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
+                    >
+                      <span
+                        aria-hidden="true"
+                        className="size-1.5 shrink-0 self-center rounded-full"
+                        style={{ backgroundColor: typeColor(note.type) }}
+                      />
+                      <span className="min-w-0 flex-1 truncate text-xs">{note.title || note.id}</span>
+                      <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{note.updated}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
             </div>
           </section>
-        </>
+        </div>
       )}
-    </div>
+    </Page>
   );
 }

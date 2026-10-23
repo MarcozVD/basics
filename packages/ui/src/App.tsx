@@ -1,6 +1,7 @@
 import { lazy, type ReactNode, Suspense, useEffect } from "react";
 import { createBrowserRouter, RouterProvider } from "react-router";
 import { Layout } from "@/components/layout";
+import { Page } from "@/components/page";
 import { Loading } from "@/components/state";
 import { useT } from "@/i18n";
 import { useVaultEvents } from "@/lib/events";
@@ -30,7 +31,7 @@ const RecommendPage = lazy(() => routeModules.recommend().then((module) => ({ de
 function RouteSkeleton() {
   const t = useT();
   return (
-    <div role="status" aria-busy="true" className="mx-auto w-full max-w-[1200px] px-5 pt-4">
+    <Page role="status" aria-busy="true">
       <span className="sr-only">{t("state.loading")}</span>
       <div aria-hidden="true" className="flex flex-col gap-3 motion-safe:animate-pulse">
         <div className="h-7 w-40 rounded-full bg-muted/70" />
@@ -41,7 +42,7 @@ function RouteSkeleton() {
           <div className="h-11 rounded-xl bg-muted/40" />
         </div>
       </div>
-    </div>
+    </Page>
   );
 }
 

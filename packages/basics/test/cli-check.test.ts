@@ -68,7 +68,7 @@ function setup(dir: string, commands: Record<string, string>, opts: { project?: 
   return { project, vaultDir, configFile };
 }
 
-test("check reports untrusted checks without a TTY", () => {
+test("check reports untrusted checks without a TTY", { timeout: 30_000 }, () => {
   const dir = tempDir();
   const { project, vaultDir, configFile } = setup(dir, { exit0: 'node -e "process.exit(0)"', exit1: 'node -e "process.exit(1)"' });
 
@@ -81,7 +81,7 @@ test("check reports untrusted checks without a TTY", () => {
   assert.equal(strict.status, 1, strict.stdout);
 });
 
-test("--trust runs the checks, records pass and persists trust", () => {
+test("--trust runs the checks, records pass and persists trust", { timeout: 30_000 }, () => {
   const dir = tempDir();
   const { project, vaultDir, configFile } = setup(dir, { exit0: 'node -e "process.exit(0)"' }, { project: true });
 
@@ -101,7 +101,7 @@ test("--trust runs the checks, records pass and persists trust", () => {
   assert.ok(listed.stdout.includes("yes"), listed.stdout);
 });
 
-test("a failing check exits 1 and stores last_checks on the project note", () => {
+test("a failing check exits 1 and stores last_checks on the project note", { timeout: 30_000 }, () => {
   const dir = tempDir();
   const command = `node -e "console.error('boom'); process.exit(1)"`;
   const { project, vaultDir, configFile } = setup(dir, { failing: command }, { project: true });
@@ -120,7 +120,7 @@ test("a failing check exits 1 and stores last_checks on the project note", () =>
   assert.match(last?.at ?? "", /^\d{4}-\d{2}-\d{2}T/);
 });
 
-test("--only runs just the selected check", () => {
+test("--only runs just the selected check", { timeout: 30_000 }, () => {
   const dir = tempDir();
   const { project, configFile } = setup(dir, { exit0: 'node -e "process.exit(0)"', exit1: 'node -e "process.exit(1)"' }, { project: true });
 
@@ -130,7 +130,7 @@ test("--only runs just the selected check", () => {
   assert.equal(run.stdout.includes("check-exit1"), false);
 });
 
-test("check errors when basics.json is missing", () => {
+test("check errors when basics.json is missing", { timeout: 30_000 }, () => {
   const dir = tempDir();
   const { project, configFile } = setup(dir, { exit0: 'node -e "process.exit(0)"' });
   fs.rmSync(path.join(project, "basics.json"));

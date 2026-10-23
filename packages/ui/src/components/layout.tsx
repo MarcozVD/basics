@@ -10,6 +10,7 @@ import { Dock, DockItem, DockSeparator } from "@/components/motion/dock";
 import { Tabs, TabsList, TabsTrigger } from "@/components/motion/tabs";
 import { ThemeToggle } from "@/components/motion/theme-toggle";
 import { Tooltip } from "@/components/motion/tooltip";
+import { PAGE_GUTTERS } from "@/components/page";
 import { type TranslationKey, useI18n } from "@/i18n";
 import { EASE_OUT } from "@/lib/ease";
 import { useHealth, useInbox } from "@/lib/queries";
@@ -71,7 +72,8 @@ export function Layout() {
     <div className="flex h-dvh flex-col overflow-hidden bg-background text-foreground">
       <header
         className={cn(
-          "sticky top-0 z-30 flex h-12 shrink-0 items-center justify-between gap-3 bg-background px-4",
+          "sticky top-0 z-30 flex h-12 shrink-0 items-center justify-between gap-3 bg-background",
+          PAGE_GUTTERS,
           "border-b transition-colors",
           scrolled ? "border-border" : "border-transparent",
         )}

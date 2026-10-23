@@ -38,13 +38,19 @@ test("lists and approves a proposal from the inbox", async ({ page }) => {
   await page.goto("/explore");
   await page.keyboard.press("g");
   await page.keyboard.press("i");
-  await expect(page).toHaveURL(/\/inbox$/);
+  await expect(page).toHaveURL(/\/inbox(\?p=.*)?$/);
   await expect(page.locator('nav a[href="/inbox"]')).toContainText("1");
   await expect(page.getByRole("button", { name: /django/i })).toBeVisible();
 
+  // At 1280px the click selects in the master-detail pane; Enter opens the full proposal.
   await page.getByRole("button", { name: /django/i }).click();
+  await expect(page).toHaveURL(/\/inbox\?p=django$/);
+  await expect(page.getByText("Web framework for the e2e proposal flow.")).toBeVisible();
+  await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/\/inbox\/django$/);
   await expect(page.getByText("Web framework for the e2e proposal flow.")).toBeVisible();
+  // Wait for the outgoing Inbox view to finish its route transition before using the page action bar.
+  await expect(page.getByRole("heading", { name: "Inbox", level: 1 })).toHaveCount(0);
 
   await page.getByRole("button", { name: "Approve", exact: true }).click();
   await expect(page).toHaveURL(/\/notes\/django$/);
@@ -61,7 +67,7 @@ test("approves a proposal directly from the list card", async ({ page }) => {
 
   await page.locator('[data-proposal-id="svelte"]').getByRole("button", { name: "Approve", exact: true }).click();
 
-  await expect(page).toHaveURL(/\/inbox$/);
+  await expect(page).toHaveURL(/\/inbox(\?.*)?$/);
   await expect(page.getByText(/Inbox zero/)).toBeVisible();
   await expect(page.getByText("Approved", { exact: true })).toBeVisible();
 });

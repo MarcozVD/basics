@@ -21,6 +21,7 @@ import { Checkbox } from "@/components/motion/checkbox";
 import { Loader } from "@/components/motion/loader";
 import { Tabs, TabsList, TabsTrigger } from "@/components/motion/tabs";
 import { Tooltip } from "@/components/motion/tooltip";
+import { Page } from "@/components/page";
 import { ErrorState } from "@/components/state";
 import { type TranslationKey, useT } from "@/i18n";
 import { exportStack, recommend } from "@/lib/api";
@@ -56,7 +57,7 @@ function fileBasename(filePath: string): string {
 }
 const COLUMNS = "grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(280px,1fr))]";
 /** Profiles keep their column width even when only one matches. */
-const PROFILE_COLUMNS = "grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(280px,1fr))]";
+const PROFILE_COLUMNS = "grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(300px,1fr))]";
 /** Only the first cards of a column stagger in; the rest appear with them. */
 const STAGGER_LIMIT = 10;
 const STAGGER_STEP = 0.02;
@@ -313,7 +314,9 @@ function RecommendationResults({ recommendation, layerTitle, selected, reduce, o
         )}
       </section>
 
-      <p className="text-xs text-muted-foreground">{t(recommendation.mode === "hybrid" ? "recommend.note.hybrid" : "recommend.note")}</p>
+      <p className="max-w-[72ch] text-xs text-muted-foreground">
+        {t(recommendation.mode === "hybrid" ? "recommend.note.hybrid" : "recommend.note")}
+      </p>
     </div>
   );
 }
@@ -453,7 +456,7 @@ export function RecommendPage() {
 
   return (
     <div className="flex min-h-full flex-col">
-      <div className={cn("mx-auto flex w-full max-w-[1200px] flex-col gap-4 px-5 pt-4", selected.size > 0 && "pb-16")}>
+      <Page className={cn("flex flex-col gap-4", selected.size > 0 && "pb-16")}>
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-2">
             <h1 className="text-xl font-semibold tracking-tight">{t("page.recommend.title")}</h1>
@@ -576,7 +579,7 @@ export function RecommendPage() {
             />
           ) : (
             <div className="flex flex-col gap-3 pt-2">
-              <p className="max-w-2xl text-sm text-muted-foreground">{t("recommend.empty.description")}</p>
+              <p className="max-w-[72ch] text-sm text-muted-foreground">{t("recommend.empty.description")}</p>
               <div className="flex flex-wrap items-center gap-1.5">
                 <span className="mr-1 text-xs text-muted-foreground">{t("recommend.examples")}</span>
                 {EXAMPLES.map((key) => (
@@ -597,7 +600,7 @@ export function RecommendPage() {
             </div>
           )}
         </div>
-      </div>
+      </Page>
 
       {typeof document === "undefined"
         ? null
