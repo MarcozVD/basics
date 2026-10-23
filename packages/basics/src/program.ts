@@ -6,6 +6,7 @@ import net from "node:net";
 import path from "node:path";
 import { cancel, confirm, intro, isCancel, multiselect, outro, select, text } from "@clack/prompts";
 import {
+  addCommunityPack,
   basicsDir,
   type CheckStatus,
   type Config,
@@ -20,6 +21,7 @@ import {
   expandHome,
   installedPacks,
   installPack,
+  isCommunityPackName,
   isTrusted,
   type LastCheck,
   listPacks,
@@ -30,9 +32,11 @@ import {
   type NoteType,
   NotFoundError,
   normalizeTechIds,
+  PackDownloadError,
   type PackInstallResult,
   type Recommendation,
   readVaultMeta,
+  removeCommunityPack,
   renderExport,
   resolveVaultDir,
   saveConfig,
@@ -45,6 +49,7 @@ import {
   title,
   trust,
   UnknownTechError,
+  updateCommunityPack,
   updatePack,
   Vault,
   VaultNotFoundError,
@@ -90,6 +95,20 @@ function parseLang(value: string | undefined, fallback: "en" | "es"): "en" | "es
   if (value === undefined) return fallback;
   if (value !== "en" && value !== "es") fail("language must be en or es", "use --lang en or --lang es");
   return value;
+}
+
+/** Split `owner/repo[@ref]` so `pack add` can forward it to the core fetcher. */
+function parseAddArg(
+  raw: string,
+  path?: string,
+  lang?: "en" | "es",
+): { owner: string; repo: string; ref?: string; path?: string; lang?: "en" | "es" } {
+  const idx = raw.indexOf("@");
+  const body = idx === -1 ? raw : raw.slice(0, idx);
+  const ref = idx === -1 ? undefined : raw.slice(idx + 1) || undefined;
+  const slash = body.indexOf("/");
+  if (slash === -1) fail(`expected owner/repo, got "${raw}"`, "use `basics pack add <owner>/<repo>[@ref]`");
+  return { owner: body.slice(0, slash), repo: body.slice(slash + 1), ref, path, lang };
 }
 
 function parsePackList(value: string | undefined, available: string[]): string[] {
@@ -951,7 +970,7 @@ export function buildProgram(): Command {
     .option("--yes", "accept defaults and install all packs")
     .action((dir: string | undefined, opts: InitOptions) => init(dir, opts));
 
-  const pack = program.command("pack").description("manage official note packs");
+  const pack = program.command("pack").description("manage official and community note packs");
   pack
     .command("list")
     .description("list packs and installed versions")
@@ -962,9 +981,10 @@ export function buildProgram(): Command {
       const packs = listPacks(packsDir(), vault);
       if (!packs.length) return console.log("no packs found");
       printTable([
-        ["NAME", "VERSION", "INSTALLED", "NOTES", "DESCRIPTION"],
+        ["NAME", "ORIGIN", "VERSION", "INSTALLED", "NOTES", "DESCRIPTION"],
         ...packs.map((p) => [
-          p.name,
+          p.origin === "github" ? `${p.repo}@${p.ref}` : p.name,
+          p.origin,
           p.version,
           p.installed ?? "—",
           String(p.notes),
@@ -986,25 +1006,67 @@ export function buildProgram(): Command {
       printPackResults(names.map((name) => installPack(vault, packsDir(), name, { lang: language })));
     });
   pack
+    .command("add <ownerRepo>")
+    .description("add a community pack from GitHub; notes land in the inbox for review")
+    .option("--path <subdir>", "subdirectory within the repo that holds the pack")
+    .option("--lang <lang>", "note language (en|es)")
+    .action((ownerRepo: string, opts: { path?: string; lang?: string }) => {
+      // The parsed ref/path/lang are forwarded to the core fetcher.
+      const language = parseLang(opts.lang, loadConfig().language);
+      void (async () => {
+        const vault = load();
+        const result = await addCommunityPack(vault, parseAddArg(ownerRepo, opts.path, language));
+        console.log(`added ${result.name}@${result.version}`);
+        console.log(
+          `${result.proposed_new.length} new, ${result.proposed_changed.length} changed, ${result.unchanged.length} unchanged, ${result.skipped.length} skipped, ${result.invalid.length} invalid`,
+        );
+        for (const inv of result.invalid) console.log(`  skipped invalid ${inv.file}: ${inv.reason}`);
+        console.log("Review the proposals in the inbox (`basics inbox` or the UI) before installing.");
+      })().catch(handleCliError);
+    });
+  pack
     .command("update [name]")
     .description("propose pack updates for review in the inbox")
     .action((name: string | undefined) => {
-      const vault = load();
-      const installed = installedPacks(vault);
-      const names = name ? [name] : Object.keys(installed);
-      if (!names.length) return console.log("no packs installed");
-      let proposedAny = false;
-      for (const packName of names) {
-        const result = updatePack(vault, packsDir(), packName);
-        if (result.upToDate) {
-          console.log(`${packName}: up to date (${installed[packName]})`);
-          continue;
+      void (async () => {
+        const vault = load();
+        const installed = installedPacks(vault);
+        const names = name ? [name] : Object.keys(installed);
+        if (!names.length) return console.log("no packs installed");
+        let proposedAny = false;
+        for (const packName of names) {
+          if (isCommunityPackName(packName)) {
+            const result = await updateCommunityPack(vault, packName);
+            if (result.upToDate) {
+              console.log(`${packName}: up to date (${installed[packName]})`);
+              continue;
+            }
+            const proposed = result.proposed_new.length + result.proposed_changed.length;
+            console.log(`${packName}: ${proposed} proposed, ${result.unchanged.length} unchanged, ${result.invalid.length} invalid`);
+            if (proposed) proposedAny = true;
+            continue;
+          }
+          const result = updatePack(vault, packsDir(), packName);
+          if (result.upToDate) {
+            console.log(`${packName}: up to date (${installed[packName]})`);
+            continue;
+          }
+          const skipped = result.skipped.length ? `, ${result.skipped.length} skipped` : "";
+          console.log(`${packName}: ${result.proposed.length} proposed, ${result.unchanged.length} unchanged${skipped}`);
+          if (result.proposed.length) proposedAny = true;
         }
-        const skipped = result.skipped.length ? `, ${result.skipped.length} skipped` : "";
-        console.log(`${packName}: ${result.proposed.length} proposed, ${result.unchanged.length} unchanged${skipped}`);
-        if (result.proposed.length) proposedAny = true;
-      }
-      if (proposedAny) console.log("Review with `basics inbox` or the UI.");
+        if (proposedAny) console.log("Review with `basics inbox` or the UI.");
+      })().catch(handleCliError);
+    });
+  pack
+    .command("remove <ownerRepo>")
+    .description("remove a community pack from the cache (installed notes stay)")
+    .action((ownerRepo: string) => {
+      const name = ownerRepo.split("@")[0];
+      if (!isCommunityPackName(name)) fail(`expected owner/repo, got "${ownerRepo}"`, "run `basics pack add <owner>/<repo>[@ref]` first");
+      const vault = load();
+      if (!removeCommunityPack(vault, ownerRepo)) fail(`community pack "${name}" is not cached`, `run basics pack add ${name} first`);
+      console.log(`removed ${name} from the cache (installed notes were kept)`);
     });
 
   program
@@ -1215,6 +1277,7 @@ export function buildProgram(): Command {
 
 function errorHint(err: unknown): string | undefined {
   if (err instanceof CliError) return err.hint;
+  if (err instanceof PackDownloadError) return err.hint;
   if (err instanceof VaultNotFoundError) return "run `basics init` or pass --vault <dir>";
   if (err instanceof NotFoundError) {
     return String(err.id).startsWith("pack:") ? "run `basics pack list` to see the available packs" : "run `basics list` to see note ids";
