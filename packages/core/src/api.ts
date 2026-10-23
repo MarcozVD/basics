@@ -100,6 +100,27 @@ export interface PackUpdateResult {
   upToDate: boolean;
 }
 
+export interface PackAddRequest {
+  repo: string;
+  ref?: string;
+  path?: string;
+  lang?: "en" | "es";
+}
+
+export interface PackAddResult {
+  name: string;
+  version: string;
+  repo: string;
+  ref: string;
+  proposed_new: string[];
+  proposed_changed: string[];
+  unchanged: string[];
+  skipped: string[];
+  /** Invalid notes skipped and reported (file + reason). */
+  invalid: { file: string; reason: string }[];
+  upToDate?: boolean;
+}
+
 export interface ApproveAllRequest {
   pack: string;
   version?: string;
