@@ -156,6 +156,7 @@ export interface ApiError {
   message: string;
   actualHash?: string;
   issues?: unknown;
+  hint?: string;
 }
 
 export type VaultEvent = { type: "vault"; paths: string[] } | { type: "activity" } | { type: "embeddings"; done: number; total: number };

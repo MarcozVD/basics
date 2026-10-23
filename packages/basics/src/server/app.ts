@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { serveStatic } from "@hono/node-server/serve-static";
 import {
+  addCommunityPack,
   type ApiError,
   type ApproveAllResponse,
   type ApproveRequest,
@@ -21,6 +22,7 @@ import {
   loadIndex,
   type NoteType,
   NotFoundError,
+  PackDownloadError,
   proposalDetail,
   type RecommendRequest,
   readActivity,
@@ -67,6 +69,12 @@ const exportRequestSchema = z.object({
   existing: z.record(z.string(), z.string()).optional(),
 });
 const packInstallRequestSchema = z.object({ lang: z.enum(["en", "es"]).optional() });
+const packAddRequestSchema = z.object({
+  repo: z.string().min(1),
+  ref: z.string().optional(),
+  path: z.string().optional(),
+  lang: z.enum(["en", "es"]).optional(),
+});
 const approveAllRequestSchema = z.object({ pack: z.string().min(1), version: z.string().min(1).optional() });
 
 /** A sessionless POST only creates a session when it carries the initialize request. */
@@ -150,6 +158,9 @@ export function createApp(opts: { root: string; uiDir?: string; events?: EventHu
     }
     if (err instanceof UnknownTechError) {
       return c.json({ error: "invalid", message: err.message } satisfies ApiError, 400);
+    }
+    if (err instanceof PackDownloadError) {
+      return c.json({ error: "invalid", message: err.message, hint: err.hint } satisfies ApiError, 400);
     }
     if (err instanceof NotFoundError) {
       return c.json({ error: "not_found", message: err.message } satisfies ApiError, 404);
@@ -312,6 +323,21 @@ export function createApp(opts: { root: string; uiDir?: string; events?: EventHu
   });
 
   app.get("/api/packs", (c) => c.json(listPacks(packsDir(), vault())));
+
+  app.post("/api/packs/add", async (c) => {
+    const body = packAddRequestSchema.parse(await c.req.json());
+    const slash = body.repo.indexOf("/");
+    if (slash === -1) throw new PackDownloadError(`expected owner/repo, got "${body.repo}"`, "use owner/repo");
+    const result = await addCommunityPack(vault(), {
+      owner: body.repo.slice(0, slash),
+      repo: body.repo.slice(slash + 1),
+      ref: body.ref,
+      path: body.path,
+      lang: body.lang,
+    });
+    return c.json(result);
+  });
+
 
   app.post("/api/packs/:name/install", async (c) => {
     const body = packInstallRequestSchema.parse(await c.req.json().catch(() => ({})));
