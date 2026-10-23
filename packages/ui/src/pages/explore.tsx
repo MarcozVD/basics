@@ -10,10 +10,12 @@ import { Input } from "@/components/motion/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/motion/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/motion/tabs";
 import { TypeChip } from "@/components/note-form/note-preview";
+import { Page } from "@/components/page";
 import { ErrorState, Loading } from "@/components/state";
 import { type TranslationKey, useT } from "@/i18n";
 import { EASE_OUT, SPRING_LAYOUT, SPRING_PRESS } from "@/lib/ease";
 import { useLayers, useNotes, useSearch } from "@/lib/queries";
+import { formatCompactRelativeTime } from "@/lib/relative-time";
 import { cn } from "@/lib/utils";
 
 const TYPE_ORDER: NoteType[] = ["tech", "practice", "check", "profile", "project", "layer"];
@@ -28,6 +30,9 @@ const DEFAULT_VIEW: View = "list";
 const STAGGER_LIMIT = 10;
 const STAGGER_STEP = 0.02;
 const MAX_TAGS = 3;
+/** Dense list columns; wide-only columns are hidden with their matching cell. */
+const LIST_GRID =
+  "grid grid-cols-[16px_minmax(0,1fr)_minmax(0,0.8fr)_auto] items-center gap-2 min-[900px]:grid-cols-[16px_minmax(0,1.2fr)_minmax(0,0.8fr)_minmax(0,1fr)_auto] min-[900px]:gap-3 min-[1280px]:grid-cols-[16px_minmax(0,1.4fr)_130px_minmax(0,1fr)_150px_240px_110px_88px]";
 
 interface Row {
   id: string;
@@ -244,6 +249,8 @@ export function ExplorePage() {
     setHovered(null);
   };
 
+  const setSort = (value: Sort) => updateParams({ sort: value === DEFAULT_SORT ? null : value });
+
   const hasFilters = Boolean(type || layer || query || searchText);
   const clearFilters = () => {
     setSearchText("");
@@ -314,8 +321,8 @@ export function ExplorePage() {
   };
 
   return (
-    <div className="flex flex-col">
-      <div className="sticky top-0 z-20 bg-background px-5 pt-4 pb-3">
+    <Page className="flex flex-col pt-0">
+      <div className="sticky top-0 z-20 -mx-5 bg-background px-5 pt-4 pb-0 md:-mx-6 md:px-6 min-[1440px]:-mx-8 min-[1440px]:px-8">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-baseline gap-2">
             <h1 className="text-xl font-semibold tracking-tight">{t("page.explore.title")}</h1>
@@ -447,9 +454,11 @@ export function ExplorePage() {
             </Select>
           </div>
         </fieldset>
+
+        {view === "list" && rows.length > 0 ? <ListHeader sort={sort} onSort={setSort} /> : null}
       </div>
 
-      <div className="px-5 pt-1">
+      <div className="pt-1">
         {listQuery.isPending ? (
           <Loading />
         ) : listQuery.error ? (
@@ -484,7 +493,7 @@ export function ExplorePage() {
             {groups.map((group) => {
               const headingId = group.type ? `explore-group-${group.type}` : undefined;
               const items = (
-                <div className={cn(view === "grid" ? "grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-2" : "flex flex-col")}>
+                <div className={cn(view === "grid" ? "grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-2" : "flex flex-col")}>
                   <AnimatePresence mode="popLayout">
                     {group.rows.map((row, offset) => renderItem(row, group.start + offset))}
                   </AnimatePresence>
@@ -508,7 +517,7 @@ export function ExplorePage() {
           </div>
         )}
       </div>
-    </div>
+    </Page>
   );
 }
 
@@ -539,7 +548,90 @@ function AgentBadge() {
   );
 }
 
+function SourceBadge({ source }: { source: string }) {
+  const t = useT();
+  if (!source) return null;
+  if (source.startsWith("agent:")) {
+    return (
+      <span
+        title={source}
+        className="inline-flex h-5 max-w-full items-center truncate rounded-full bg-primary/12 px-2 font-mono text-[10px] font-medium text-primary-text"
+      >
+        {t("explore.agentBadge")}
+      </span>
+    );
+  }
+  if (source.startsWith("pack:")) {
+    return (
+      <span
+        title={source}
+        className="inline-flex h-5 max-w-full items-center truncate rounded-full bg-emerald-500/10 px-2 font-mono text-[10px] font-medium text-emerald-700 dark:text-emerald-300"
+      >
+        {t("explore.packBadge")}
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex h-5 max-w-full items-center truncate rounded-full bg-muted/60 px-2 font-mono text-[10px] text-muted-foreground">
+      {t("explore.manualBadge")}
+    </span>
+  );
+}
+
+function ListHeader({ sort, onSort }: { sort: Sort; onSort: (sort: Sort) => void }) {
+  const t = useT();
+  const sortButton = (value: Sort, label: string, className?: string) => (
+    <button
+      type="button"
+      onClick={() => onSort(value)}
+      className={cn(
+        "flex min-w-0 items-center gap-1 rounded-sm text-left transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+        sort === value && "text-foreground",
+        className,
+      )}
+    >
+      <span className="truncate">{label}</span>
+      {sort === value ? <ArrowDownUp className="size-2.5 shrink-0" aria-hidden="true" /> : null}
+    </button>
+  );
+
+  return (
+    <div
+      data-list-header
+      className={cn(
+        LIST_GRID,
+        "mt-3 h-8 border-b border-border px-3 text-[10.5px] font-medium tracking-wide text-muted-foreground uppercase",
+      )}
+    >
+      <button
+        type="button"
+        aria-label={t("explore.sort.type")}
+        title={t("explore.sort.type")}
+        onClick={() => onSort("type")}
+        className={cn(
+          "grid size-4 place-items-center rounded-sm transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+          sort === "type" && "bg-muted",
+        )}
+      >
+        <span
+          aria-hidden="true"
+          className="h-4 w-[3px] rounded-full bg-[linear-gradient(to_bottom,var(--type-tech),var(--type-practice),var(--type-layer))]"
+        />
+      </button>
+      {sortButton("title", t("explore.sort.title"))}
+      <span className="truncate">{t("explore.column.id")}</span>
+      <span className="hidden min-[900px]:block truncate">{t("explore.column.excerpt")}</span>
+      <span className="truncate">{t("explore.column.layers")}</span>
+      <span className="hidden min-[1280px]:block truncate">{t("explore.column.tags")}</span>
+      <span className="hidden min-[1280px]:block truncate">{t("explore.column.source")}</span>
+      {sortButton("updated", t("explore.column.updated"), "hidden min-[1280px]:flex justify-end")}
+    </div>
+  );
+}
+
 function ListRow({ row, index, selected, reduce, layerTitles, onHover, onOpen }: ItemProps) {
+  const t = useT();
+  const extraTags = row.tags.length - MAX_TAGS;
   return (
     <button
       id={`note-row-${index}`}
@@ -550,26 +642,51 @@ function ListRow({ row, index, selected, reduce, layerTitles, onHover, onOpen }:
       tabIndex={-1}
       onMouseEnter={onHover}
       onClick={onOpen}
-      className="relative flex h-11 w-full scroll-mt-32 scroll-mb-24 items-center gap-3 rounded-xl px-3 text-left outline-none"
+      className={cn(
+        LIST_GRID,
+        "relative h-10 w-full scroll-mt-32 scroll-mb-24 rounded-lg border-b border-border/40 px-3 text-left outline-none last:border-b-0",
+      )}
     >
       {selected && (
         <motion.span
           layoutId="explore-row-highlight"
           aria-hidden="true"
           transition={reduce ? { duration: 0 } : SPRING_LAYOUT}
-          className="absolute inset-0 rounded-xl bg-muted"
+          className="absolute inset-0 rounded-lg bg-muted"
         />
       )}
-      <span aria-hidden="true" className="relative h-5 w-[3px] shrink-0 rounded-full" style={{ backgroundColor: typeColor(row.type) }} />
-      <span className="relative max-w-[40%] shrink-0 truncate text-sm font-medium">{row.title}</span>
-      <span className="relative max-w-48 min-w-0 shrink truncate font-mono text-[11px] text-muted-foreground">{row.id}</span>
-      <span className="relative min-w-0 flex-1 truncate text-[13px] text-muted-foreground">{row.excerpt}</span>
-      <span className="relative flex shrink-0 items-center gap-1">
+      <span aria-hidden="true" className="relative h-5 w-[3px] rounded-full" style={{ backgroundColor: typeColor(row.type) }} />
+      <span className="relative min-w-0 truncate text-[13px] font-medium">{row.title}</span>
+      <span className="relative min-w-0 truncate font-mono text-[11px] text-muted-foreground">{row.id}</span>
+      <span className="relative hidden min-w-0 truncate text-[12px] text-muted-foreground min-[900px]:block">{row.excerpt}</span>
+      <span className="relative flex min-w-0 items-center gap-1 overflow-hidden">
         {row.layers.map((id) => (
           <LayerChip key={id} id={id} title={layerTitles.get(id)} />
         ))}
-        {row.source.startsWith("agent:") && <AgentBadge />}
       </span>
+      <span className="relative hidden min-w-0 items-center gap-1 overflow-hidden min-[1280px]:flex">
+        {row.tags.slice(0, MAX_TAGS).map((tag) => (
+          <span
+            key={tag}
+            className="inline-flex h-5 max-w-28 shrink-0 items-center truncate rounded-full bg-muted px-2 font-mono text-[10px] text-muted-foreground"
+          >
+            #{tag}
+          </span>
+        ))}
+        {extraTags > 0 && (
+          <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{t("explore.moreTags", { count: extraTags })}</span>
+        )}
+      </span>
+      <span className="relative hidden min-w-0 items-center min-[1280px]:flex">
+        <SourceBadge source={row.source} />
+      </span>
+      <time
+        dateTime={row.updated}
+        title={row.updated}
+        className="relative hidden min-w-0 truncate text-right font-mono text-[11px] text-muted-foreground min-[1280px]:block"
+      >
+        {row.updated ? formatCompactRelativeTime(row.updated) : "—"}
+      </time>
     </button>
   );
 }
