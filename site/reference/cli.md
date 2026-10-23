@@ -142,7 +142,7 @@ basics init [options] [dir]
 
 ### `basics pack`
 
-manage official note packs
+manage official and community note packs
 
 ```
 basics pack [options] [command]
@@ -172,12 +172,35 @@ basics pack install [options] <names...>
 | --- | --- | --- |
 | `--lang <lang>` | note language (en\|es) | — |
 
+#### `basics pack add`
+
+add a community pack from GitHub; notes land in the inbox for review
+
+```
+basics pack add [options] <ownerRepo>
+```
+
+| Flag | Description | Default |
+| --- | --- | --- |
+| `--path <subdir>` | subdirectory within the repo that holds the pack | — |
+| `--lang <lang>` | note language (en\|es) | — |
+
 #### `basics pack update`
 
 propose pack updates for review in the inbox
 
 ```
 basics pack update [options] [name]
+```
+
+No options.
+
+#### `basics pack remove`
+
+remove a community pack from the cache (installed notes stay)
+
+```
+basics pack remove [options] <ownerRepo>
 ```
 
 No options.

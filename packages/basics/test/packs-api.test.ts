@@ -4,8 +4,8 @@ import os from "node:os";
 import path from "node:path";
 import { installedPacks, Vault } from "@marcozvd/basics-core";
 import { test } from "vitest";
-import { createApp } from "../src/server/app.js";
 import { buildTarGz, fixtureEntries } from "../../core/test/tar-builder.js";
+import { createApp } from "../src/server/app.js";
 
 test("packs and approve-all routes", async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "basics-api-packs-"));

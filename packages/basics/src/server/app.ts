@@ -4,10 +4,10 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { serveStatic } from "@hono/node-server/serve-static";
 import {
-  addCommunityPack,
   type ApiError,
   type ApproveAllResponse,
   type ApproveRequest,
+  addCommunityPack,
   buildGraph,
   ConflictError,
   type ContextResponse,
@@ -337,7 +337,6 @@ export function createApp(opts: { root: string; uiDir?: string; events?: EventHu
     });
     return c.json(result);
   });
-
 
   app.post("/api/packs/:name/install", async (c) => {
     const body = packInstallRequestSchema.parse(await c.req.json().catch(() => ({})));
