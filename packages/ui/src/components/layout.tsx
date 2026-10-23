@@ -1,4 +1,4 @@
-import { Command, House, Inbox, LayoutList, Sparkles, Waypoints } from "lucide-react";
+import { Command, FolderKanban, House, Inbox, LayoutList, Sparkles, Waypoints } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useRef, useState } from "react";
 import { Link, useLocation, useOutlet } from "react-router";
@@ -28,6 +28,7 @@ interface DockLink {
 const dockLinks: DockLink[] = [
   { to: "/", labelKey: "nav.home", icon: House, shortcut: "H" },
   { to: "/explore", labelKey: "nav.explore", icon: LayoutList, shortcut: "E" },
+  { to: "/projects", labelKey: "nav.projects", icon: FolderKanban, shortcut: "P" },
   { to: "/graph", labelKey: "nav.graph", icon: Waypoints, shortcut: "G" },
   { to: "/inbox", labelKey: "nav.inbox", icon: Inbox, shortcut: "I" },
   { to: "/recommend", labelKey: "nav.recommend", icon: Sparkles, shortcut: "R" },

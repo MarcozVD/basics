@@ -16,6 +16,7 @@ const routeModules = {
   // Cytoscape is heavy; the graph page and its canvas stay out of the main chunk.
   graph: () => import("@/pages/graph"),
   inbox: () => import("@/pages/inbox"),
+  projects: () => import("@/pages/projects"),
   proposal: () => import("@/pages/proposal"),
   recommend: () => import("@/pages/recommend"),
 };
@@ -24,6 +25,7 @@ const ExplorePage = lazy(() => routeModules.explore().then((module) => ({ defaul
 const EditorPage = lazy(() => routeModules.editor().then((module) => ({ default: module.EditorPage })));
 const GraphPage = lazy(() => routeModules.graph().then((module) => ({ default: module.GraphPage })));
 const InboxPage = lazy(() => routeModules.inbox().then((module) => ({ default: module.InboxPage })));
+const ProjectsPage = lazy(() => routeModules.projects().then((module) => ({ default: module.ProjectsPage })));
 const ProposalPage = lazy(() => routeModules.proposal().then((module) => ({ default: module.ProposalPage })));
 const RecommendPage = lazy(() => routeModules.recommend().then((module) => ({ default: module.RecommendPage })));
 
@@ -70,6 +72,14 @@ const router = createBrowserRouter([
         element: (
           <Lazy>
             <ExplorePage />
+          </Lazy>
+        ),
+      },
+      {
+        path: "projects",
+        element: (
+          <Lazy>
+            <ProjectsPage />
           </Lazy>
         ),
       },

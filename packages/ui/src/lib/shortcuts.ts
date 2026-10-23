@@ -5,6 +5,7 @@ import { useNavigate } from "react-router";
 export const SHORTCUT_ROUTES: Record<string, string> = {
   h: "/",
   e: "/explore",
+  p: "/projects",
   g: "/graph",
   i: "/inbox",
   r: "/recommend",

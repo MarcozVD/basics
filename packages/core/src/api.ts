@@ -12,6 +12,8 @@ export interface NoteSummary {
   tags: string[];
   /** First `use_when` entry for tech notes, else the first non-heading body line (max 120 chars). */
   excerpt?: string;
+  /** Full project frontmatter for project notes, so the Projects list needs one request. */
+  project?: Extract<NoteData, { type: "project" }>;
 }
 
 export interface LayerSummary {

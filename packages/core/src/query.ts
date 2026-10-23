@@ -103,6 +103,7 @@ export function listNotes(vault: Vault, opts: { type?: NoteType; layer?: string 
         updated: n.data.updated,
         tags: n.data.tags ?? [],
         excerpt: excerpt(n),
+        project: n.data.type === "project" ? n.data : undefined,
       };
     })
     .filter((n) => !layerId || n.layers.includes(layerId))

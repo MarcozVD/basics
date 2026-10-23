@@ -3,6 +3,7 @@
 
 import {
   Copy,
+  FolderKanban,
   House,
   Inbox as InboxIcon,
   Languages,
@@ -186,6 +187,7 @@ export function AppCommandPalette() {
     const routes: { to: string; labelKey: TranslationKey; icon: LucideIcon; hint: string }[] = [
       { to: "/", labelKey: "nav.home", icon: House, hint: "G H" },
       { to: "/explore", labelKey: "nav.explore", icon: LayoutList, hint: "G E" },
+      { to: "/projects", labelKey: "nav.projects", icon: FolderKanban, hint: "G P" },
       { to: "/graph", labelKey: "nav.graph", icon: Waypoints, hint: "G G" },
       { to: "/inbox", labelKey: "nav.inbox", icon: InboxIcon, hint: "G I" },
       { to: "/recommend", labelKey: "nav.recommend", icon: Sparkles, hint: "G R" },

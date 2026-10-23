@@ -687,7 +687,7 @@ export function HomePage() {
                   label={t(`type.${type}` as TranslationKey)}
                   dot={`var(--type-${type})`}
                   value={counts?.[type] ?? 0}
-                  onClick={() => navigate(`/explore?type=${type}`)}
+                  onClick={() => navigate(type === "project" ? "/projects" : `/explore?type=${type}`)}
                 />
               ))}
 
