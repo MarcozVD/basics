@@ -1,22 +1,59 @@
 import { expect, test } from "@playwright/test";
 
-test("creates a note and shows it in Explore", async ({ page }) => {
+test("creates a tech note from the dialog with kind and layers", async ({ page }) => {
   await page.goto("/explore");
 
   await page.getByRole("button", { name: "New note", exact: true }).click();
   const dialog = page.getByRole("dialog");
 
-  await dialog.getByRole("tab", { name: "Tech", exact: true }).click();
+  const title = dialog.getByLabel("Title", { exact: true });
+  await expect(title).toBeFocused();
+  await title.fill("Drizzle ORM");
+  await expect(dialog.getByLabel("ID", { exact: true })).toHaveValue("drizzle-orm");
+  await expect(dialog.getByRole("tab", { name: "Tech", exact: true })).toHaveAttribute("aria-selected", "true");
 
-  await dialog.getByLabel("ID", { exact: true }).fill("e2e-demo");
-
-  await dialog.getByRole("tab", { name: "Backend", exact: true }).click();
+  await dialog.getByRole("tab", { name: "Library", exact: true }).click();
+  await expect(dialog.getByRole("button", { name: "Backend", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await dialog.getByRole("button", { name: "Data", exact: true }).click();
+  await dialog.getByLabel("When would you use it?", { exact: true }).fill("Typed SQL with migrations");
 
   await dialog.getByRole("button", { name: "Create", exact: true }).click();
 
-  await expect(page).toHaveURL(/\/notes\/e2e-demo$/);
-  await expect(page.getByLabel("Title", { exact: true })).toHaveValue("e2e-demo");
+  await expect(page).toHaveURL(/\/notes\/drizzle-orm$/);
+  await expect(page.getByLabel("Title", { exact: true })).toHaveValue("Drizzle ORM");
+  await expect(page.getByText("TODO")).toHaveCount(0);
 
-  await page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Explore", exact: true }).click();
-  await expect(page.getByRole("option").filter({ hasText: "e2e-demo" })).toBeVisible();
+  const response = await page.request.get("/api/notes/drizzle-orm");
+  expect(response.ok()).toBe(true);
+  const note = (await response.json()) as {
+    data: { kind: string; layer: string[]; use_when: string[] };
+    body: string;
+  };
+  expect(note.data.kind).toBe("library");
+  expect(note.data.layer).toEqual(expect.arrayContaining(["backend", "data"]));
+  expect(note.data.use_when).toEqual(["Typed SQL with migrations"]);
+  expect(note.body).not.toContain("TODO");
+});
+
+test("creates a note from a related field", async ({ page }) => {
+  await page.goto("/notes/nextjs");
+
+  const related = page.getByLabel("Related", { exact: true });
+  await related.fill("Hono");
+  const create = page.getByRole("option", { name: 'Create "Hono"' });
+  await expect(create).toBeVisible();
+  await create.click();
+
+  await expect(page.getByText("Created Hono", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Remove hono" })).toBeVisible();
+  await expect(related).toBeFocused();
+
+  const response = await page.request.get("/api/notes/hono");
+  expect(response.ok()).toBe(true);
+
+  await page.keyboard.press("Control+s");
+  await expect(page.getByText("Note saved", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Open", exact: true }).click();
+  await expect(page).toHaveURL(/\/notes\/hono$/);
+  await expect(page.getByPlaceholder("hono")).toHaveValue("Hono");
 });

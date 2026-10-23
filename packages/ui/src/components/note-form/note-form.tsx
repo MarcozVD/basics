@@ -23,11 +23,13 @@ export function NoteForm({
   data,
   onChange,
   errors,
+  compact = false,
 }: {
   type: NoteType;
   data: NoteData;
   onChange: (data: NoteData) => void;
   errors: Record<string, string>;
+  compact?: boolean;
 }) {
   const t = useT();
   const [open, setOpen] = useState(readOpen);
@@ -54,7 +56,9 @@ export function NoteForm({
         {t("editor.properties")}
       </CollapsibleTrigger>
       <CollapsibleContent>
-        <div className="grid grid-cols-[96px_minmax(0,1fr)] items-start gap-x-2 sm:grid-cols-[132px_minmax(0,1fr)] sm:gap-x-3">
+        <div
+          className={cn("grid items-start", compact ? "grid-cols-[96px_minmax(0,1fr)] gap-x-2" : "grid-cols-[132px_minmax(0,1fr)] gap-x-3")}
+        >
           {fields.map((field) => (
             <Fragment key={field.key}>
               <label htmlFor={`field-${field.key}`} className="truncate px-1 text-[12px] leading-7 text-muted-foreground">
@@ -80,7 +84,7 @@ export function NoteForm({
               {extra.map((key) => (
                 <Fragment key={key}>
                   <span className="truncate px-2 py-1 font-mono text-[11px] text-muted-foreground">{key}</span>
-                  <span className="truncate px-2 py-1 font-mono text-[11px] text-muted-foreground">
+                  <span className="min-w-0 break-words whitespace-pre-wrap px-2 py-1 font-mono text-[11px] text-muted-foreground">
                     {JSON.stringify(record[key]) ?? "undefined"}
                   </span>
                 </Fragment>

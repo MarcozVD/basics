@@ -133,7 +133,7 @@ export function MultiSelectValue({
                 chipClassName,
               )}
             >
-              <span className="truncate">
+              <span className="min-w-0 break-words">
                 {children ? children(value, label) : label}
               </span>
               <button

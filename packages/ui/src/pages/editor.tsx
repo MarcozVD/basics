@@ -624,6 +624,7 @@ export function EditorPage() {
       type={note.type}
       data={data}
       errors={errors}
+      compact={wide}
       onChange={(next) => {
         setData(next);
         markDirty();

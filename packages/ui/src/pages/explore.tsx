@@ -377,7 +377,11 @@ export function ExplorePage() {
               </TabsList>
             </Tabs>
 
-            <Button size="sm" onClick={() => window.dispatchEvent(new Event("basics:new-note"))} pressScale={0.97}>
+            <Button
+              size="sm"
+              onClick={() => window.dispatchEvent(new CustomEvent("basics:new-note", { detail: { type } }))}
+              pressScale={0.97}
+            >
               <Plus className="size-3.5" aria-hidden="true" />
               {t("explore.newNote")}
             </Button>

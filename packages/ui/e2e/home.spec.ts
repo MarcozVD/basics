@@ -33,8 +33,10 @@ function writeProposal(id: string, title: string, body: string) {
 }
 
 test("home shows the agent loop and approves from the queue", async ({ page }) => {
-  // create-note.spec runs before this file and leaves a tech note behind.
-  fs.rmSync(path.join(vaultPath(), "tech", "e2e-demo.md"), { force: true });
+  // create-note.spec runs before this file and leaves tech notes behind.
+  for (const id of ["drizzle-orm", "hono"]) {
+    fs.rmSync(path.join(vaultPath(), "tech", `${id}.md`), { force: true });
+  }
 
   await page.goto("/");
 

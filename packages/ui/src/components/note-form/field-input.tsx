@@ -1,6 +1,8 @@
-import type { NoteType } from "@marcozvd/basics-core";
+import type { NoteSummary, NoteType } from "@marcozvd/basics-core";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, X } from "lucide-react";
-import { Fragment, type ReactNode, useRef, useState } from "react";
+import { Fragment, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type Ref, useLayoutEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router";
 import { Input } from "@/components/motion/input";
 import {
   MultiSelect,
@@ -14,22 +16,29 @@ import {
 } from "@/components/motion/multi-select";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/motion/select";
 import { type TranslationKey, useT } from "@/i18n";
+import { ApiRequestError, createNote } from "@/lib/api";
 import type { Field } from "@/lib/fields";
+import { TEMPLATES } from "@/lib/fields";
 import { useLayers, useNotes } from "@/lib/queries";
+import { slugify } from "@/lib/slug";
+import { toast } from "@/lib/toast";
 import { tintStyle } from "@/lib/type-color";
 import { cn } from "@/lib/utils";
 
 const FIELD_CLASS = "h-7 rounded-lg border-transparent bg-transparent hover:border-border";
-const ITEM_FIELD_CLASS = "h-[26px] rounded-md border-transparent bg-transparent hover:border-border";
+const AUTO_TEXTAREA_CLASS =
+  "min-h-[26px] w-full resize-none overflow-hidden rounded-md border border-transparent bg-transparent px-2 py-1 text-[13px] leading-[18px] text-foreground outline-none transition-colors hover:border-border focus:border-foreground/40 focus:ring-2 focus:ring-ring/40";
 const INPUT_CLASS = "px-2 text-[13px]";
 // Empty values read as a muted dash until the control is focused.
 const EMPTY_INPUT_CLASS = "placeholder:text-muted-foreground focus:placeholder:text-transparent";
 const TRIGGER_CLASS = "min-h-7 rounded-lg border-transparent bg-transparent px-1.5 py-0 hover:border-border";
-const CHIP_CLASS = "h-5 gap-1 rounded-md bg-transparent p-0 text-[11px] font-medium";
+const CHIP_CLASS = "h-auto min-h-5 max-w-full items-start rounded-md bg-transparent px-1.5 py-0.5 text-[11px] font-medium";
 const SEARCH_INPUT_CLASS = "h-5 text-[13px] placeholder:text-transparent focus:placeholder:text-muted-foreground";
+const CREATE_VALUE = "__basics-create__";
 
 const typeColor = (type: NoteType | undefined) => `var(--type-${type ?? "layer"})`;
 const optionLabel = (t: ReturnType<typeof useT>, value: string) => t(`option.${value}` as TranslationKey);
+const isCreateValue = (value: string) => value === CREATE_VALUE;
 
 function linkItems(value: unknown): string[] {
   if (Array.isArray(value)) return value.filter((item): item is string => typeof item === "string");
@@ -37,14 +46,132 @@ function linkItems(value: unknown): string[] {
   return [];
 }
 
+function AutoGrowTextarea({
+  textareaRef,
+  id,
+  value,
+  onChange,
+  ariaLabel,
+  placeholder,
+  className,
+  onKeyDown,
+}: {
+  textareaRef?: Ref<HTMLTextAreaElement>;
+  id?: string;
+  value: string;
+  onChange: (value: string) => void;
+  ariaLabel: string;
+  placeholder?: string;
+  className?: string;
+  onKeyDown?: (event: ReactKeyboardEvent<HTMLTextAreaElement>) => void;
+}) {
+  const localRef = useRef<HTMLTextAreaElement>(null);
+
+  useLayoutEffect(() => {
+    const textarea = localRef.current;
+    if (!textarea) return;
+    textarea.style.height = "0px";
+    textarea.style.height = `${textarea.scrollHeight}px`;
+  });
+
+  return (
+    <textarea
+      ref={(node) => {
+        localRef.current = node;
+        if (typeof textareaRef === "function") textareaRef(node);
+        else if (textareaRef) (textareaRef as { current: HTMLTextAreaElement | null }).current = node;
+      }}
+      id={id}
+      rows={1}
+      value={value}
+      aria-label={ariaLabel}
+      placeholder={placeholder}
+      wrap="soft"
+      onChange={(event) => onChange(event.target.value)}
+      onKeyDown={onKeyDown}
+      className={cn(AUTO_TEXTAREA_CLASS, className)}
+    />
+  );
+}
+
 function LinkField({ id, field, value, onChange }: { id: string; field: Field; value: unknown; onChange: (value: unknown) => void }) {
   const t = useT();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const notes = useNotes(field.linkType ? { type: field.linkType } : {});
   const values = linkItems(value);
   const label = t(`field.${field.key}` as TranslationKey);
+  const [query, setQuery] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const addValue = (nextId: string) => {
+    if (field.kind === "link") {
+      onChange(nextId);
+      return;
+    }
+    if (values.includes(nextId)) return;
+    onChange([...values, nextId]);
+  };
+
+  const create = useMutation({
+    mutationFn: ({ title, id: nextId }: { title: string; id: string }) => {
+      const type = field.linkType;
+      if (!type) throw new Error("This field cannot create notes");
+      return createNote({ id: nextId, data: TEMPLATES[type]({ title }), body: `# ${title}\n` });
+    },
+    onSuccess: (note, input) => {
+      void queryClient.invalidateQueries({ queryKey: ["notes"] });
+      addValue(note.id);
+      toast.success(t("field.created", { title: input.title }), {
+        label: t("field.open"),
+        onClick: () => navigate(`/notes/${encodeURIComponent(note.id)}`),
+      });
+      requestAnimationFrame(() => inputRef.current?.focus());
+    },
+    onError: (error, input) => {
+      if (error instanceof ApiRequestError && error.body.error === "exists") {
+        addValue(input.id);
+        void queryClient.invalidateQueries({ queryKey: ["notes"] });
+      } else {
+        toast.error(t("field.createFailed", { title: input.title }));
+      }
+      requestAnimationFrame(() => inputRef.current?.focus());
+    },
+  });
+
+  const requested = query.trim();
+  const requestedId = slugify(requested);
+  const exactMatch = (notes.data ?? []).some(
+    (note) => note.id.toLowerCase() === requested.toLowerCase() || (note.title || note.id).toLowerCase() === requested.toLowerCase(),
+  );
+  const showCreate = Boolean(field.linkType && requested && requestedId && !exactMatch);
+  const createLabel = t("field.create", { title: requested });
+
+  const createFromQuery = () => {
+    const title = query.trim();
+    const nextId = slugify(title);
+    if (!title || !nextId || !field.linkType) return;
+    const existing = (notes.data ?? []).find((note) => note.id === nextId);
+    if (existing) {
+      addValue(existing.id);
+      setQuery("");
+      requestAnimationFrame(() => inputRef.current?.focus());
+      return;
+    }
+    create.mutate({ title, id: nextId });
+  };
 
   return (
-    <MultiSelect value={values} onValueChange={(next) => onChange(field.kind === "link" ? (next.at(-1) ?? "") : next)}>
+    <MultiSelect
+      value={values}
+      query={query}
+      onQueryChange={setQuery}
+      onValueChange={(next) => {
+        const plain = next.filter((item) => !isCreateValue(item));
+        if (plain.length !== next.length) return;
+        onChange(field.kind === "link" ? (plain.at(-1) ?? "") : plain);
+      }}
+    >
       <MultiSelectTrigger className={TRIGGER_CLASS}>
         <MultiSelectValue placeholder="—" chipClassName={CHIP_CLASS}>
           {(item) => {
@@ -52,14 +179,17 @@ function LinkField({ id, field, value, onChange }: { id: string; field: Field; v
             const missing = notes.data !== undefined && target === undefined;
             const color = missing ? "var(--destructive)" : typeColor(target?.type);
             return (
-              <span className="flex h-5 items-center gap-1.5 rounded-md px-1.5 font-mono" style={tintStyle(color)}>
-                <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-current" />
-                {item}
+              <span
+                className="flex min-h-5 min-w-0 max-w-full items-start gap-1.5 rounded-md px-1.5 py-0 font-mono"
+                style={tintStyle(color)}
+              >
+                <span aria-hidden="true" className="mt-2 size-1.5 shrink-0 rounded-full bg-current" />
+                <span className="min-w-0 break-all">{item}</span>
               </span>
             );
           }}
         </MultiSelectValue>
-        <MultiSelectInput id={id} aria-label={label} className={SEARCH_INPUT_CLASS} />
+        <MultiSelectInput ref={inputRef} id={id} aria-label={label} className={SEARCH_INPUT_CLASS} />
       </MultiSelectTrigger>
       <MultiSelectContent>
         <MultiSelectList>
@@ -72,6 +202,24 @@ function LinkField({ id, field, value, onChange }: { id: string; field: Field; v
               </span>
             </MultiSelectItem>
           ))}
+          {showCreate ? (
+            <MultiSelectItem
+              value={CREATE_VALUE}
+              textValue={createLabel}
+              keywords={[requested, requestedId]}
+              onSelect={createFromQuery}
+              disabled={create.isPending}
+            >
+              <span className="flex min-w-0 items-center gap-1.5">
+                <span
+                  aria-hidden="true"
+                  className="size-1.5 shrink-0 rounded-full"
+                  style={{ backgroundColor: typeColor(field.linkType) }}
+                />
+                <span className="min-w-0 break-words">{createLabel}</span>
+              </span>
+            </MultiSelectItem>
+          ) : null}
           <MultiSelectEmpty>{t("palette.empty")}</MultiSelectEmpty>
         </MultiSelectList>
       </MultiSelectContent>
@@ -83,6 +231,7 @@ function ListField({ id, field, value, onChange }: { id: string; field: Field; v
   const t = useT();
   const items = linkItems(value);
   const [draft, setDraft] = useState("");
+  const draftRef = useRef<HTMLTextAreaElement>(null);
   const label = t(`field.${field.key}` as TranslationKey);
 
   const update = (index: number, next: string) => onChange(items.map((item, i) => (i === index ? next : item)));
@@ -92,24 +241,31 @@ function ListField({ id, field, value, onChange }: { id: string; field: Field; v
     setDraft("");
     if (!next || items.includes(next)) return;
     onChange([...items, next]);
+    requestAnimationFrame(() => draftRef.current?.focus());
   };
 
   return (
     <div className="group/list flex flex-col">
       {items.map((item, index) => (
         // biome-ignore lint/suspicious/noArrayIndexKey: list items are positional while being edited.
-        <div key={index} className="group flex h-[26px] items-center gap-1">
-          <Input
-            aria-label={label}
+        <div key={index} className="group flex items-start gap-1">
+          <AutoGrowTextarea
+            ariaLabel={label}
             value={item}
             onChange={(next) => update(index, next)}
-            classNames={{ root: "flex-1", field: ITEM_FIELD_CLASS, input: INPUT_CLASS }}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter") return;
+              event.preventDefault();
+              event.currentTarget.blur();
+              draftRef.current?.focus();
+            }}
+            className="flex-1"
           />
           <button
             type="button"
             aria-label={`${t("editor.delete")} ${item}`}
             onClick={() => remove(index)}
-            className="grid size-5 shrink-0 place-items-center rounded-full text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-foreground focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring group-hover:opacity-100"
+            className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-foreground focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring group-hover:opacity-100"
           >
             <X className="size-3" aria-hidden="true" />
           </button>
@@ -119,19 +275,20 @@ function ListField({ id, field, value, onChange }: { id: string; field: Field; v
           hover or focus (or while it holds a draft) and stays in the tab order. */}
       <div
         className={cn(
-          "flex items-center gap-1",
+          "flex items-start gap-1",
           items.length > 0
             ? cn(
-                "h-[26px] transition-opacity duration-150 group-focus-within/list:opacity-100 group-hover/list:opacity-100",
+                "min-h-[26px] transition-opacity duration-150 group-focus-within/list:opacity-100 group-hover/list:opacity-100",
                 draft ? "opacity-100" : "opacity-0",
               )
-            : "h-7",
+            : "min-h-7",
         )}
       >
-        <Input
+        <AutoGrowTextarea
+          textareaRef={draftRef}
           id={id}
           value={draft}
-          aria-label={`${t("editor.addItem")} ${label}`}
+          ariaLabel={`${t("editor.addItem")} ${label}`}
           placeholder={items.length > 0 ? t("editor.addItem") : "—"}
           onChange={setDraft}
           onKeyDown={(event) => {
@@ -143,18 +300,14 @@ function ListField({ id, field, value, onChange }: { id: string; field: Field; v
               remove(items.length - 1);
             }
           }}
-          classNames={{
-            root: "flex-1",
-            field: items.length > 0 ? `${ITEM_FIELD_CLASS} border-dashed` : FIELD_CLASS,
-            input: items.length > 0 ? INPUT_CLASS : `${INPUT_CLASS} ${EMPTY_INPUT_CLASS}`,
-          }}
+          className={cn("flex-1", items.length > 0 && "border-dashed", items.length === 0 && EMPTY_INPUT_CLASS)}
         />
         <button
           type="button"
           aria-label={t("editor.addItem")}
           onClick={add}
           disabled={!draft.trim()}
-          className="grid size-5 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
+          className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
         >
           <Plus className="size-3" aria-hidden="true" />
         </button>
@@ -235,12 +388,161 @@ function TagsField({ id, field, value, onChange }: { id: string; field: Field; v
   );
 }
 
+function StackLayerRow({
+  layer,
+  title,
+  ids,
+  techs,
+  onIdsChange,
+  onRemove,
+}: {
+  layer: string;
+  title: string;
+  ids: string[];
+  techs: NoteSummary[] | undefined;
+  onIdsChange: (ids: string[]) => void;
+  onRemove: () => void;
+}) {
+  const t = useT();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [query, setQuery] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const addValue = (nextId: string) => {
+    if (ids.includes(nextId)) return;
+    onIdsChange([...ids, nextId]);
+  };
+
+  const create = useMutation({
+    mutationFn: ({ title: nextTitle, id: nextId }: { title: string; id: string }) =>
+      createNote({
+        id: nextId,
+        data: TEMPLATES.tech({ title: nextTitle, layer }),
+        body: `# ${nextTitle}\n`,
+      }),
+    onSuccess: (note, input) => {
+      void queryClient.invalidateQueries({ queryKey: ["notes"] });
+      addValue(note.id);
+      toast.success(t("field.created", { title: input.title }), {
+        label: t("field.open"),
+        onClick: () => navigate(`/notes/${encodeURIComponent(note.id)}`),
+      });
+      requestAnimationFrame(() => inputRef.current?.focus());
+    },
+    onError: (error, input) => {
+      if (error instanceof ApiRequestError && error.body.error === "exists") {
+        addValue(input.id);
+        void queryClient.invalidateQueries({ queryKey: ["notes"] });
+      } else {
+        toast.error(t("field.createFailed", { title: input.title }));
+      }
+      requestAnimationFrame(() => inputRef.current?.focus());
+    },
+  });
+
+  const requested = query.trim();
+  const requestedId = slugify(requested);
+  const exactMatch = (techs ?? []).some(
+    (tech) => tech.id.toLowerCase() === requested.toLowerCase() || (tech.title || tech.id).toLowerCase() === requested.toLowerCase(),
+  );
+  const showCreate = Boolean(requested && requestedId && !exactMatch);
+  const createLabel = t("field.create", { title: requested });
+
+  const createFromQuery = () => {
+    const nextTitle = query.trim();
+    const nextId = slugify(nextTitle);
+    if (!nextTitle || !nextId) return;
+    const existing = (techs ?? []).find((tech) => tech.id === nextId);
+    if (existing) {
+      addValue(existing.id);
+      setQuery("");
+      requestAnimationFrame(() => inputRef.current?.focus());
+      return;
+    }
+    create.mutate({ title: nextTitle, id: nextId });
+  };
+
+  return (
+    <div className="flex items-start gap-1">
+      <span className="mt-1.5 w-20 shrink-0 truncate font-mono text-[11px] text-muted-foreground">{title}</span>
+      <div className="min-w-0 flex-1">
+        <MultiSelect
+          value={ids}
+          query={query}
+          onQueryChange={setQuery}
+          onValueChange={(next) => {
+            const plain = next.filter((item) => !isCreateValue(item));
+            if (plain.length !== next.length) return;
+            onIdsChange(plain);
+          }}
+        >
+          <MultiSelectTrigger className={cn(TRIGGER_CLASS, "min-w-0")}>
+            <MultiSelectValue placeholder="—" chipClassName={CHIP_CLASS}>
+              {(item) => {
+                const tech = techs?.find((note) => note.id === item);
+                const missing = techs !== undefined && tech === undefined;
+                const color = missing ? "var(--destructive)" : "var(--type-tech)";
+                return (
+                  <span
+                    className="flex min-h-5 min-w-0 max-w-full items-start gap-1.5 rounded-md px-1.5 py-0 font-mono"
+                    style={tintStyle(color)}
+                  >
+                    <span aria-hidden="true" className="mt-2 size-1.5 shrink-0 rounded-full bg-current" />
+                    <span className="min-w-0 break-all">{item}</span>
+                  </span>
+                );
+              }}
+            </MultiSelectValue>
+            <MultiSelectInput ref={inputRef} aria-label={`${t("field.stack")} ${title}`} className={SEARCH_INPUT_CLASS} />
+          </MultiSelectTrigger>
+          <MultiSelectContent>
+            <MultiSelectList>
+              {(techs ?? []).map((tech) => (
+                <MultiSelectItem key={tech.id} value={tech.id} keywords={[tech.title]}>
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full" style={{ backgroundColor: "var(--type-tech)" }} />
+                    <span className="truncate">{tech.title || tech.id}</span>
+                    <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{tech.id}</span>
+                  </span>
+                </MultiSelectItem>
+              ))}
+              {showCreate ? (
+                <MultiSelectItem
+                  value={CREATE_VALUE}
+                  textValue={createLabel}
+                  keywords={[requested, requestedId]}
+                  onSelect={createFromQuery}
+                  disabled={create.isPending}
+                >
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full" style={{ backgroundColor: "var(--type-tech)" }} />
+                    <span className="min-w-0 break-words">{createLabel}</span>
+                  </span>
+                </MultiSelectItem>
+              ) : null}
+              <MultiSelectEmpty>{t("palette.empty")}</MultiSelectEmpty>
+            </MultiSelectList>
+          </MultiSelectContent>
+        </MultiSelect>
+      </div>
+      <button
+        type="button"
+        aria-label={`${t("editor.delete")} ${title}`}
+        onClick={onRemove}
+        className="mt-1 grid size-6 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
+      >
+        <X className="size-3" aria-hidden="true" />
+      </button>
+    </div>
+  );
+}
+
 function StackField({ value, onChange }: { value: unknown; onChange: (value: unknown) => void }) {
   const t = useT();
   const layers = useLayers();
   const techs = useNotes({ type: "tech" });
   const stack = value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, string[]>) : {};
-  const label = t("field.stack");
 
   const setLayer = (layer: string, next: string[]) => onChange({ ...stack, [layer]: next });
   const addLayer = (layer: string) => {
@@ -252,61 +554,19 @@ function StackField({ value, onChange }: { value: unknown; onChange: (value: unk
   return (
     <div className="flex flex-col gap-1">
       {Object.entries(stack).map(([layer, ids]) => (
-        <div key={layer} className="flex items-start gap-1">
-          <span className="mt-1.5 w-20 shrink-0 truncate font-mono text-[11px] text-muted-foreground">
-            {layers.data?.find((item) => item.id === layer)?.title ?? layer}
-          </span>
-          <div className="min-w-0 flex-1">
-            <MultiSelect value={Array.isArray(ids) ? ids : []} onValueChange={(next) => setLayer(layer, next)}>
-              <MultiSelectTrigger className={cn(TRIGGER_CLASS, "min-w-0")}>
-                <MultiSelectValue placeholder="—" chipClassName={CHIP_CLASS}>
-                  {(item) => {
-                    const tech = techs.data?.find((note) => note.id === item);
-                    const missing = techs.data !== undefined && tech === undefined;
-                    const color = missing ? "var(--destructive)" : "var(--type-tech)";
-                    return (
-                      <span className="flex h-5 items-center gap-1.5 rounded-md px-1.5 font-mono" style={tintStyle(color)}>
-                        <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-current" />
-                        {item}
-                      </span>
-                    );
-                  }}
-                </MultiSelectValue>
-                <MultiSelectInput aria-label={`${label} ${layer}`} className={SEARCH_INPUT_CLASS} />
-              </MultiSelectTrigger>
-              <MultiSelectContent>
-                <MultiSelectList>
-                  {(techs.data ?? []).map((tech) => (
-                    <MultiSelectItem key={tech.id} value={tech.id} keywords={[tech.title]}>
-                      <span className="flex min-w-0 items-center gap-1.5">
-                        <span
-                          aria-hidden="true"
-                          className="size-1.5 shrink-0 rounded-full"
-                          style={{ backgroundColor: "var(--type-tech)" }}
-                        />
-                        <span className="truncate">{tech.title || tech.id}</span>
-                        <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{tech.id}</span>
-                      </span>
-                    </MultiSelectItem>
-                  ))}
-                  <MultiSelectEmpty>{t("palette.empty")}</MultiSelectEmpty>
-                </MultiSelectList>
-              </MultiSelectContent>
-            </MultiSelect>
-          </div>
-          <button
-            type="button"
-            aria-label={`${t("editor.delete")} ${layer}`}
-            onClick={() => {
-              const next = { ...stack };
-              delete next[layer];
-              onChange(next);
-            }}
-            className="mt-1 grid size-6 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
-          >
-            <X className="size-3" aria-hidden="true" />
-          </button>
-        </div>
+        <StackLayerRow
+          key={layer}
+          layer={layer}
+          title={layers.data?.find((item) => item.id === layer)?.title || layer}
+          ids={Array.isArray(ids) ? ids : []}
+          techs={techs.data}
+          onIdsChange={(next) => setLayer(layer, next)}
+          onRemove={() => {
+            const next = { ...stack };
+            delete next[layer];
+            onChange(next);
+          }}
+        />
       ))}
       {remaining.length > 0 ? (
         <div className="w-40">

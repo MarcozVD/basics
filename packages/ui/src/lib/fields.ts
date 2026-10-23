@@ -56,7 +56,7 @@ export const FIELDS: Record<NoteType, Field[]> = {
 
 export type TemplateOptions = {
   title?: string;
-  layer?: string;
+  layer?: string | string[];
 };
 
 export const TEMPLATES: Record<NoteType, (opts?: TemplateOptions) => NoteData> = {
@@ -72,9 +72,9 @@ export const TEMPLATES: Record<NoteType, (opts?: TemplateOptions) => NoteData> =
     layer: opts.layer ?? "backend",
     tags: [],
     source: "manual",
-    use_when: ["TODO"],
-    avoid_when: ["TODO"],
-    performs_best: ["TODO"],
+    use_when: [],
+    avoid_when: [],
+    performs_best: [],
     related: [],
     practices: [],
     checks: [],
@@ -82,7 +82,7 @@ export const TEMPLATES: Record<NoteType, (opts?: TemplateOptions) => NoteData> =
   }),
   practice: (opts = {}) => ({
     type: "practice",
-    applies_to: ["TODO"],
+    applies_to: [],
     tags: [],
     source: "manual",
     ...(opts.title ? { title: opts.title } : {}),
@@ -90,14 +90,14 @@ export const TEMPLATES: Record<NoteType, (opts?: TemplateOptions) => NoteData> =
   check: (opts = {}) => ({
     type: "check",
     kind: "test",
-    applies_to: ["TODO"],
+    applies_to: [],
     tags: [],
     source: "manual",
     ...(opts.title ? { title: opts.title } : {}),
   }),
   profile: (opts = {}) => ({
     type: "profile",
-    use_when: ["TODO"],
+    use_when: [],
     stack: {},
     tags: [],
     source: "manual",
