@@ -313,7 +313,7 @@ No options.
 
 #### `basics inbox approve-all`
 
-approve every proposal from a pack (optionally a specific version)
+approve pending proposals (all, or only a pack/version/agent)
 
 ```
 basics inbox approve-all [options]
@@ -321,8 +321,9 @@ basics inbox approve-all [options]
 
 | Flag | Description | Default |
 | --- | --- | --- |
-| `--pack <name>` | pack name, e.g. python-api (required) | — |
+| `--pack <name>` | pack name, e.g. python-api | — |
 | `--version <version>` | only proposals from this pack version | — |
+| `--agent <name>` | only proposals from this agent | — |
 
 #### `basics inbox reject`
 

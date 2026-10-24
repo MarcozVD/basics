@@ -1,4 +1,4 @@
-import type { NoteData } from "@marcozvd/basics-core";
+import type { ApproveAllRequest, NoteData } from "@marcozvd/basics-core";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Inbox as InboxIcon, Package } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
@@ -7,6 +7,7 @@ import { useMatch, useNavigate, useSearchParams } from "react-router";
 import { ApprovalCard } from "@/components/agents/approval-card";
 import { AnimatedNumber } from "@/components/motion/animated-number";
 import { Button } from "@/components/motion/button/base";
+import { CenterMorphModal, CenterMorphModalContent } from "@/components/motion/center-morph-modal";
 import { Tabs, TabsList, TabsTrigger } from "@/components/motion/tabs";
 import { Page } from "@/components/page";
 import { issuesToErrors, ProposalDetail, ProposalEditModal } from "@/components/proposal-detail";
@@ -22,6 +23,8 @@ import { useReturnFocus } from "@/lib/return-focus";
 import { toast } from "@/lib/toast";
 
 type Filter = "all" | "create" | "update";
+type ApproveAllMode = "pack" | "header";
+type ApproveAllVariables = { request: ApproveAllRequest; mode: ApproveAllMode };
 
 const README_PROPOSE = "https://marcozvd.github.io/basics/guide/mcp-clients.html";
 const WIDE_QUERY = "(min-width: 1280px)";
@@ -68,14 +71,17 @@ export function InboxPage() {
   const [armedPack, setArmedPack] = useState<string | null>(null);
   const packTimer = useRef<number | undefined>(undefined);
   const [editOpen, setEditOpen] = useState(false);
+  const [approveAllOpen, setApproveAllOpen] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const editButtonRef = useRef<HTMLButtonElement>(null);
+  const approveAllButtonRef = useRef<HTMLButtonElement>(null);
   const lastParam = useRef<string | null>(null);
   const pendingParam = useRef<string | null>(null);
   const pParam = searchParams.get("p");
   const packFilter = searchParams.get("pack");
 
   useReturnFocus(editOpen, editButtonRef);
+  useReturnFocus(approveAllOpen, approveAllButtonRef);
 
   const proposals = useMemo(
     () => [...(inbox.data ?? [])].sort((a, b) => createdTime(b.meta.created) - createdTime(a.meta.created)),
@@ -98,6 +104,14 @@ export function InboxPage() {
     () => (filter === "all" ? packFiltered : packFiltered.filter((proposal) => proposal.meta.action === filter)),
     [filter, packFiltered],
   );
+  const approveAllCount = visible.length;
+  const showApproveAll = approveAllCount >= 2;
+  const approveAllRequest = (): ApproveAllRequest => {
+    const request: ApproveAllRequest = {};
+    if (packFilter) request.pack = packFilter;
+    if (filter !== "all") request.action = filter;
+    return request;
+  };
 
   const packGroups = useMemo(
     () =>
@@ -188,6 +202,10 @@ export function InboxPage() {
         toast.error(t("proposal.gone"));
         return;
       }
+      if (error instanceof ApiRequestError && error.status === 409) {
+        toast.error(t("inbox.approveConflict"));
+        return;
+      }
       toast.error(t("inbox.approveFailed"));
     },
   });
@@ -208,6 +226,10 @@ export function InboxPage() {
       }
       if (error instanceof ApiRequestError && error.status === 400) {
         setErrors(issuesToErrors(error.body.issues));
+        return;
+      }
+      if (error instanceof ApiRequestError && error.status === 409) {
+        toast.error(t("inbox.approveConflict"));
         return;
       }
       toast.error(t("proposal.approveFailed"));
@@ -231,10 +253,16 @@ export function InboxPage() {
   });
 
   const approveAll = useMutation({
-    mutationFn: (target: { pack: string; version?: string }) => approveAllProposals(target),
-    onSuccess: (data) => {
+    mutationFn: ({ request }: ApproveAllVariables) => approveAllProposals(request),
+    onSuccess: (data, variables) => {
       invalidate();
-      toast.success(t("inbox.approveAllDone", { count: data.approved.length }));
+      if (variables.mode === "pack" && data.failed.length === 0) {
+        toast.success(t("inbox.approveAllDone", { count: data.approved.length }));
+        return;
+      }
+      const message = t("inbox.approveAllResult", { approved: data.approved.length, kept: data.failed.length });
+      if (data.approved.length) toast.success(message);
+      else toast.error(message);
     },
     onError: () => toast.error(t("inbox.approveAllFailed")),
   });
@@ -259,7 +287,7 @@ export function InboxPage() {
     if (armedPack === key) {
       window.clearTimeout(packTimer.current);
       setArmedPack(null);
-      approveAll.mutate({ pack, version });
+      approveAll.mutate({ request: { pack, version }, mode: "pack" });
       return;
     }
     window.clearTimeout(packTimer.current);
@@ -344,7 +372,10 @@ export function InboxPage() {
     packGroups.length > 0 ? (
       <div className="flex flex-col gap-1.5">
         {packGroups.map((group) => {
-          const busy = approveAll.isPending && approveAll.variables?.pack === group.name && approveAll.variables?.version === group.version;
+          const busy =
+            approveAll.isPending &&
+            approveAll.variables?.request.pack === group.name &&
+            approveAll.variables?.request.version === group.version;
           const confirms = armedPack === group.from;
           return (
             <div
@@ -434,22 +465,39 @@ export function InboxPage() {
           </span>
         </div>
 
-        <Tabs value={filter} onValueChange={(value) => setFilter(value as Filter)} variant="segment">
-          <TabsList>
-            {(
-              [
-                ["all", t("type.all"), counts.all],
-                ["create", t("proposal.action.create"), counts.create],
-                ["update", t("proposal.action.update"), counts.update],
-              ] as const
-            ).map(([value, label, count]) => (
-              <TabsTrigger key={value} value={value} className="gap-1.5 px-3 py-1 text-xs">
-                {label}
-                <span className="font-mono text-[11px]">{count}</span>
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
+        <div className="flex flex-wrap items-center gap-2">
+          {showApproveAll ? (
+            <Button
+              ref={approveAllButtonRef}
+              variant="primary"
+              size="sm"
+              pressScale={0.97}
+              disabled={approveAll.isPending}
+              aria-haspopup="dialog"
+              aria-expanded={approveAllOpen}
+              onClick={() => setApproveAllOpen(true)}
+              className="h-8 shrink-0"
+            >
+              {t("inbox.approveAllCount", { count: approveAllCount })}
+            </Button>
+          ) : null}
+          <Tabs value={filter} onValueChange={(value) => setFilter(value as Filter)} variant="segment">
+            <TabsList>
+              {(
+                [
+                  ["all", t("type.all"), counts.all],
+                  ["create", t("proposal.action.create"), counts.create],
+                  ["update", t("proposal.action.update"), counts.update],
+                ] as const
+              ).map(([value, label, count]) => (
+                <TabsTrigger key={value} value={value} className="gap-1.5 px-3 py-1 text-xs">
+                  {label}
+                  <span className="font-mono text-[11px]">{count}</span>
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+        </div>
       </header>
 
       <div className="mt-4 grid min-h-0 gap-4 min-[1280px]:h-[calc(100dvh-14rem)] min-[1280px]:grid-cols-[420px_minmax(0,1fr)]">
@@ -587,6 +635,38 @@ export function InboxPage() {
           onSubmit={(data, body) => editApprove.mutate({ id: current.id, data, body })}
         />
       ) : null}
+
+      <CenterMorphModal open={approveAllOpen} onOpenChange={setApproveAllOpen}>
+        <CenterMorphModalContent
+          ariaLabel={t("inbox.approveAllTitle")}
+          ariaDescribedBy="inbox-approve-all-prompt"
+          closeButtonLabel={t("proposal.cancel")}
+          showCloseButton={false}
+          className="max-w-md p-6"
+        >
+          <h2 className="text-base font-semibold tracking-tight">{t("inbox.approveAllTitle")}</h2>
+          <p id="inbox-approve-all-prompt" className="mt-2 text-sm leading-6 text-muted-foreground">
+            {t("inbox.approveAllPrompt", { count: approveAllCount })}
+          </p>
+          <div className="mt-5 flex items-center justify-end gap-2">
+            <Button variant="ghost" size="sm" pressScale={0.97} onClick={() => setApproveAllOpen(false)}>
+              {t("proposal.cancel")}
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              pressScale={0.97}
+              disabled={approveAll.isPending}
+              onClick={() => {
+                setApproveAllOpen(false);
+                approveAll.mutate({ request: approveAllRequest(), mode: "header" });
+              }}
+            >
+              {t("inbox.approveAll")}
+            </Button>
+          </div>
+        </CenterMorphModalContent>
+      </CenterMorphModal>
     </Page>
   );
 }

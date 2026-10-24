@@ -76,7 +76,21 @@ const packAddRequestSchema = z.object({
   path: z.string().optional(),
   lang: z.enum(["en", "es"]).optional(),
 });
-const approveAllRequestSchema = z.object({ pack: z.string().min(1), version: z.string().min(1).optional() });
+const approveAllRequestSchema = z
+  .object({
+    pack: z.string().min(1).optional(),
+    version: z.string().min(1).optional(),
+    agent: z.string().min(1).optional(),
+    action: z.enum(["create", "update"]).optional(),
+  })
+  .refine((value) => !(value.pack && value.agent), {
+    message: "pack and agent filters are mutually exclusive",
+    path: ["agent"],
+  })
+  .refine((value) => !value.version || Boolean(value.pack), {
+    message: "a version filter requires a pack",
+    path: ["version"],
+  });
 const connectRequestSchema = z.object({
   clients: z.array(z.enum(CONNECT_CLIENTS)).optional(),
   transport: z.enum(["stdio", "http"]).optional(),
@@ -362,8 +376,9 @@ export function createApp(opts: { root: string; uiDir?: string; events?: EventHu
   });
 
   app.post("/api/inbox/approve-all", async (c) => {
-    const body = approveAllRequestSchema.parse(await c.req.json());
-    return c.json({ approved: vault().approveAll(body) } satisfies ApproveAllResponse);
+    const raw = await c.req.text();
+    const body = approveAllRequestSchema.parse(raw.trim() ? JSON.parse(raw) : {});
+    return c.json(vault().approveMany(body) satisfies ApproveAllResponse);
   });
 
   if (opts.events) {

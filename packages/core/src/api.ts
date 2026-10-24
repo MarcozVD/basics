@@ -122,12 +122,20 @@ export interface PackAddResult {
 }
 
 export interface ApproveAllRequest {
-  pack: string;
+  pack?: string;
   version?: string;
+  agent?: string;
+  action?: "create" | "update";
+}
+
+export interface ApproveAllFailure {
+  id: string;
+  error: string;
 }
 
 export interface ApproveAllResponse {
   approved: string[];
+  failed: ApproveAllFailure[];
 }
 
 export interface RecommendRequest {

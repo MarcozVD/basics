@@ -1239,12 +1239,16 @@ export function buildProgram(): Command {
   inbox.command("approve <id>").action((id: string) => console.log(`approved -> ${load().approve(id)}`));
   inbox
     .command("approve-all")
-    .description("approve every proposal from a pack (optionally a specific version)")
-    .requiredOption("--pack <name>", "pack name, e.g. python-api")
+    .description("approve pending proposals (all, or only a pack/version/agent)")
+    .option("--pack <name>", "pack name, e.g. python-api")
     .option("--version <version>", "only proposals from this pack version")
-    .action(({ pack, version }: { pack: string; version?: string }) => {
-      const approved = load().approveAll({ pack, version });
+    .option("--agent <name>", "only proposals from this agent")
+    .action(({ pack, version, agent }: { pack?: string; version?: string; agent?: string }) => {
+      const { approved, failed } = load().approveMany({ pack, version, agent });
       console.log(approved.length ? `approved ${approved.length}: ${approved.join(", ")}` : "no matching proposals");
+      if (failed.length) {
+        console.log(`failed ${failed.length}: ${failed.map((item) => `${item.id} (${item.error})`).join(", ")}`);
+      }
     });
   inbox.command("reject <id>").action((id: string) => {
     load().reject(id);

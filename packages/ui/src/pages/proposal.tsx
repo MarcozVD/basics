@@ -67,6 +67,10 @@ export function ProposalPage() {
         setGone(true);
         return;
       }
+      if (error instanceof ApiRequestError && error.status === 409) {
+        toast.error(t("inbox.approveConflict"));
+        return;
+      }
       toast.error(t("proposal.approveFailed"));
     },
   });
@@ -87,6 +91,10 @@ export function ProposalPage() {
       }
       if (error instanceof ApiRequestError && error.status === 400) {
         setErrors(issuesToErrors(error.body.issues));
+        return;
+      }
+      if (error instanceof ApiRequestError && error.status === 409) {
+        toast.error(t("inbox.approveConflict"));
         return;
       }
       toast.error(t("proposal.approveFailed"));

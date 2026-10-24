@@ -648,6 +648,10 @@ export function HomePage() {
         toast.error(t("proposal.gone"));
         return;
       }
+      if (error instanceof ApiRequestError && error.status === 409) {
+        toast.error(t("inbox.approveConflict"));
+        return;
+      }
       toast.error(t("inbox.approveFailed"));
     },
   });

@@ -35,8 +35,9 @@ const markdown = renderContext(vault, ["fastapi", "postgresql"]);
 - **Vault** — `Vault.load(dir)` reads every note and validates it; `vault.get(id)`, `vault.byType(type)`,
   `vault.techInLayer(layer)` and `vault.getBacklinks(id)` query it. `vault.writeNote(id, data, body, { expectedHash })`
   writes atomically and throws `ConflictError` when the file changed on disk; `deleteNote` and `reload` complete the cycle.
-- **Inbox** — `vault.propose(...)`, `listProposals()`, `approve(id)`, `approveAll({ pack, version })` and `reject(id)`
-  implement the agent-proposal workflow.
+- **Inbox** — `vault.propose(...)`, `listProposals()`, `approve(id)`, `approveMany(filter)`, the deprecated
+  `approveAll({ pack, version })` and `reject(id)` implement the agent-proposal workflow. `approveMany` reports
+  approved ids and per-proposal failures instead of aborting the whole batch.
 - **Search and navigation** — `search(vault, query)`, `listNotes(vault, { type, layer })`, `buildGraph(vault)`
   and `vaultStats(vault)`.
 - **Recommendation** — `recommend(vault, description, opts)` ranks candidates per layer with a score breakdown;

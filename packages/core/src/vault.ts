@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import matter from "gray-matter";
+import { ZodError } from "zod";
 import { atomicWrite, sha256 } from "./fsutil.js";
 import {
   type Note,
@@ -38,6 +39,13 @@ function walk(dir: string): string[] {
     if (e.isDirectory()) return e.name.startsWith(".") ? [] : walk(full);
     return e.name.endsWith(".md") ? [full] : [];
   });
+}
+
+function describeError(error: unknown): string {
+  if (error instanceof ZodError) {
+    return error.issues.map((issue) => `${issue.path.join(".") || "frontmatter"}: ${issue.message}`).join("; ");
+  }
+  return error instanceof Error ? error.message : String(error);
 }
 
 function frontmatterRefs(data: NoteData): string[] {
@@ -92,8 +100,9 @@ export class ConflictError extends Error {
     readonly path: string,
     readonly expectedHash: string,
     readonly actualHash: string,
+    message = `note changed on disk since it was read: ${path}`,
   ) {
-    super(`note changed on disk since it was read: ${path}`);
+    super(message);
     this.name = "ConflictError";
   }
 }
@@ -112,6 +121,19 @@ export class VaultNotFoundError extends Error {
     super(`Vault not found at ${root}`);
     this.name = "VaultNotFoundError";
   }
+}
+
+/** Optional narrowing for a bulk approval. With no fields, every proposal is approved. */
+export interface ApproveAllFilter {
+  pack?: string;
+  version?: string;
+  agent?: string;
+  action?: "create" | "update";
+}
+
+export interface ApproveAllResult {
+  approved: string[];
+  failed: { id: string; error: string }[];
 }
 
 export class Vault {
@@ -222,26 +244,52 @@ export class Vault {
 
   // ---- Inbox: agent proposals awaiting human review ----
 
-  propose(id: string, data: NoteData, body: string, meta: Omit<ProposalMeta, "action" | "created">): Proposal {
+  propose(id: string, data: NoteData, body: string, meta: Omit<ProposalMeta, "action" | "created" | "base_hash">): Proposal {
     const parsed = noteSchema.parse(data);
     const slug = slugify(id);
-    const action = this.get(slug) ? "update" : "create";
-    const proposal: ProposalMeta = { ...meta, action, created: new Date().toISOString() };
+    const existing = this.get(slug);
+    const action = existing ? "update" : "create";
+    const proposal: ProposalMeta = {
+      ...meta,
+      ...(existing ? { base_hash: existing.hash } : {}),
+      action,
+      created: new Date().toISOString(),
+    };
     const file = path.join(this.root, INBOX_DIR, `${slug}.md`);
     fs.mkdirSync(path.dirname(file), { recursive: true });
     atomicWrite(file, serializeNote({ ...parsed, proposal }, body));
     return { id: slug, path: file, meta: proposal, data: parsed, body };
   }
 
+  /** Read every inbox file, keeping invalid frontmatter as a reported failure. */
+  private inboxEntries(): { proposals: Proposal[]; invalid: { id: string; error: string }[] } {
+    const proposals: Proposal[] = [];
+    const invalid: { id: string; error: string }[] = [];
+    for (const file of walk(path.join(this.root, INBOX_DIR))) {
+      const id = slugify(path.basename(file, ".md"));
+      try {
+        const { data, content } = matter(fs.readFileSync(file, "utf8"));
+        const { proposal, ...rest } = data;
+        const meta = proposalMetaSchema.safeParse(proposal);
+        if (!meta.success) {
+          invalid.push({ id, error: `invalid proposal frontmatter: ${describeError(meta.error)}` });
+          continue;
+        }
+        const note = noteSchema.safeParse(rest);
+        if (!note.success) {
+          invalid.push({ id, error: `invalid note frontmatter: ${describeError(note.error)}` });
+          continue;
+        }
+        proposals.push({ id, path: file, meta: meta.data, data: note.data, body: content.trim() });
+      } catch (error) {
+        invalid.push({ id, error: `unreadable proposal: ${describeError(error)}` });
+      }
+    }
+    return { proposals, invalid };
+  }
+
   listProposals(): Proposal[] {
-    return walk(path.join(this.root, INBOX_DIR)).flatMap((file) => {
-      const { data, content } = matter(fs.readFileSync(file, "utf8"));
-      const { proposal, ...rest } = data;
-      const meta = proposalMetaSchema.safeParse(proposal);
-      const note = noteSchema.safeParse(rest);
-      if (!meta.success || !note.success) return [];
-      return [{ id: slugify(path.basename(file, ".md")), path: file, meta: meta.data, data: note.data, body: content.trim() }];
-    });
+    return this.inboxEntries().proposals;
   }
 
   getProposal(id: string): Proposal | undefined {
@@ -252,7 +300,20 @@ export class Vault {
   private acceptProposal(p: Proposal, override: { data?: NoteData; body?: string } = {}, reload = true): string {
     const source = p.meta.proposed_by.startsWith("pack:") ? p.meta.proposed_by : `agent:${p.meta.proposed_by}`;
     const data = { ...(override.data ?? p.data), source };
-    const file = this.writeNote(p.id, data, override.body ?? p.body, { reload });
+    let file: string;
+    try {
+      file = this.writeNote(p.id, data, override.body ?? p.body, { expectedHash: p.meta.base_hash, reload });
+    } catch (error) {
+      if (error instanceof ConflictError) {
+        throw new ConflictError(
+          error.path,
+          error.expectedHash,
+          error.actualHash,
+          `note "${p.id}" changed since this proposal was created; review the note and try again`,
+        );
+      }
+      throw error;
+    }
     fs.rmSync(p.path);
     return file;
   }
@@ -263,6 +324,10 @@ export class Vault {
     return this.acceptProposal(p, override);
   }
 
+  /**
+   * Approve every proposal from a pack (optionally a single version).
+   * @deprecated Use {@link approveMany} to get per-proposal successes and failures.
+   */
   approveAll(filter: { pack: string; version?: string }): string[] {
     const prefix = `pack:${filter.pack}@`;
     const exact = filter.version === undefined ? undefined : `${prefix}${filter.version}`;
@@ -272,6 +337,37 @@ export class Vault {
     for (const p of proposals) this.acceptProposal(p, {}, false);
     if (proposals.length) this.reload();
     return proposals.map((p) => p.id);
+  }
+
+  approveMany(filter: ApproveAllFilter = {}): ApproveAllResult {
+    if (filter.version && !filter.pack) throw new Error("a version filter requires a pack");
+    if (filter.pack && filter.agent) throw new Error("pack and agent filters are mutually exclusive");
+    const { proposals, invalid } = this.inboxEntries();
+    let selected = proposals;
+    if (filter.pack) {
+      const prefix = `pack:${filter.pack}@`;
+      const exact = filter.version === undefined ? undefined : `${prefix}${filter.version}`;
+      selected = selected.filter((p) => (exact === undefined ? p.meta.proposed_by.startsWith(prefix) : p.meta.proposed_by === exact));
+    }
+    if (filter.agent) selected = selected.filter((p) => p.meta.proposed_by === filter.agent);
+    if (filter.action) selected = selected.filter((p) => p.meta.action === filter.action);
+
+    const result: ApproveAllResult = {
+      approved: [],
+      // Unfiltered approval owns the whole inbox, including files that cannot
+      // be parsed. A filtered approval only reports the proposals it selected.
+      failed: filter.pack || filter.agent || filter.action ? [] : invalid,
+    };
+    for (const p of selected) {
+      try {
+        this.acceptProposal(p, {}, false);
+        result.approved.push(p.id);
+      } catch (error) {
+        result.failed.push({ id: p.id, error: describeError(error) });
+      }
+    }
+    if (selected.length) this.reload();
+    return result;
   }
 
   reject(id: string): void {

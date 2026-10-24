@@ -131,6 +131,9 @@ export const proposalMetaSchema = z.object({
   proposed_by: z.string(),
   reason: z.string(),
   created: z.string(),
+  // Hash of the note when the proposal was created. Approval refuses to
+  // overwrite a note that changed in the meantime.
+  base_hash: z.string().optional(),
 });
 export type ProposalMeta = z.infer<typeof proposalMetaSchema>;
 

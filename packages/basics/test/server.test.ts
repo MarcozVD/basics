@@ -174,6 +174,29 @@ test("rejects a non-local Origin header on writes", async () => {
   assert.equal(res.status, 403);
 });
 
+test("POST /api/inbox/:id/approve with a changed note returns 409 and keeps the proposal", async () => {
+  const v = tempVault();
+  const note = v.get("fastapi");
+  assert.ok(note);
+  v.propose("fastapi", note.data as NoteData, "# Proposed", { proposed_by: "test", reason: "test" });
+  v.writeNote("fastapi", note.data as NoteData, `${note.body}\nlocal edit after proposal`);
+
+  const app = createApp({ root: v.root });
+  const res = await app.request("/api/inbox/fastapi/approve", jsonInit({}));
+  assert.equal(res.status, 409);
+  const body = (await res.json()) as { error: string; message: string; actualHash?: string };
+  assert.equal(body.error, "conflict");
+  assert.match(body.message, /changed since this proposal was created/);
+  assert.ok(body.actualHash);
+
+  const listed = await app.request("/api/inbox", { headers: HOST });
+  const inbox = (await listed.json()) as { id: string }[];
+  assert.deepEqual(
+    inbox.map((proposal) => proposal.id),
+    ["fastapi"],
+  );
+});
+
 test("inbox lists a proposal and approves it", async () => {
   const v = tempVault();
   const note = v.get("fastapi");
