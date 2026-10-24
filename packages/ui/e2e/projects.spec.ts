@@ -126,6 +126,29 @@ test("lists projects, filters by status and selects with ↓ showing stack and c
   await expect(dialog).toContainText("FastAPI");
 });
 
+test("creates a project from Projects and selects its row", async ({ page }) => {
+  await page.goto("/projects");
+
+  // Empty state keeps the primary create action in the page header.
+  await expect(page.getByRole("heading", { name: "No projects yet", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "New project", exact: true }).click();
+
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("tab", { name: "Project", exact: true })).toHaveAttribute("aria-selected", "true");
+
+  await dialog.getByLabel("Title", { exact: true }).fill("Gamma App");
+  await expect(dialog.getByLabel("ID", { exact: true })).toHaveValue("gamma-app");
+  await dialog.getByRole("button", { name: "Create", exact: true }).click();
+
+  // Creation from Projects stays on Projects with the new row selected.
+  await expect(page).toHaveURL(/\/projects\?p=gamma-app$/);
+  const row = page.getByRole("option");
+  await expect(row).toHaveCount(1);
+  await expect(row).toContainText("Gamma App");
+  await expect(row).toHaveAttribute("aria-selected", "true");
+});
+
 test("hover over the last row does not scroll the list", async ({ page }) => {
   // Seed enough projects so the list column scrolls.
   for (let i = 1; i <= 20; i++) {

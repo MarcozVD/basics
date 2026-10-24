@@ -269,7 +269,7 @@ export const es: typeof en = {
   "projects.empty.exportBefore": "o cuando ejecutas",
   "projects.empty.exportAfter": "en un repositorio.",
   "projects.empty.hint": "Cada nota guarda el stack, las lecciones y los últimos chequeos que leen los agentes.",
-  "projects.create": "Crear nota de proyecto",
+  "projects.create": "Nuevo proyecto",
   "projects.filtered.title": "No hay proyectos coincidentes",
   "projects.filtered.description": "Prueba otro estado o búsqueda.",
   "projects.clearFilters": "Limpiar filtros",

@@ -1,6 +1,6 @@
 "use client";
 
-import type { NoteType } from "@marcozvd/basics-core";
+import type { NoteSummary, NoteType } from "@marcozvd/basics-core";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useId, useRef, useState } from "react";
 import { useNavigate } from "react-router";
@@ -11,7 +11,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/motion/tabs";
 import { type TranslationKey, useT } from "@/i18n";
 import { ApiRequestError, createNote } from "@/lib/api";
 import { TEMPLATES } from "@/lib/fields";
-import { useLayers } from "@/lib/queries";
+import { queryKeys, useLayers } from "@/lib/queries";
 import { useReturnFocus } from "@/lib/return-focus";
 import { slugify } from "@/lib/slug";
 import { toast } from "@/lib/toast";
@@ -24,6 +24,8 @@ type TechKind = (typeof TECH_KINDS)[number];
 interface NewNoteDetail {
   id?: string;
   type?: NoteType;
+  /** Caller that opened the dialog, so creation can return to that screen. */
+  from?: "projects";
 }
 
 interface CreateInput {
@@ -52,6 +54,7 @@ export function NewNoteDialog() {
   const titleRef = useRef<HTMLInputElement>(null);
 
   const [open, setOpen] = useState(false);
+  const [from, setFrom] = useState<NewNoteDetail["from"]>();
   const [type, setType] = useState<NoteType>("tech");
   const [title, setTitle] = useState("");
   const [id, setId] = useState("");
@@ -60,6 +63,8 @@ export function NewNoteDialog() {
   const [selectedLayers, setSelectedLayers] = useState<string[]>([]);
   const [useWhen, setUseWhen] = useState("");
   const [error, setError] = useState("");
+  // Opening before the layer query resolves must still default the tech layer.
+  const awaitingDefaultLayer = useRef(false);
   useReturnFocus(open);
 
   useEffect(() => {
@@ -83,8 +88,25 @@ export function NewNoteDialog() {
     },
     onSuccess: (note) => {
       void queryClient.invalidateQueries({ queryKey: ["notes"] });
+      if (from === "projects") {
+        // The Projects page selects `?p=` from its notes query; seed the new row
+        // so it can be selected before the invalidation refetch lands.
+        const summary: NoteSummary = {
+          id: note.id,
+          type: note.type,
+          title: note.data.title || note.id,
+          layers: note.data.type === "tech" ? [note.data.layer].flat() : [],
+          kind: note.data.type === "tech" ? note.data.kind : undefined,
+          source: note.data.source,
+          tags: note.data.tags ?? [],
+          project: note.data.type === "project" ? note.data : undefined,
+        };
+        queryClient.setQueryData<NoteSummary[]>(queryKeys.notes({}), (current) =>
+          current?.some((item) => item.id === note.id) ? current : [...(current ?? []), summary],
+        );
+      }
       setOpen(false);
-      navigate(`/notes/${encodeURIComponent(note.id)}`);
+      navigate(from === "projects" ? `/projects?p=${encodeURIComponent(note.id)}` : `/notes/${encodeURIComponent(note.id)}`);
     },
     onError: (mutationError) => {
       if (mutationError instanceof ApiRequestError && mutationError.body.error === "exists") {
@@ -106,14 +128,25 @@ export function NewNoteDialog() {
       setId(requestedId);
       setIdEdited(Boolean(requestedId));
       setKind("framework");
-      setSelectedLayers(layers.data?.[0]?.id ? [layers.data[0].id] : []);
+      const defaultLayer = layers.data?.[0]?.id;
+      awaitingDefaultLayer.current = !defaultLayer;
+      setSelectedLayers(defaultLayer ? [defaultLayer] : []);
       setUseWhen("");
       setError("");
+      setFrom(detail?.from);
       setOpen(true);
     };
     window.addEventListener("basics:new-note", onOpen);
     return () => window.removeEventListener("basics:new-note", onOpen);
   }, [layers.data]);
+
+  useEffect(() => {
+    if (!open || !awaitingDefaultLayer.current) return;
+    const first = layers.data?.[0]?.id;
+    if (!first) return;
+    awaitingDefaultLayer.current = false;
+    setSelectedLayers([first]);
+  }, [open, layers.data]);
 
   const slug = slugify(id);
   const submit = () => {

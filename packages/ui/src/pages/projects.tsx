@@ -133,6 +133,21 @@ function SectionLabel({ children }: { children: ReactNode }) {
   return <h3 className="text-[11px] font-semibold tracking-[0.05em] text-muted-foreground uppercase">{children}</h3>;
 }
 
+/** Primary create action shared by the list header and the empty state. */
+function NewProjectButton() {
+  const { t } = useI18n();
+  return (
+    <Button
+      size="sm"
+      pressScale={0.97}
+      onClick={() => window.dispatchEvent(new CustomEvent("basics:new-note", { detail: { type: "project", from: "projects" } }))}
+    >
+      <FolderKanban className="size-3.5" aria-hidden="true" />
+      {t("projects.create")}
+    </Button>
+  );
+}
+
 function StatusChip({ status }: { status: ProjectStatus }) {
   const t = useI18n().t;
   return (
@@ -883,9 +898,12 @@ export function ProjectsPage() {
   if (projectEmpty) {
     return (
       <Page className="flex min-h-0 flex-col">
-        <header className="flex flex-wrap items-baseline gap-2">
-          <h1 className="text-xl font-semibold tracking-tight">{t("page.projects.title")}</h1>
-          <span className="text-xs text-muted-foreground">{t("projects.total", { count: 0 })}</span>
+        <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+          <div className="flex items-baseline gap-2">
+            <h1 className="text-xl font-semibold tracking-tight">{t("page.projects.title")}</h1>
+            <span className="text-xs text-muted-foreground">{t("projects.total", { count: 0 })}</span>
+          </div>
+          <NewProjectButton />
         </header>
         <div className="flex min-h-[calc(100dvh-12rem)] items-center justify-center py-10">
           <div className="max-w-xl text-center">
@@ -901,15 +919,6 @@ export function ProjectsPage() {
               {t("projects.empty.exportAfter")}
             </p>
             <p className="mx-auto mt-3 max-w-md text-xs leading-5 text-muted-foreground">{t("projects.empty.hint")}</p>
-            <Button
-              className="mt-5"
-              size="sm"
-              pressScale={0.97}
-              onClick={() => window.dispatchEvent(new CustomEvent("basics:new-note", { detail: { type: "project" } }))}
-            >
-              <FolderKanban className="size-3.5" aria-hidden="true" />
-              {t("projects.create")}
-            </Button>
           </div>
         </div>
       </Page>
@@ -925,6 +934,7 @@ export function ProjectsPage() {
         </div>
 
         <div className="flex min-w-0 flex-wrap items-center gap-2 max-[640px]:w-full">
+          <NewProjectButton />
           <Tabs
             value={prefs.status}
             onValueChange={(value) => {

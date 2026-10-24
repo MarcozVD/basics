@@ -267,7 +267,7 @@ export const en = {
   "projects.empty.exportBefore": "or when you run",
   "projects.empty.exportAfter": "in a repo.",
   "projects.empty.hint": "Each note keeps the stack, lessons and last check results that agents read.",
-  "projects.create": "Create project note",
+  "projects.create": "New project",
   "projects.filtered.title": "No projects match",
   "projects.filtered.description": "Try another status or search.",
   "projects.clearFilters": "Clear filters",
