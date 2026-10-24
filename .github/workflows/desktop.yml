@@ -1,0 +1,91 @@
+name: Desktop
+
+# Builds the unsigned desktop installers. Manual runs upload them as workflow
+# artifacts; a `desktop-v*` tag also attaches them to a draft GitHub Release.
+on:
+  workflow_dispatch:
+  push:
+    tags: ["desktop-v*"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            triple: x86_64-pc-windows-msvc
+            args: ""
+            bundle_dir: apps/desktop/src-tauri/target/release/bundle
+          - os: macos-latest
+            triple: universal-apple-darwin
+            args: --target universal-apple-darwin
+            bundle_dir: apps/desktop/src-tauri/target/universal-apple-darwin/release/bundle
+          - os: ubuntu-22.04
+            triple: x86_64-unknown-linux-gnu
+            args: ""
+            bundle_dir: apps/desktop/src-tauri/target/release/bundle
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.triple == 'universal-apple-darwin' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri -> target
+
+      - name: Linux system dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Build the Basics CLI and UI
+        run: |
+          npm ci
+          npm run build
+
+      - name: Install the desktop tooling
+        run: npm ci --prefix apps/desktop
+
+      - name: Bundle the server and the Node sidecar
+        run: node apps/desktop/scripts/prepare.mjs --target-triple ${{ matrix.triple }}
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: apps/desktop
+          tauriScript: npx tauri
+          args: ${{ matrix.args }}
+          tagName: ${{ startsWith(github.ref, 'refs/tags/desktop-v') && github.ref_name || '' }}
+          releaseName: Basics desktop ${{ github.ref_name }}
+          releaseBody: Unsigned installers. See https://marcozvd.github.io/basics/guide/desktop for how to open them on each OS.
+          releaseDraft: true
+          prerelease: false
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: basics-desktop-${{ matrix.triple }}
+          path: |
+            ${{ matrix.bundle_dir }}/msi/*.msi
+            ${{ matrix.bundle_dir }}/nsis/*.exe
+            ${{ matrix.bundle_dir }}/dmg/*.dmg
+            ${{ matrix.bundle_dir }}/appimage/*.AppImage
+            ${{ matrix.bundle_dir }}/deb/*.deb
+          if-no-files-found: error
