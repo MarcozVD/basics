@@ -4,9 +4,7 @@ English | [Español](README.es.md)
 
 [![CI](https://github.com/MarcozVD/basics/actions/workflows/ci.yml/badge.svg)](https://github.com/MarcozVD/basics/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-<!-- npm badge, enable once the package is published:
 [![npm](https://img.shields.io/npm/v/@marcozvd/basics.svg)](https://www.npmjs.com/package/@marcozvd/basics)
--->
 
 Basics is a personal tech-stack vault: a folder of Markdown notes about the layers, technologies, practices, checks and
 profiles you use, which your coding agents read and extend over MCP. Notes are plain files (frontmatter +
