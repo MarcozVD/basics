@@ -23,6 +23,16 @@ import { cn } from "@/lib/utils";
 /** Drawer width plus its right gap, kept clear when centering a node beside it. */
 const DRAWER_SPACE = 372;
 const TOOLBAR_OFFSET = 12;
+const GROUP_KEY = "basics:graph-group";
+
+/** Grouped by layer unless the reader turned the switch off once. */
+function readGrouped(): boolean {
+  try {
+    return localStorage.getItem(GROUP_KEY) !== "0";
+  } catch {
+    return true;
+  }
+}
 
 const typeColor = (type: GraphNodeType) => (type === "missing" ? "var(--destructive)" : `var(--type-${type})`);
 
@@ -35,6 +45,7 @@ export function GraphPage() {
   const searchRef = useRef<HTMLInputElement>(null);
 
   const [broken, setBroken] = useState(false);
+  const [grouped, setGrouped] = useState(readGrouped);
   const [hiddenTypes, setHiddenTypes] = useState<Set<GraphNodeType>>(() => new Set());
   const [layer, setLayer] = useState("all");
   const [search, setSearch] = useState("");
@@ -123,6 +134,15 @@ export function GraphPage() {
     setBroken(next);
   };
 
+  const toggleGrouped = (next: boolean) => {
+    setGrouped(next);
+    try {
+      localStorage.setItem(GROUP_KEY, next ? "1" : "0");
+    } catch {
+      // Private mode: the switch still works for this visit.
+    }
+  };
+
   // A live refresh can delete the selected or focused note.
   useEffect(() => {
     if (!data) return;
@@ -189,7 +209,7 @@ export function GraphPage() {
           mode="full"
           visibleIds={visibleIds}
           query={search}
-          grouped={!focusId}
+          grouped={grouped && !focusId}
           selectedId={selectedId}
           insets={insets}
           onNodeClick={setSelectedId}
@@ -299,6 +319,20 @@ export function GraphPage() {
         />
 
         <ToolbarDivider />
+
+        <ToolbarDivider />
+
+        <span data-testid="graph-group" className="inline-flex h-8 items-center gap-2 pr-1 pl-1.5">
+          <Switch checked={grouped} onCheckedChange={toggleGrouped} ariaLabel={t("graph.groupByLayer")} />
+          <button
+            type="button"
+            tabIndex={-1}
+            onClick={() => toggleGrouped(!grouped)}
+            className="text-[12px] font-medium whitespace-nowrap text-muted-foreground hover:text-foreground"
+          >
+            {t("graph.groupByLayer")}
+          </button>
+        </span>
 
         <span data-testid="graph-broken" className="inline-flex h-8 items-center gap-2 pr-1 pl-1.5">
           <Switch checked={broken} onCheckedChange={toggleBroken} ariaLabel={t("graph.showBroken")} />

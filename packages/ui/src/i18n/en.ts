@@ -427,6 +427,7 @@ export const en = {
   "graph.searchHint": "Enter jumps to the first match",
   "graph.matches": "{count} matches",
   "graph.showBroken": "Broken links",
+  "graph.groupByLayer": "Group by layer",
   "graph.fit": "Fit to view",
   "graph.focusing": "Focus",
   "graph.showAll": "Show all",

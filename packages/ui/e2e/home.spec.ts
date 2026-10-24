@@ -150,6 +150,14 @@ test("activity panel scrolls on its own instead of growing the page", async ({ p
     await expect(panel).toBeVisible();
     await expect(panel).toHaveAttribute("tabindex", "0");
 
+    // The panel sizes itself after the late Geist swap; measure only once layout has settled.
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) => {
+          void document.fonts.ready.then(() => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+        }),
+    );
+
     const metrics = await page.evaluate(() => {
       const activity = document.querySelector<HTMLElement>('[data-testid="activity-panel"]');
       const main = document.querySelector<HTMLElement>("main");

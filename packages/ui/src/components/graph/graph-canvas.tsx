@@ -82,6 +82,8 @@ const LABEL_MIN_ZOOM = 0.6;
 const BOX_LABEL_SIZE = 14;
 const NODE_LABEL_MIN_SCREEN = 9;
 const BOX_LABEL_MIN_SCREEN = 14;
+/** Practice and check labels stay hidden until the reader zooms in this far. */
+const DETAIL_LABEL_ZOOM = 1.25;
 /** Titles in a box grid are cut short; the hover tooltip and the panel keep the full one. */
 const LABEL_TRUNCATE = 16;
 const MAX_FIT_ZOOM = 1.6;
@@ -239,13 +241,18 @@ function buildStyle(palette: Palette, reduce: boolean): StylesheetJson {
       style: { "text-max-width": "112px" },
     },
     {
-      // Practice and check labels appear on hover, selection or search only.
+      // Practice and check labels appear when zoomed in, on hover, selection or search.
       selector: 'node[grouped = 1][type = "practice"], node[grouped = 1][type = "check"]',
       style: { "text-opacity": 0 },
     },
     {
       selector:
         'node[grouped = 1].lit[type = "practice"], node[grouped = 1].lit[type = "check"], node[grouped = 1].picked[type = "practice"], node[grouped = 1].picked[type = "check"], node[grouped = 1].hit[type = "practice"], node[grouped = 1].hit[type = "check"]',
+      style: { "text-opacity": 1 },
+    },
+    {
+      // Zoomed in far enough that the grid has room: practice/check titles appear.
+      selector: 'node[grouped = 1].zoomed[type = "practice"], node[grouped = 1].zoomed[type = "check"]',
       style: { "text-opacity": 1 },
     },
     {
@@ -406,6 +413,7 @@ function fitTo(cy: Core, eles: cytoscape.Collection, insets: Insets, animate: bo
   if (animate) cy.animate({ zoom, pan }, { duration: CAMERA_MS, easing: "ease-out-cubic" });
   else cy.viewport({ zoom, pan });
   scaleLabelsToFit(cy, zoom);
+  toggleDetailLabels(cy);
 }
 
 /**
@@ -440,6 +448,17 @@ function scaleLabelsToFit(cy: Core, zoom: number): void {
   cy.batch(() => {
     cy.nodes().not(":parent, [bandLabel]").style("font-size", nodeFont);
     cy.nodes(":parent, [bandLabel]").style("font-size", boxFont);
+  });
+}
+
+/**
+ * Practice and check titles are noise at the fit zoom: they join the tech labels only
+ * once the reader zooms past `DETAIL_LABEL_ZOOM` (hover and selection still show them).
+ */
+function toggleDetailLabels(cy: Core): void {
+  const show = cy.zoom() >= DETAIL_LABEL_ZOOM;
+  cy.batch(() => {
+    cy.nodes('[type = "practice"], [type = "check"]').toggleClass("zoomed", show);
   });
 }
 
@@ -705,6 +724,7 @@ export default function GraphCanvas({
       setHover(null);
     });
     cy.on("viewport", () => {
+      toggleDetailLabels(cy);
       setHover((current) => {
         if (!current) return current;
         const node = cy.getElementById(current.id);
@@ -775,6 +795,7 @@ export default function GraphCanvas({
       runPresetLayout(cy, layout);
       if (first || boxedChanged || freshInstance) fitVisible(false);
       else scaleLabelsToFit(cy, cy.zoom());
+      toggleDetailLabels(cy);
       emphasizeNode(cy, latest.current.selectedId ?? null);
       return;
     }

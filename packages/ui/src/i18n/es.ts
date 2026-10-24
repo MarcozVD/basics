@@ -430,6 +430,7 @@ export const es: typeof en = {
   "graph.searchHint": "Enter salta a la primera coincidencia",
   "graph.matches": "{count} coincidencias",
   "graph.showBroken": "Enlaces rotos",
+  "graph.groupByLayer": "Agrupar por capa",
   "graph.fit": "Ajustar a la vista",
   "graph.focusing": "Enfoque",
   "graph.showAll": "Mostrar todo",
