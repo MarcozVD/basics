@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Inbox as InboxIcon, Package } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { useNavigate, useSearchParams } from "react-router";
+import { useMatch, useNavigate, useSearchParams } from "react-router";
 import { ApprovalCard } from "@/components/agents/approval-card";
 import { AnimatedNumber } from "@/components/motion/animated-number";
 import { Button } from "@/components/motion/button/base";
@@ -54,6 +54,9 @@ export function InboxPage() {
   const { t, language } = useI18n();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  // This page can stay mounted for one render after the router enters `/inbox/:id`.
+  // While that detail route owns the URL, the list must not write its own `?p=`.
+  const detailRoute = useMatch("/inbox/:id") !== null;
   const wide = useWideInbox();
   const reduce = useReducedMotion() ?? false;
   const queryClient = useQueryClient();
@@ -118,9 +121,13 @@ export function InboxPage() {
   // A parameter adopted from the URL must win over the initial default selection,
   // and a deep link that arrives before the inbox has loaded waits for the data.
   useEffect(() => {
-    if (!wide) {
-      lastParam.current = null;
-      pendingParam.current = null;
+    if (!wide || detailRoute) {
+      // The narrow list and the detail page both own their own URL; only the
+      // wide master-detail view on `/inbox` syncs the selected row to `?p=`.
+      if (!wide) {
+        lastParam.current = null;
+        pendingParam.current = null;
+      }
       return;
     }
     if (pParam !== lastParam.current) {
@@ -144,7 +151,7 @@ export function InboxPage() {
     if (next) params.set("p", next);
     else params.delete("p");
     setSearchParams(params, { replace: true });
-  }, [wide, pParam, visible, selected, searchParams, setSearchParams, inbox.isPending]);
+  }, [wide, detailRoute, pParam, visible, selected, searchParams, setSearchParams, inbox.isPending]);
 
   useEffect(() => {
     document.getElementById(`proposal-card-${selected}`)?.scrollIntoView({ block: "nearest" });

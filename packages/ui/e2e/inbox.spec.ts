@@ -47,10 +47,11 @@ test("lists and approves a proposal from the inbox", async ({ page }) => {
   await expect(page).toHaveURL(/\/inbox\?p=django$/);
   await expect(page.getByText("Web framework for the e2e proposal flow.")).toBeVisible();
   await page.keyboard.press("Enter");
+  // Wait for the outgoing Inbox view to finish its route transition before using the page action bar.
+  // Checking the URL afterwards proves the exiting list did not write its `?p=` back onto this route.
+  await expect(page.getByRole("heading", { name: "Inbox", level: 1 })).toHaveCount(0);
   await expect(page).toHaveURL(/\/inbox\/django$/);
   await expect(page.getByText("Web framework for the e2e proposal flow.")).toBeVisible();
-  // Wait for the outgoing Inbox view to finish its route transition before using the page action bar.
-  await expect(page.getByRole("heading", { name: "Inbox", level: 1 })).toHaveCount(0);
 
   await page.getByRole("button", { name: "Approve", exact: true }).click();
   await expect(page).toHaveURL(/\/notes\/django$/);
@@ -67,8 +68,9 @@ test("approves a proposal directly from the list card", async ({ page }) => {
 
   await page.locator('[data-proposal-id="svelte"]').getByRole("button", { name: "Approve", exact: true }).click();
 
-  await expect(page).toHaveURL(/\/inbox(\?.*)?$/);
   await expect(page.getByText(/Inbox zero/)).toBeVisible();
+  // The empty list drops the stale selection instead of deep-linking to a proposal that no longer exists.
+  await expect(page).toHaveURL(/\/inbox$/);
   await expect(page.getByText("Approved", { exact: true })).toBeVisible();
 });
 
