@@ -2,9 +2,10 @@ import type { ActivityEvent, NoteType, PackInfo, ProposalSummary } from "@marcoz
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, Check, Copy, GitFork, Package } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, type RefObject, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { ApprovalCard } from "@/components/agents/approval-card";
+import { DOCK_SPACE } from "@/components/layout";
 import { AnimatedNumber } from "@/components/motion/animated-number";
 import { Button } from "@/components/motion/button/base";
 import { Checkbox } from "@/components/motion/checkbox";
@@ -82,6 +83,72 @@ function groupActivity(events: ActivityEvent[]): ActivityGroup[] {
   return groups;
 }
 
+interface EdgeFade {
+  top: boolean;
+  bottom: boolean;
+}
+
+/** Height of the edge fade on the activity scroll panel. */
+const FADE_PX = 24;
+/** The page's own bottom rhythm (`Page` uses `pb-8`) that has to stay below the panel. */
+const PAGE_BOTTOM_PX = 32;
+
+/** Mask that fades only the edges where the list still has content to scroll to. */
+function activityMask({ top, bottom }: EdgeFade): string | undefined {
+  if (top && bottom) {
+    return `linear-gradient(to bottom, transparent 0, #000 ${FADE_PX}px, #000 calc(100% - ${FADE_PX}px), transparent 100%)`;
+  }
+  if (top) return `linear-gradient(to bottom, transparent 0, #000 ${FADE_PX}px)`;
+  if (bottom) return `linear-gradient(to bottom, #000 0, #000 calc(100% - ${FADE_PX}px), transparent 100%)`;
+  return undefined;
+}
+
+/**
+ * Height that leaves the activity panel exactly the space `<main>` has under the page
+ * header: from the panel's own top edge down to the Dock clearance and the page's bottom
+ * rhythm. Measuring the panel keeps the title block, grid gap and language-dependent line
+ * wrapping out of the calculation. Below 1024 the stacked layout uses its CSS cap instead.
+ */
+function useActivityPanelHeight(ref: RefObject<HTMLElement | null>, attachKey: number): number | undefined {
+  const [height, setHeight] = useState<number>();
+
+  // Layout effect so the panel never paints at the wrong height first.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: re-measure when the list mounts or its content changes.
+  useLayoutEffect(() => {
+    const el = ref.current;
+    const main = el?.closest("main");
+    if (!el || !main) return;
+    let cancelled = false;
+    const measure = () => {
+      if (cancelled) return;
+      if (window.innerWidth < 1024) {
+        setHeight(undefined);
+        return;
+      }
+      const offset = el.getBoundingClientRect().top - main.getBoundingClientRect().top + main.scrollTop;
+      // `main.clientHeight` includes its bottom padding, which already reserves DOCK_SPACE.
+      const available = main.clientHeight - DOCK_SPACE - offset - PAGE_BOTTOM_PX;
+      const next = Math.round(available);
+      setHeight(next > 0 ? next : undefined);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(main);
+    // The page header above the panel is the only other thing whose height can move its top edge.
+    const pageHeader = main.querySelector("h1")?.closest("header");
+    if (pageHeader) observer.observe(pageHeader);
+    window.addEventListener("resize", measure);
+    void document.fonts?.ready.then(measure);
+    return () => {
+      cancelled = true;
+      observer.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, [ref, attachKey]);
+
+  return height;
+}
+
 function useRevealOnce(): boolean {
   const [reveal] = useState(() => {
     try {
@@ -101,8 +168,12 @@ function useRevealOnce(): boolean {
   return reveal;
 }
 
-function SectionLabel({ children }: { children: string }) {
-  return <h2 className="text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">{children}</h2>;
+function SectionLabel({ children, id }: { children: string; id?: string }) {
+  return (
+    <h2 id={id} className="text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
+      {children}
+    </h2>
+  );
 }
 
 function TypeChip({ id, type }: { id: string; type: NoteType | undefined }) {
@@ -498,6 +569,34 @@ export function HomePage() {
 
   const groups = useMemo(() => groupActivity(timeline.data ?? []), [timeline.data]);
 
+  const activityRef = useRef<HTMLElement>(null);
+  const [activityFade, setActivityFade] = useState<EdgeFade>({ top: false, bottom: false });
+  const activityHeight = useActivityPanelHeight(activityRef, groups.length);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: re-attach whenever the list renders — ResizeObserver then covers size changes.
+  useEffect(() => {
+    const el = activityRef.current;
+    if (!el) return;
+    const update = () => {
+      const scrollable = el.scrollHeight > el.clientHeight;
+      setActivityFade((prev) => {
+        const next: EdgeFade = {
+          top: el.scrollTop > 0,
+          bottom: scrollable && el.scrollTop < el.scrollHeight - el.clientHeight - 1,
+        };
+        return prev.top === next.top && prev.bottom === next.bottom ? prev : next;
+      });
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    el.addEventListener("scroll", update, { passive: true });
+    return () => {
+      observer.disconnect();
+      el.removeEventListener("scroll", update);
+    };
+  }, [groups.length]);
+  const activityMaskImage = activityMask(activityFade);
+
   const pendingCommunityPacks = useMemo(
     () =>
       new Set(
@@ -718,8 +817,8 @@ export function HomePage() {
             </div>
           </section>
 
-          <section aria-label={t("home.activity")} className="min-w-0">
-            <SectionLabel>{t("home.activity")}</SectionLabel>
+          <section className="min-w-0">
+            <SectionLabel id="home-activity-label">{t("home.activity")}</SectionLabel>
 
             {timeline.isPending ? (
               <div className="mt-2">
@@ -748,58 +847,69 @@ export function HomePage() {
                 </div>
               </div>
             ) : (
-              <ul className="mt-1 flex flex-col">
-                <AnimatePresence initial={false}>
-                  {groups.map((group) => (
-                    <motion.li
-                      key={group.key}
-                      layout={!reduce}
-                      initial={reduce ? { opacity: 0 } : { opacity: 0, y: -6 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={reduce ? { opacity: 0 } : { opacity: 0 }}
-                      transition={reduce ? { duration: 0 } : { type: "spring", stiffness: 420, damping: 34 }}
-                      className="flex items-start gap-2 border-b border-border/50 py-1.5 last:border-0"
-                    >
-                      <time
-                        className="w-10 shrink-0 pt-0.5 text-right font-mono text-[10px] whitespace-nowrap text-muted-foreground"
-                        dateTime={group.event.ts}
-                        title={formatFullDateTime(group.event.ts, language)}
+              <section
+                ref={activityRef}
+                // A scrollable region must be reachable from the keyboard so arrow keys can scroll it.
+                // biome-ignore lint/a11y/noNoninteractiveTabindex: focusable scroll container, labelled by the section heading.
+                tabIndex={0}
+                aria-labelledby="home-activity-label"
+                data-testid="activity-panel"
+                className="mt-2 max-h-[60dvh] overflow-y-auto overscroll-contain focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring min-[1024px]:max-h-none"
+                style={{ height: activityHeight, WebkitMaskImage: activityMaskImage, maskImage: activityMaskImage }}
+              >
+                <ul className="mt-1 flex flex-col">
+                  <AnimatePresence initial={false}>
+                    {groups.map((group) => (
+                      <motion.li
+                        key={group.key}
+                        layout={!reduce}
+                        initial={reduce ? { opacity: 0 } : { opacity: 0, y: -6 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={reduce ? { opacity: 0 } : { opacity: 0 }}
+                        transition={reduce ? { duration: 0 } : { type: "spring", stiffness: 420, damping: 34 }}
+                        className="flex items-start gap-2 border-b border-border/50 py-1.5 last:border-0"
                       >
-                        {formatCompactRelativeTime(group.event.ts)}
-                      </time>
-                      <span
-                        aria-hidden="true"
-                        className="mt-0.5 grid size-[18px] shrink-0 place-items-center rounded-md font-mono text-[10px] font-semibold text-[#111113]"
-                        style={{ backgroundColor: agentColor(group.event.agent) }}
-                      >
-                        {agentInitial(group.event.agent)}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 text-xs">
-                          <span className="font-medium">{group.event.agent}</span>
-                          <span className="text-muted-foreground">{verbFor(group)}</span>
-                          {group.count > 1 && group.event.tool !== "get_note" ? (
-                            <span className="font-mono text-[11px] text-muted-foreground">×{group.count}</span>
-                          ) : null}
-                          {group.event.tool === "search_vault" && group.detail ? (
-                            <span className="font-mono text-[11px] text-muted-foreground">“{group.detail}”</span>
-                          ) : null}
-                        </div>
-                        {group.noteIds.length > 0 ? (
-                          <div className="mt-1 flex flex-wrap gap-1">
-                            {group.noteIds.slice(0, 6).map((id) => (
-                              <TypeChip key={id} id={id} type={typeById.get(id)} />
-                            ))}
-                            {group.noteIds.length > 6 ? (
-                              <span className="self-center font-mono text-[10px] text-muted-foreground">+{group.noteIds.length - 6}</span>
+                        <time
+                          className="w-10 shrink-0 pt-0.5 text-right font-mono text-[10px] whitespace-nowrap text-muted-foreground"
+                          dateTime={group.event.ts}
+                          title={formatFullDateTime(group.event.ts, language)}
+                        >
+                          {formatCompactRelativeTime(group.event.ts)}
+                        </time>
+                        <span
+                          aria-hidden="true"
+                          className="mt-0.5 grid size-[18px] shrink-0 place-items-center rounded-md font-mono text-[10px] font-semibold text-[#111113]"
+                          style={{ backgroundColor: agentColor(group.event.agent) }}
+                        >
+                          {agentInitial(group.event.agent)}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 text-xs">
+                            <span className="font-medium">{group.event.agent}</span>
+                            <span className="text-muted-foreground">{verbFor(group)}</span>
+                            {group.count > 1 && group.event.tool !== "get_note" ? (
+                              <span className="font-mono text-[11px] text-muted-foreground">×{group.count}</span>
+                            ) : null}
+                            {group.event.tool === "search_vault" && group.detail ? (
+                              <span className="font-mono text-[11px] text-muted-foreground">“{group.detail}”</span>
                             ) : null}
                           </div>
-                        ) : null}
-                      </div>
-                    </motion.li>
-                  ))}
-                </AnimatePresence>
-              </ul>
+                          {group.noteIds.length > 0 ? (
+                            <div className="mt-1 flex flex-wrap gap-1">
+                              {group.noteIds.slice(0, 6).map((id) => (
+                                <TypeChip key={id} id={id} type={typeById.get(id)} />
+                              ))}
+                              {group.noteIds.length > 6 ? (
+                                <span className="self-center font-mono text-[10px] text-muted-foreground">+{group.noteIds.length - 6}</span>
+                              ) : null}
+                            </div>
+                          ) : null}
+                        </div>
+                      </motion.li>
+                    ))}
+                  </AnimatePresence>
+                </ul>
+              </section>
             )}
           </section>
 

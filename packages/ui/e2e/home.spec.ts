@@ -90,3 +90,67 @@ test("creates the missing note from the broken links tile", async ({ page }) => 
     fs.rmSync(file, { force: true });
   }
 });
+
+/** Seed the vault's activity log; returns a restore function for the previous file. */
+function seedActivity(count: number): () => void {
+  const dir = path.join(vaultPath(), ".basics");
+  const file = path.join(dir, "activity.jsonl");
+  fs.mkdirSync(dir, { recursive: true });
+  const previous = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : null;
+  const now = Date.now();
+  const lines = Array.from({ length: count }, (_, index) =>
+    JSON.stringify({
+      // Alternating agents keep every event its own row instead of collapsing into groups.
+      ts: new Date(now - index * 60_000).toISOString(),
+      agent: index % 2 === 0 ? "claude-code" : "opencode",
+      tool: "get_note",
+      noteIds: ["fastapi"],
+    }),
+  );
+  fs.writeFileSync(file, `${lines.join("\n")}\n`);
+  return () => {
+    if (previous === null) fs.rmSync(file, { force: true });
+    else fs.writeFileSync(file, previous);
+  };
+}
+
+test("activity panel scrolls on its own instead of growing the page", async ({ page }) => {
+  const restore = seedActivity(60);
+  try {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/");
+
+    const panel = page.getByTestId("activity-panel");
+    await expect(panel).toBeVisible();
+    await expect(panel).toHaveAttribute("tabindex", "0");
+
+    const metrics = await page.evaluate(() => {
+      const activity = document.querySelector<HTMLElement>('[data-testid="activity-panel"]');
+      const main = document.querySelector<HTMLElement>("main");
+      return {
+        viewport: window.innerHeight,
+        documentHeight: document.scrollingElement?.scrollHeight ?? 0,
+        panelScrollHeight: activity?.scrollHeight ?? 0,
+        panelClientHeight: activity?.clientHeight ?? 0,
+        mainScrollHeight: main?.scrollHeight ?? 0,
+        mainClientHeight: main?.clientHeight ?? 0,
+      };
+    });
+
+    // The document never scrolls, and neither does <main>: the panel took the remaining space.
+    expect(metrics.documentHeight).toBeLessThanOrEqual(metrics.viewport + 1);
+    expect(metrics.mainScrollHeight).toBeLessThanOrEqual(metrics.mainClientHeight + 1);
+    expect(metrics.panelScrollHeight).toBeGreaterThan(metrics.panelClientHeight);
+
+    // The bottom fade appears only once the list extends past the panel.
+    const mask = await panel.evaluate((element) => getComputedStyle(element).maskImage);
+    expect(mask).not.toBe("none");
+
+    // The panel is focusable and scrolls with the keyboard.
+    await panel.focus();
+    await page.keyboard.press("End");
+    await expect.poll(() => panel.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+  } finally {
+    restore();
+  }
+});
