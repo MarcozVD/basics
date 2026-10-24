@@ -69,6 +69,32 @@ test("an empty layer shows the quiet no-match line", async ({ page }) => {
   await expect(page.getByText("No match in your vault for this layer", { exact: true })).toBeVisible();
 });
 
+test("the semantic-matching action shows a clear error when the runtime is absent", async ({ page }) => {
+  // The e2e server has no embeddings runtime; never let the click trigger a real download.
+  await page.route("**/api/embeddings/enable", (route) =>
+    route.fulfill({
+      status: 503,
+      contentType: "application/json",
+      body: JSON.stringify({ error: "internal", message: "embeddings runtime unavailable" }),
+    }),
+  );
+
+  await page.goto("/recommend");
+  await expect(page.getByRole("button", { name: "Backend", exact: true })).toBeVisible();
+
+  await page.getByLabel("Describe the project", { exact: true }).fill("API REST para servir modelos de machine learning");
+  await page.getByRole("button", { name: "Recommend", exact: true }).click();
+
+  await expect(page.getByText("Keywords", { exact: true })).toBeVisible();
+  const enable = page.getByRole("button", { name: "Turn on semantic matching", exact: true });
+  await expect(enable).toBeVisible();
+  await enable.click();
+
+  await expect(page.getByRole("alert")).toContainText("embeddings runtime unavailable");
+  // The badge stays Keywords after a failed enable.
+  await expect(page.getByText("Keywords", { exact: true })).toBeVisible();
+});
+
 test("creates a project from the recommendation and merges its stack on repeat", async ({ page }) => {
   const description = "API REST para servir modelos de machine learning";
 

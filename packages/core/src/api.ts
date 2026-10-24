@@ -1,3 +1,4 @@
+import type { DownloadSize } from "./embeddings.js";
 import type { ExportTarget } from "./export.js";
 import type { NoteData, NoteType, ProposalMeta } from "./schema.js";
 
@@ -150,6 +151,24 @@ export interface ContextRequest {
 
 export interface ContextResponse {
   markdown: string;
+}
+
+/** State of the opt-in embeddings runtime, model cache and vector index. */
+export interface EmbeddingsStatus {
+  enabled: boolean;
+  runtime: boolean;
+  model: string;
+  indexed: number;
+  stale: number;
+  /** One-time download estimate for the configured model. */
+  download: DownloadSize;
+}
+
+export interface EmbeddingsEnableResponse {
+  enabled: true;
+  model: string;
+  /** Notes in the vector index after enabling. */
+  indexed: number;
 }
 
 export interface ExportRequest {

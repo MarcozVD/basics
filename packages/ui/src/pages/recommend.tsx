@@ -1,6 +1,6 @@
 import type { Candidate, ExportFile, Recommendation } from "@marcozvd/basics-core";
-import { useMutation } from "@tanstack/react-query";
-import { AlertTriangle, Ban, Check, Copy, FileDown, type LucideIcon, Plus, Star, X } from "lucide-react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { AlertTriangle, Ban, Check, Copy, FileDown, type LucideIcon, Plus, Sparkles, Star, X } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -23,9 +23,10 @@ import { Page } from "@/components/page";
 import { CreateProjectDialog } from "@/components/recommend/create-project-dialog";
 import { ErrorState } from "@/components/state";
 import { type TranslationKey, useT } from "@/i18n";
-import { exportStack, recommend } from "@/lib/api";
+import { enableEmbeddings, exportStack, recommend } from "@/lib/api";
 import { EASE_OUT, SPRING_PANEL } from "@/lib/ease";
-import { useLayers } from "@/lib/queries";
+import { useEmbeddingsProgress } from "@/lib/events";
+import { queryKeys, useEmbeddings, useLayers } from "@/lib/queries";
 import { clearRecommend, updateRecommend, useRecommendStore } from "@/lib/recommend-store";
 import { useReturnFocus } from "@/lib/return-focus";
 import { toast } from "@/lib/toast";
@@ -34,6 +35,15 @@ import { cn } from "@/lib/utils";
 
 const EXAMPLES = ["recommend.example.api", "recommend.example.ml", "recommend.example.web"] as const;
 const EMBEDDINGS_CLI = "basics embeddings enable";
+
+/** Round download sizes the way the enable prompt describes them (~500 MB). */
+function formatBytes(bytes: number): string {
+  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(2)} GB`;
+  if (bytes >= 1024 ** 2) return `${Math.round(bytes / 1024 ** 2)} MB`;
+  if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${bytes} B`;
+}
+
 const COLUMNS = "grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(280px,1fr))]";
 /** Profiles keep their column width even when only one matches. */
 const PROFILE_COLUMNS = "grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(300px,1fr))]";
@@ -337,6 +347,7 @@ export function RecommendPage() {
   const layersQuery = useLayers();
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const store = useRecommendStore();
+  const queryClient = useQueryClient();
   const [files, setFiles] = useState<ExportFile[]>([]);
   const [stackIds, setStackIds] = useState<string[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -359,10 +370,27 @@ export function RecommendPage() {
   );
   const activeLayers = selectedLayers ?? layerIds;
 
+  /** Only the opt-in prompt needs the embeddings state, so it is fetched lazily. */
+  const embeddings = useEmbeddings(recommendation?.mode === "keywords");
+
   const run = useMutation({
     mutationFn: recommend,
     onSuccess: (data) => updateRecommend({ recommendation: data, selected: [] }),
   });
+
+  /** One-click `basics embeddings enable`; on success the same description is re-ranked as hybrid. */
+  const enableSemantic = useMutation({
+    mutationFn: enableEmbeddings,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.embeddings });
+      toast.success(t("recommend.enableHybrid.success"));
+      if (description.trim() && activeLayers.length > 0) {
+        run.mutate({ description: description.trim(), layers: activeLayers, perLayer });
+      }
+    },
+    onError: () => toast.error(t("recommend.enableHybrid.failed")),
+  });
+  const enableProgress = useEmbeddingsProgress(enableSemantic.isPending);
 
   const exportFiles = useMutation({
     mutationFn: (ids: string[]) => exportStack(ids, EXPORT_TARGETS),
@@ -445,9 +473,26 @@ export function RecommendPage() {
     <div className="flex min-h-full flex-col">
       <Page className={cn("flex flex-col gap-4", selected.size > 0 && "pb-16")}>
         <div className="flex flex-col gap-1">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-xl font-semibold tracking-tight">{t("page.recommend.title")}</h1>
             {recommendation ? <ModeIndicator mode={recommendation.mode} /> : null}
+            {recommendation?.mode === "keywords" ? (
+              <Button
+                variant="secondary"
+                size="sm"
+                pressScale={0.97}
+                className="h-7 px-2.5"
+                disabled={enableSemantic.isPending}
+                onClick={() => enableSemantic.mutate()}
+              >
+                {enableSemantic.isPending ? (
+                  <Loader variant="spinner" size={14} label={t("recommend.enableHybrid.working")} />
+                ) : (
+                  <Sparkles className="size-3.5" aria-hidden="true" />
+                )}
+                {t("recommend.enableHybrid")}
+              </Button>
+            ) : null}
             {(description.trim() || recommendation) && (
               <Button variant="ghost" size="sm" pressScale={0.97} className="h-7 px-2.5" onClick={clear}>
                 {t("recommend.reset")}
@@ -455,14 +500,34 @@ export function RecommendPage() {
             )}
           </div>
           {recommendation?.mode === "keywords" ? (
-            <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-              <span>{t("recommend.enableHybrid")}</span>
+            <div className="flex flex-col gap-1 text-xs text-muted-foreground">
+              {embeddings.data ? (
+                <p>
+                  {t("recommend.enableHybrid.explain", {
+                    model: embeddings.data.model,
+                    size: formatBytes(embeddings.data.download.total),
+                  })}
+                </p>
+              ) : null}
+              {enableSemantic.isPending ? (
+                <p role="status" className="flex items-center gap-1.5">
+                  <Loader variant="spinner" size={12} label={t("recommend.enableHybrid.working")} />
+                  {enableProgress
+                    ? t("recommend.enableHybrid.progress", { done: enableProgress.done, total: enableProgress.total })
+                    : t("recommend.enableHybrid.working")}
+                </p>
+              ) : null}
+              {enableSemantic.isError ? (
+                <p role="alert" className="text-destructive">
+                  {enableSemantic.error instanceof Error ? enableSemantic.error.message : t("recommend.enableHybrid.failed")}
+                </p>
+              ) : null}
               <button
                 type="button"
                 aria-label={`${t("recommend.copyCli")}: ${EMBEDDINGS_CLI}`}
                 title={t("recommend.copyCli")}
                 onClick={() => void copyText(EMBEDDINGS_CLI)}
-                className="inline-flex h-6 max-w-full items-center gap-1.5 rounded-md border border-border bg-card px-2 font-mono text-[10.5px] text-foreground transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                className="mt-0.5 inline-flex h-6 max-w-full items-center gap-1.5 self-start rounded-md border border-border bg-card px-2 font-mono text-[10.5px] text-foreground transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
               >
                 <span className="truncate">{EMBEDDINGS_CLI}</span>
                 <Copy className="size-3 shrink-0 text-muted-foreground" aria-hidden="true" />

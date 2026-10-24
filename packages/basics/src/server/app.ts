@@ -13,6 +13,8 @@ import {
   type ContextResponse,
   type CreateNoteRequest,
   configSchema,
+  downloadSize,
+  type EmbeddingsEnableResponse,
   type ExportRequest,
   installPack,
   type LayerSummary,
@@ -31,6 +33,7 @@ import {
   type SaveNoteRequest,
   saveConfig,
   search,
+  syncIndex,
   title,
   toDetail,
   UnknownTechError,
@@ -45,7 +48,7 @@ import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { ZodError, z } from "zod";
 import { CONNECT_CLIENTS, connect } from "../connect.js";
-import { runtimeInstalled } from "../embeddings-runtime.js";
+import { createEmbedder, installRuntime, loadRuntime, runtimeDir, runtimeInstalled } from "../embeddings-runtime.js";
 import { createMcpServer } from "../mcp/tools.js";
 import { packsDir } from "../packs-dir.js";
 import { getRecommender } from "../recommender.js";
@@ -327,7 +330,32 @@ export function createApp(opts: { root: string; uiDir?: string; events?: EventHu
       model: cfg.embeddingsModel,
       indexed: index.notes,
       stale: index.stale(v).length,
+      download: downloadSize(cfg.embeddingsModel),
     });
+  });
+
+  /**
+   * One-click equivalent of `basics embeddings enable`: install the runtime, fetch the model
+   * and sync the index. Progress is broadcast on the same SSE channel as ranking progress.
+   * The download is real and can be large; failures (offline, no npm, missing runtime) return
+   * a message the UI can show without changing the active mode.
+   */
+  app.post("/api/embeddings/enable", async (c) => {
+    const cfg = loadConfig();
+    const model = cfg.embeddingsModel;
+    const onProgress = (done: number, total: number) => opts.events?.publish({ type: "embeddings", done, total });
+    try {
+      if (!runtimeInstalled()) await installRuntime();
+      const runtime = await loadRuntime();
+      if (!runtime) throw new Error(`embeddings runtime missing at ${runtimeDir()}`);
+      const embedder = await createEmbedder(runtime, model);
+      saveConfig(configSchema.parse({ ...cfg, embeddings: true, embeddingsModel: model }));
+      const stats = await syncIndex(vault(), embedder, onProgress);
+      return c.json({ enabled: true, model, indexed: stats.notes } satisfies EmbeddingsEnableResponse);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return c.json({ error: "internal", message } satisfies ApiError, 500);
+    }
   });
 
   app.get("/api/activity", (c) => {

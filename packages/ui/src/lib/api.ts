@@ -6,6 +6,8 @@ import type {
   ApproveRequest,
   ContextResponse,
   CreateNoteRequest,
+  EmbeddingsEnableResponse,
+  EmbeddingsStatus,
   ExportFile,
   ExportTarget,
   GraphData,
@@ -129,6 +131,15 @@ export function search(q: string, filter: NoteFilter = {}): Promise<SearchHit[]>
 
 export function recommend(body: RecommendRequest): Promise<Recommendation> {
   return request<Recommendation>("/api/recommend", { method: "POST", body: JSON.stringify(body) });
+}
+
+export function getEmbeddings(): Promise<EmbeddingsStatus> {
+  return request<EmbeddingsStatus>("/api/embeddings");
+}
+
+/** Same as `basics embeddings enable`: download the runtime/model once and sync the index. */
+export function enableEmbeddings(): Promise<EmbeddingsEnableResponse> {
+  return request<EmbeddingsEnableResponse>("/api/embeddings/enable", { method: "POST" });
 }
 
 export function getContext(techIds: string[]): Promise<ContextResponse> {

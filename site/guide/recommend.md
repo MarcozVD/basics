@@ -39,6 +39,13 @@ Scores are relative to your own notes; exact values are not part of the stable A
 
 Keywords are the default. Semantic search is off until you enable it, and **nothing is downloaded before that**.
 
+The **Recommend** screen shows the active mode as a badge next to the title, **Keywords** or **Hybrid**. While
+keywords are active, a **Turn on semantic matching** action sits next to that badge: it explains the one-time
+download (the configured model, about 130 MB, plus the ~375 MB runtime) and then performs the same steps as
+`basics embeddings enable`, with live progress from the server. When it finishes, the current description is
+re-ranked and the badge switches to **Hybrid**. If the runtime cannot be installed or loaded, the action shows a
+clear error and the mode stays **Keywords**.
+
 ```bash
 basics embeddings enable              # asks for confirmation; --yes skips it
 basics embeddings status              # config, runtime, model cache, index state
@@ -74,3 +81,9 @@ npm run eval -- --json              # raw JSON result
 
 Run the eval after changing a pack or touching the scoring code; `forbid` violations mean a `avoid_when` was recommended
 anyway.
+
+`npm run eval -- --realistic` runs the same checks against a larger fixture vault written like a real one (many
+notes with only tags and a short body). Both suites guard against regressions while the scoring changes; they are not
+an accuracy promise for your vault, which depends on how much `use_when`, tags and text your notes have. The
+**hybrid** numbers require the embeddings runtime, so `npm run eval -- --hybrid` only runs after
+`basics embeddings enable` (or the **Turn on semantic matching** button) has installed it.

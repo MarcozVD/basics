@@ -3,6 +3,7 @@ import {
   type ActivityFilter,
   getActivity,
   getConfig,
+  getEmbeddings,
   getGraph,
   getHealth,
   getInbox,
@@ -26,6 +27,7 @@ export const queryKeys = {
   proposal: (id: string) => ["proposal", id] as const,
   packs: ["packs"] as const,
   config: ["config"] as const,
+  embeddings: ["embeddings"] as const,
   activity: (filter: ActivityFilter) => ["activity", filter] as const,
   stats: ["stats"] as const,
   graph: (broken: boolean) => ["graph", broken] as const,
@@ -65,6 +67,10 @@ export function usePacks(enabled = true) {
 
 export function useConfig() {
   return useQuery({ queryKey: queryKeys.config, queryFn: getConfig });
+}
+
+export function useEmbeddings(enabled = true) {
+  return useQuery({ queryKey: queryKeys.embeddings, queryFn: getEmbeddings, enabled });
 }
 
 export function useStats() {
