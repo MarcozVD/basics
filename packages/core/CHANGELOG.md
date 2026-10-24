@@ -1,5 +1,18 @@
 # @marcozvd/basics-core
 
+## 1.3.0
+
+### Minor Changes
+
+- Agents recommend the stack from the vault and every agent connects in one step.
+  
+  - New MCP tool `get_vault_overview` (whole catalog in one call) and MCP prompt `plan-stack`; the Basics skill now has the agent state the stack with reasons from the vault and confirm once before writing files.
+  - New `basics connect`: registers the MCP server (stdio, global vault) and the skill with Claude Code, OpenCode, Codex, Cursor and Claude Desktop, backing up each config once. Also `POST /api/connect`.
+  - Sharper keyword recommendations: es/en stemming, a general synonym map, IDF weighting, matches on title, tags and note text, split hyphenated tags, language boost only for techs that already match. `per_layer` is now a maximum: candidates with no match are dropped.
+  - Recommend can turn on semantic matching with one click (`POST /api/embeddings/enable`).
+  - Inbox: Approve all pending proposals (`Vault.approveMany`, `POST /api/inbox/approve-all` with an empty body); approving a proposal whose note changed since it was proposed now returns 409 instead of overwriting.
+  - UI: graph grouped into one box per layer, layers listed in Home's vault health, agent activity scrolls on its own, Inbox cards no longer clipped, Basics logo as favicon and in the top bar, broken links can open their source or create the missing note.
+
 ## 1.2.0
 
 ### Minor Changes
