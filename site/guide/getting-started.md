@@ -61,7 +61,7 @@ Or connect over stdio without the UI:
 claude mcp add basics --scope user -- basics-mcp /absolute/path/to/my-vault
 ```
 
-Every other client (Claude Desktop, Cursor, VS Code, Codex CLI, Windsurf) is covered in
+Every other client (Claude Desktop, Cursor, VS Code, Codex CLI, OpenCode, Windsurf) is covered in
 [MCP clients](./mcp-clients.md).
 
 ## First recommendation

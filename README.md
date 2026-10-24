@@ -31,7 +31,7 @@ claude mcp add --transport http basics http://127.0.0.1:4747/mcp
 ```
 
 Ask your agent to recommend a stack, then review and approve what it proposes in the Inbox.
-Other clients (Cursor, VS Code, Codex, Windsurf) are covered in
+Other clients (Cursor, VS Code, Codex, OpenCode, Windsurf) are covered in
 [MCP clients](https://marcozvd.github.io/basics/guide/mcp-clients.html).
 
 ## What it does

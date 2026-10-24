@@ -102,6 +102,35 @@ command = "basics-mcp"
 args = ["/absolute/path/to/my-vault"]
 ```
 
+## OpenCode
+
+Global `~/.config/opencode/opencode.json` or project `opencode.json`:
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "basics": {
+      "type": "local",
+      "command": ["basics-mcp", "/absolute/path/to/my-vault"],
+      "enabled": true
+    }
+  }
+}
+```
+
+With the UI or the desktop app running, use the HTTP endpoint instead:
+
+```json
+{
+  "mcp": {
+    "basics": { "type": "remote", "url": "http://127.0.0.1:4747/mcp", "enabled": true }
+  }
+}
+```
+
+Restart OpenCode afterwards; `opencode mcp list` shows the server once it is loaded.
+
 ## Windsurf
 
 `~/.codeium/windsurf/mcp_config.json`:
