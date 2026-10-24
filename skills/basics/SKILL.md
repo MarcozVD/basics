@@ -25,14 +25,26 @@ http://127.0.0.1:4747/mcp` while `basics ui` or the desktop app is running) and 
 
 ## New project
 
-1. `search_vault` and `list_layers` to see what the user already knows and uses.
-2. `recommend_stack` with the project description. Treat the result as a shortlist, not an answer.
-3. Read the top candidates with `get_note` (their `use_when`, `avoid_when` and `performs_best`), choose one per layer and
-   explain the choice to the user in a few lines. Wait for their OK when the choice is not obvious.
-4. `get_stack_context` with the chosen tech ids. Keep that document as your working rules for the project.
+If the client supports MCP prompts, start with the `plan-stack` prompt and the project description: it runs the
+whole flow below in one step. Otherwise follow these steps.
+
+1. `get_vault_overview` for the whole catalog (layers, techs, profiles and past projects) and `recommend_stack` with
+   the project description as a ranked cross-check. Treat the ranking as a shortlist, not the decision.
+2. Decide yourself from the vault: one tech per needed layer. Prefer a matching profile when one fits. Prefer what
+   past projects used successfully, and respect their lessons.
+3. Tell the user the decision in this shape, one line per layer:
+
+   `Vamos a usar: <layer>: <tech> — <reason from [[note]]>`
+
+   Then list the alternatives you ruled out and why (from their `avoid_when`). Ask ONE question — "¿Usamos este
+   stack? / Shall we use this stack?" — before writing any file.
+4. After the user says yes, `get_stack_context` with the chosen tech ids. Keep that document as your working rules for
+   the project.
 5. `get_check_templates` and write the files that do not exist yet.
 6. `export_project` with the stack. Send the current contents of `AGENTS.md`, `CLAUDE.md` or Cursor rules in `existing`
    so the user's own text survives, then write the returned files into the project root.
+7. If the project has no project note, `propose_note` with type `project`, the stack by layer and the description.
+   Say "proposed for review"; it lands in the vault inbox.
 
 ## Existing project
 
