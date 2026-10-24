@@ -1,0 +1,19 @@
+# Search/read ignore for coding agents (opencode, ripgrep). Extends .gitignore.
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+*.log
+package-lock.json
+pnpm-lock.yaml
+site/.vitepress/cache/
+site/.vitepress/dist/
+packages/ui/test-results/
+packages/ui/playwright-report/
+.playwright-cli/
+.basics/
+
+# docs/ is gitignored, but agents need the task specs.
+!docs/
+!docs/agents/
+!docs/agents/tasks/
