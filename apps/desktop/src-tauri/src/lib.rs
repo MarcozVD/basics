@@ -12,13 +12,21 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use serde::Serialize;
-use tauri::{AppHandle, Manager, RunEvent};
+use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri::webview::NewWindowResponse;
+use tauri::{AppHandle, Manager, RunEvent, Url, WebviewUrl, WebviewWindowBuilder, WindowEvent};
+use tauri_plugin_autostart::{MacosLauncher, ManagerExt as _};
+use tauri_plugin_clipboard_manager::ClipboardExt;
+use tauri_plugin_dialog::DialogExt;
+use tauri_plugin_opener::OpenerExt;
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
 
 const DEFAULT_PORT: u16 = 4747;
 const STARTUP_TIMEOUT: Duration = Duration::from_secs(20);
 const LOG_LINES: usize = 40;
+const RELEASES_URL: &str = "https://github.com/MarcozVD/basics/releases";
 
 #[derive(Clone, Serialize, Default)]
 #[serde(rename_all = "lowercase")]
@@ -35,6 +43,8 @@ struct Status {
     message: String,
     log: Vec<String>,
     url: Option<String>,
+    /// True when the server refused to start because no vault is configured yet.
+    needs_vault: bool,
 }
 
 #[derive(Default)]
@@ -43,6 +53,8 @@ struct Server {
     child: Option<CommandChild>,
     status: Status,
     log: VecDeque<String>,
+    /// Vault folder reported by the running server's `/api/health`.
+    vault: Option<String>,
 }
 
 struct ServerState(Mutex<Server>);
@@ -86,7 +98,8 @@ fn plain_path(path: std::path::PathBuf) -> std::path::PathBuf {
 fn set_status(app: &AppHandle, phase: Phase, message: impl Into<String>, url: Option<String>) {
     let state = app.state::<ServerState>();
     let mut server = state.0.lock().unwrap();
-    server.status = Status { phase, message: message.into(), log: server.log.iter().cloned().collect(), url };
+    let needs_vault = matches!(phase, Phase::Error) && server.log.iter().any(|line| line.contains("Vault not found"));
+    server.status = Status { phase, message: message.into(), log: server.log.iter().cloned().collect(), url, needs_vault };
 }
 
 fn push_log(app: &AppHandle, line: String) {
@@ -98,6 +111,60 @@ fn push_log(app: &AppHandle, line: String) {
         }
         server.log.push_back(part.to_string());
     }
+}
+
+/// Put the sidecar in a job object that Windows closes when this process dies, so
+/// even a killed or crashed app never leaves an orphan server holding the port.
+#[cfg(windows)]
+fn tie_to_app_lifetime(pid: u32) {
+    use std::sync::OnceLock;
+    use windows_sys::Win32::Foundation::{CloseHandle, HANDLE};
+    use windows_sys::Win32::System::JobObjects::{
+        AssignProcessToJobObject, CreateJobObjectW, JobObjectExtendedLimitInformation, SetInformationJobObject,
+        JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+    };
+    use windows_sys::Win32::System::Threading::{OpenProcess, PROCESS_SET_QUOTA, PROCESS_TERMINATE};
+
+    // One job for the app's lifetime; its handle is intentionally never closed.
+    static JOB: OnceLock<usize> = OnceLock::new();
+    let job = *JOB.get_or_init(|| unsafe {
+        let job = CreateJobObjectW(std::ptr::null(), std::ptr::null());
+        if job.is_null() {
+            return 0;
+        }
+        let mut info: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = std::mem::zeroed();
+        info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+        let ok = SetInformationJobObject(
+            job,
+            JobObjectExtendedLimitInformation,
+            &info as *const _ as *const std::ffi::c_void,
+            std::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
+        );
+        if ok == 0 {
+            CloseHandle(job);
+            return 0;
+        }
+        job as usize
+    });
+    if job == 0 {
+        return;
+    }
+    unsafe {
+        let process = OpenProcess(PROCESS_SET_QUOTA | PROCESS_TERMINATE, 0, pid);
+        if !process.is_null() {
+            AssignProcessToJobObject(job as HANDLE, process);
+            CloseHandle(process);
+        }
+    }
+}
+
+/// Elsewhere a killed app can leave the server running; the next launch attaches to it.
+#[cfg(not(windows))]
+fn tie_to_app_lifetime(_pid: u32) {}
+
+fn remember_vault(app: &AppHandle, health: &serde_json::Value) {
+    let vault = health.get("vault").and_then(|v| v.as_str()).map(str::to_owned);
+    app.state::<ServerState>().0.lock().unwrap().vault = vault;
 }
 
 fn stop_sidecar(app: &AppHandle) {
@@ -123,7 +190,8 @@ fn start(app: AppHandle) {
         server.status = Status::default();
     }
 
-    if basics_health(DEFAULT_PORT).is_some() {
+    if let Some(health) = basics_health(DEFAULT_PORT) {
+        remember_vault(&app, &health);
         let url = format!("http://127.0.0.1:{DEFAULT_PORT}");
         set_status(&app, Phase::Ready, "attached to a running Basics server", Some(url.clone()));
         open_in_window(&app, &url);
@@ -162,6 +230,7 @@ fn start(app: AppHandle) {
             return;
         }
     };
+    tie_to_app_lifetime(child.pid());
     app.state::<ServerState>().0.lock().unwrap().child = Some(child);
 
     let log_app = app.clone();
@@ -181,7 +250,8 @@ fn start(app: AppHandle) {
 
     let deadline = Instant::now() + STARTUP_TIMEOUT;
     loop {
-        if basics_health(port).is_some() {
+        if let Some(health) = basics_health(port) {
+            remember_vault(&app, &health);
             let url = format!("http://127.0.0.1:{port}");
             set_status(&app, Phase::Ready, "server started", Some(url.clone()));
             open_in_window(&app, &url);
@@ -215,16 +285,162 @@ fn retry_startup(app: AppHandle) {
     std::thread::spawn(move || start(app));
 }
 
+/// First run: pick (or create) a vault folder, run `basics init` there, then start.
+#[tauri::command]
+async fn choose_vault(app: AppHandle) -> Result<bool, String> {
+    let Some(picked) = app.dialog().file().set_title("Choose a folder for your Basics vault").blocking_pick_folder() else {
+        return Ok(false);
+    };
+    let dir = picked.into_path().map_err(|err| err.to_string())?;
+    let resources = app.path().resource_dir().map_err(|err| err.to_string())?;
+    let cli = plain_path(resources).join("basics").join("dist").join("cli.js");
+    let output = app
+        .shell()
+        .sidecar("node")
+        .map_err(|err| err.to_string())?
+        .args([cli.to_string_lossy().into_owned(), "init".into(), plain_path(dir).to_string_lossy().into_owned(), "--packs".into(), "none".into()])
+        .output()
+        .await
+        .map_err(|err| err.to_string())?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(if stderr.is_empty() { "basics init failed".into() } else { stderr });
+    }
+    retry_startup(app);
+    Ok(true)
+}
+
+fn show_main(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.unminimize();
+        let _ = window.set_focus();
+    }
+}
+
+fn is_app_url(url: &Url) -> bool {
+    match url.scheme() {
+        "tauri" | "asset" | "about" | "data" | "blob" => true,
+        "http" | "https" => matches!(url.host_str(), Some("127.0.0.1" | "localhost" | "tauri.localhost")),
+        _ => false,
+    }
+}
+
+fn open_external(app: &AppHandle, url: &Url) {
+    if matches!(url.scheme(), "http" | "https" | "mailto") {
+        let _ = app.opener().open_url(url.as_str(), None::<&str>);
+    }
+}
+
+fn build_main_window(app: &AppHandle) -> tauri::Result<()> {
+    let nav_app = app.clone();
+    let popup_app = app.clone();
+    WebviewWindowBuilder::new(app, "main", WebviewUrl::App("loading.html".into()))
+        .title("Basics")
+        .inner_size(1280.0, 820.0)
+        .min_inner_size(900.0, 600.0)
+        .center()
+        // Links that leave the local server open in the system browser.
+        .on_navigation(move |url| {
+            if is_app_url(url) {
+                return true;
+            }
+            open_external(&nav_app, url);
+            false
+        })
+        .on_new_window(move |url, _features| {
+            if is_app_url(&url) {
+                if let Some(window) = popup_app.get_webview_window("main") {
+                    let _ = window.navigate(url);
+                }
+            } else {
+                open_external(&popup_app, &url);
+            }
+            NewWindowResponse::Deny
+        })
+        .build()?;
+    Ok(())
+}
+
+fn build_tray(app: &AppHandle) -> tauri::Result<()> {
+    let autostart_on = app.autolaunch().is_enabled().unwrap_or(false);
+    let open = MenuItem::with_id(app, "open", "Open Basics", true, None::<&str>)?;
+    let copy_mcp = MenuItem::with_id(app, "copy-mcp", "Copy MCP URL", true, None::<&str>)?;
+    let vault = MenuItem::with_id(app, "open-vault", "Open vault folder", true, None::<&str>)?;
+    let autostart = CheckMenuItem::with_id(app, "autostart", "Start at login", true, autostart_on, None::<&str>)?;
+    let updates = MenuItem::with_id(app, "updates", "Check for updates", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", "Quit Basics", true, None::<&str>)?;
+    let separator_a = PredefinedMenuItem::separator(app)?;
+    let separator_b = PredefinedMenuItem::separator(app)?;
+    let menu = Menu::with_items(app, &[&open, &copy_mcp, &vault, &separator_a, &autostart, &updates, &separator_b, &quit])?;
+
+    let autostart_item = autostart.clone();
+    let mut tray = TrayIconBuilder::with_id("main").tooltip("Basics").menu(&menu).show_menu_on_left_click(false);
+    if let Some(icon) = app.default_window_icon() {
+        tray = tray.icon(icon.clone());
+    }
+    tray.on_menu_event(move |app, event| match event.id().as_ref() {
+        "open" => show_main(app),
+        "copy-mcp" => {
+            let url = app.state::<ServerState>().0.lock().unwrap().status.url.clone();
+            if let Some(url) = url {
+                let _ = app.clipboard().write_text(format!("{url}/mcp"));
+            }
+        }
+        "open-vault" => {
+            let vault = app.state::<ServerState>().0.lock().unwrap().vault.clone();
+            if let Some(vault) = vault {
+                let _ = app.opener().open_path(vault, None::<&str>);
+            }
+        }
+        "autostart" => {
+            let launcher = app.autolaunch();
+            let enable = !launcher.is_enabled().unwrap_or(false);
+            let _ = if enable { launcher.enable() } else { launcher.disable() };
+            let _ = autostart_item.set_checked(launcher.is_enabled().unwrap_or(enable));
+        }
+        "updates" => {
+            let _ = app.opener().open_url(RELEASES_URL, None::<&str>);
+        }
+        "quit" => app.exit(0),
+        _ => {}
+    })
+    .on_tray_icon_event(|tray, event| {
+        if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = event {
+            show_main(tray.app_handle());
+        }
+    })
+    .build(app)?;
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let app = tauri::Builder::default()
+        // Registered first: a second launch only focuses the running window.
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| show_main(app)))
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, None))
         .manage(ServerState(Mutex::new(Server::default())))
-        .invoke_handler(tauri::generate_handler![startup_status, retry_startup])
+        .invoke_handler(tauri::generate_handler![startup_status, retry_startup, choose_vault])
         .setup(|app| {
             let handle = app.handle().clone();
+            build_main_window(&handle)?;
+            build_tray(&handle)?;
             std::thread::spawn(move || start(handle));
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            // Closing hides the window; the server keeps serving MCP until Quit.
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                if window.label() == "main" {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+            }
         })
         .build(tauri::generate_context!())
         .expect("error while building the Basics desktop app");

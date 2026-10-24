@@ -53,6 +53,8 @@
         font: inherit; font-weight: 500; padding: 6px 14px; border-radius: 999px; border: 0;
         background: var(--primary); color: #fff; cursor: pointer;
       }
+      .actions { display: flex; gap: 8px; }
+      button.secondary { background: transparent; color: var(--fg); border: 1px solid var(--border); }
       button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
     </style>
   </head>
@@ -64,7 +66,10 @@
         <h1>Basics could not start</h1>
         <p id="message"></p>
         <pre id="log"></pre>
-        <button type="button" id="retry">Retry</button>
+        <div class="actions">
+          <button type="button" id="choose" hidden>Choose vault folder…</button>
+          <button type="button" id="retry">Retry</button>
+        </div>
       </section>
     </main>
     <script>
@@ -79,7 +84,13 @@
           if (status.phase === "error") {
             starting.style.display = "none";
             error.style.display = "block";
-            document.getElementById("message").textContent = status.message;
+            const choose = document.getElementById("choose");
+            const retry = document.getElementById("retry");
+            choose.hidden = !status.needs_vault;
+            retry.classList.toggle("secondary", status.needs_vault);
+            document.getElementById("message").textContent = status.needs_vault
+              ? "There is no Basics vault yet. Choose an empty folder (or an existing vault) and Basics will set it up."
+              : status.message;
             document.getElementById("log").textContent = status.log.join("\n") || "(no server output)";
             return;
           }
@@ -95,6 +106,19 @@
         await invoke("retry_startup");
         clearTimeout(timer);
         poll();
+      });
+
+      document.getElementById("choose").addEventListener("click", async () => {
+        try {
+          const chosen = await invoke("choose_vault");
+          if (!chosen) return;
+          error.style.display = "none";
+          starting.style.display = "flex";
+          clearTimeout(timer);
+          poll();
+        } catch (err) {
+          document.getElementById("message").textContent = String(err);
+        }
       });
 
       poll();
