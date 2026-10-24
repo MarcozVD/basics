@@ -35,8 +35,16 @@ const dockLinks: DockLink[] = [
   { to: "/recommend", labelKey: "nav.recommend", icon: Sparkles, shortcut: "R" },
 ];
 
-const DOCK_HEIGHT = 54;
-/** Bottom space content keeps clear of the floating Dock. */
+/** Height of the floating Dock itself. */
+export const DOCK_HEIGHT = 54;
+/** The Dock floats this far off the bottom edge (`bottom-4`). */
+export const DOCK_OFFSET = 16;
+/**
+ * Bottom clearance every page keeps when scrolled to the end: the Dock's height
+ * plus 24px of breathing room (`DOCK_HEIGHT + 24`). `<main>` reserves it as
+ * bottom padding and scroll padding; fixed-height panels subtract it so their
+ * last row never lands under the Dock.
+ */
 export const DOCK_SPACE = DOCK_HEIGHT + 24;
 /** Room for a page's own sticky header (editor breadcrumb bar) when focus scrolls content up. */
 const STICKY_SPACE = 64;
@@ -74,7 +82,7 @@ export function Layout() {
     <div className="flex h-dvh flex-col overflow-hidden bg-background text-foreground">
       <header
         className={cn(
-          "sticky top-0 z-30 flex h-12 shrink-0 items-center justify-between gap-3 bg-background",
+          "sticky top-0 z-30 flex shrink-0 items-center justify-between gap-3 bg-background py-4",
           PAGE_GUTTERS,
           "border-b transition-colors",
           scrolled ? "border-border" : "border-transparent",

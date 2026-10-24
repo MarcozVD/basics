@@ -134,6 +134,40 @@
 
   --font-sans: "Geist Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: "Geist Mono Variable", ui-monospace, "JetBrains Mono", monospace;
+
+  /* Desktop page frame: gutters and the vertical rhythm between top-level blocks.
+     `page.tsx` reads them so the top bar, every page and its sticky header share one edge. */
+  --spacing-gutter: 24px;
+  --spacing-section: 32px;
+}
+
+@layer base {
+  :root {
+    @media (width >= 768px) {
+      --spacing-gutter: 32px;
+    }
+    @media (width >= 1024px) {
+      --spacing-gutter: 40px;
+    }
+    @media (width >= 1440px) {
+      --spacing-gutter: 48px;
+    }
+  }
+}
+
+@layer utilities {
+  /* Distance between the page title block and the sections below it. */
+  .gap-page-section {
+    gap: var(--spacing-section);
+  }
+  /* The page's side gutter, on every edge of the frame. */
+  .px-page-gutter {
+    padding-inline: var(--spacing-gutter);
+  }
+  /* Pulls a full-bleed sticky header back out over the frame's gutter. */
+  .mx-page-gutter {
+    margin-inline: calc(var(--spacing-gutter) * -1);
+  }
 }
 
 @layer base {

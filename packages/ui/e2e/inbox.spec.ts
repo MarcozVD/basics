@@ -87,6 +87,9 @@ test("lists and approves a proposal from the inbox", async ({ page }) => {
 
   await page.locator('nav a[href="/inbox"]').click();
   await expect(page.getByText(/Inbox zero/)).toBeVisible();
+  // With nothing pending the whole content area holds one empty state: no list and no detail pane.
+  await expect(page.getByTestId("inbox-list")).toHaveCount(0);
+  await expect(page.locator("aside")).toHaveCount(0);
 });
 
 test("approves a proposal directly from the list card", async ({ page }) => {

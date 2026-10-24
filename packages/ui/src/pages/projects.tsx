@@ -18,7 +18,7 @@ import { Button } from "@/components/motion/button/base";
 import { Input } from "@/components/motion/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/motion/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/motion/tabs";
-import { Page } from "@/components/page";
+import { PAGE_SECTIONS, Page } from "@/components/page";
 import { ErrorState, Loading } from "@/components/state";
 import { type TranslationKey, useI18n } from "@/i18n";
 import { exportStack, getNote } from "@/lib/api";
@@ -897,7 +897,7 @@ export function ProjectsPage() {
 
   if (projectEmpty) {
     return (
-      <Page className="flex min-h-0 flex-col">
+      <Page className={`min-h-0 ${PAGE_SECTIONS}`}>
         <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
           <div className="flex items-baseline gap-2">
             <h1 className="text-xl font-semibold tracking-tight">{t("page.projects.title")}</h1>
@@ -905,7 +905,7 @@ export function ProjectsPage() {
           </div>
           <NewProjectButton />
         </header>
-        <div className="flex min-h-[calc(100dvh-12rem)] items-center justify-center py-10">
+        <div className="flex min-h-[calc(100dvh-14rem)] items-center justify-center py-10">
           <div className="max-w-xl text-center">
             <span className="mx-auto grid size-12 place-items-center rounded-2xl bg-muted/60 text-muted-foreground">
               <FolderKanban className="size-5" aria-hidden="true" />
@@ -926,7 +926,7 @@ export function ProjectsPage() {
   }
 
   return (
-    <Page className="flex min-h-0 flex-col">
+    <Page className={`min-h-0 ${PAGE_SECTIONS}`}>
       <header className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
         <div className="flex items-baseline gap-2">
           <h1 className="text-xl font-semibold tracking-tight">{t("page.projects.title")}</h1>
@@ -984,7 +984,7 @@ export function ProjectsPage() {
         </div>
       </header>
 
-      <div className="mt-4 grid min-h-0 gap-4 min-[1280px]:h-[calc(100dvh-13rem)] min-[1280px]:grid-cols-[420px_minmax(0,1fr)]">
+      <div className="grid min-h-0 gap-4 min-[1280px]:h-[calc(100dvh-16rem)] min-[1280px]:grid-cols-[420px_minmax(0,1fr)]">
         <div className="flex min-h-0 min-w-0 flex-col">
           <div
             role="listbox"

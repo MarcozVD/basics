@@ -13,7 +13,7 @@ import { Loader } from "@/components/motion/loader";
 import { MorphPopover, MorphPopoverContent, MorphPopoverTrigger } from "@/components/motion/popover-morph";
 import { Tabs, TabsList, TabsTrigger } from "@/components/motion/tabs";
 import { TextReveal } from "@/components/motion/text-reveal";
-import { Page } from "@/components/page";
+import { PAGE_SECTIONS, Page } from "@/components/page";
 import { ErrorState, Loading } from "@/components/state";
 import { type TranslationKey, useI18n } from "@/i18n";
 import { agentColor, agentInitial } from "@/lib/agent-color";
@@ -90,8 +90,14 @@ interface EdgeFade {
 
 /** Height of the edge fade on the activity scroll panel. */
 const FADE_PX = 24;
-/** The page's own bottom rhythm (`Page` uses `pb-8`) that has to stay below the panel. */
-const PAGE_BOTTOM_PX = 32;
+/** Below 1024 the stacked layout caps the activity panel at about this many rows. */
+const ACTIVITY_ROWS = 8;
+/**
+ * A hair of slack under the wide activity panel so sub-pixel rounding can never
+ * turn the exact fill into a scrollbar on `<main>`. Home drops its own `pb-8`
+ * from 1024 up, so this is the whole bottom rhythm the panel leaves behind.
+ */
+const PAGE_BOTTOM_PX = 4;
 
 /** Mask that fades only the edges where the list still has content to scroll to. */
 function activityMask({ top, bottom }: EdgeFade): string | undefined {
@@ -103,14 +109,24 @@ function activityMask({ top, bottom }: EdgeFade): string | undefined {
   return undefined;
 }
 
+interface ActivityPanelSize {
+  /** Exact fill height on wide screens; undefined in the stacked layout. */
+  height?: number;
+  /** Row cap on narrow screens; undefined on wide screens. */
+  maxHeight?: number;
+}
+
 /**
- * Height that leaves the activity panel exactly the space `<main>` has under the page
- * header: from the panel's own top edge down to the Dock clearance and the page's bottom
- * rhythm. Measuring the panel keeps the title block, grid gap and language-dependent line
- * wrapping out of the calculation. Below 1024 the stacked layout uses its CSS cap instead.
+ * Size the activity panel so it never runs under the Dock.
+ *
+ * At 1024 and up the panel fills the space `<main>` has under the page header,
+ * down to the Dock clearance and the page's bottom rhythm — measuring the panel
+ * keeps the title block, grid gap and language-dependent wrapping out of the
+ * calculation. Below 1024 the stacked layout caps it at about 8 measured rows so
+ * it scrolls on its own instead of growing the page.
  */
-function useActivityPanelHeight(ref: RefObject<HTMLElement | null>, attachKey: number): number | undefined {
-  const [height, setHeight] = useState<number>();
+function useActivityPanelSize(ref: RefObject<HTMLElement | null>, attachKey: number): ActivityPanelSize {
+  const [size, setSize] = useState<ActivityPanelSize>({});
 
   // Layout effect so the panel never paints at the wrong height first.
   // biome-ignore lint/correctness/useExhaustiveDependencies: re-measure when the list mounts or its content changes.
@@ -119,21 +135,30 @@ function useActivityPanelHeight(ref: RefObject<HTMLElement | null>, attachKey: n
     const main = el?.closest("main");
     if (!el || !main) return;
     let cancelled = false;
+    const apply = (next: ActivityPanelSize) => {
+      if (cancelled) return;
+      setSize((prev) => (prev.height === next.height && prev.maxHeight === next.maxHeight ? prev : next));
+    };
     const measure = () => {
       if (cancelled) return;
       if (window.innerWidth < 1024) {
-        setHeight(undefined);
+        // `maxHeight`, not `height`, keeps short lists compact while long ones scroll.
+        const row = el.querySelector("li");
+        const rowHeight = row?.getBoundingClientRect().height ?? 0;
+        apply(rowHeight > 0 ? { maxHeight: Math.round(rowHeight * ACTIVITY_ROWS) } : {});
         return;
       }
       const offset = el.getBoundingClientRect().top - main.getBoundingClientRect().top + main.scrollTop;
       // `main.clientHeight` includes its bottom padding, which already reserves DOCK_SPACE.
       const available = main.clientHeight - DOCK_SPACE - offset - PAGE_BOTTOM_PX;
       const next = Math.round(available);
-      setHeight(next > 0 ? next : undefined);
+      apply(next > 0 ? { height: next } : {});
     };
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(main);
+    // Row height (and therefore the 8-row cap) can change with the content or wrapping.
+    observer.observe(el);
     // The page header above the panel is the only other thing whose height can move its top edge.
     const pageHeader = main.querySelector("h1")?.closest("header");
     if (pageHeader) observer.observe(pageHeader);
@@ -146,7 +171,7 @@ function useActivityPanelHeight(ref: RefObject<HTMLElement | null>, attachKey: n
     };
   }, [ref, attachKey]);
 
-  return height;
+  return size;
 }
 
 function useRevealOnce(): boolean {
@@ -309,7 +334,7 @@ function StarterPacks({
   const allInstalled = Boolean(packs?.length) && !canInstall;
 
   return (
-    <section aria-label={t(allInstalled ? "home.packs.installedTitle" : "home.packs.title")} className="mt-6 w-full min-w-0">
+    <section aria-label={t(allInstalled ? "home.packs.installedTitle" : "home.packs.title")} className="w-full min-w-0">
       <div className="flex items-start gap-3">
         <span className="grid size-10 shrink-0 place-items-center rounded-full bg-muted/60 text-muted-foreground">
           {allInstalled ? <Check className="size-5" aria-hidden="true" /> : <Package className="size-5" aria-hidden="true" />}
@@ -588,7 +613,7 @@ export function HomePage() {
 
   const activityRef = useRef<HTMLElement>(null);
   const [activityFade, setActivityFade] = useState<EdgeFade>({ top: false, bottom: false });
-  const activityHeight = useActivityPanelHeight(activityRef, groups.length);
+  const activitySize = useActivityPanelSize(activityRef, groups.length);
   // biome-ignore lint/correctness/useExhaustiveDependencies: re-attach whenever the list renders — ResizeObserver then covers size changes.
   useEffect(() => {
     const el = activityRef.current;
@@ -729,7 +754,7 @@ export function HomePage() {
   const pending = stats.data?.inbox ?? 0;
 
   return (
-    <Page>
+    <Page className={`${PAGE_SECTIONS} min-[1024px]:pb-0`}>
       <header>
         {reveal ? (
           <TextReveal
@@ -763,7 +788,7 @@ export function HomePage() {
           onInstall={() => install.mutate([...selectedPacks])}
         />
       ) : (
-        <div className="mt-5 grid gap-6 min-[1024px]:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] min-[1440px]:grid-cols-[minmax(0,40fr)_minmax(0,35fr)_minmax(0,25fr)] min-[1440px]:gap-5">
+        <div className="grid gap-6 min-[1024px]:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] min-[1440px]:grid-cols-[minmax(0,40fr)_minmax(0,35fr)_minmax(0,25fr)] min-[1440px]:gap-5">
           <section aria-label={t("home.waiting")} className="min-w-0">
             <div className="flex items-baseline justify-between gap-3">
               <SectionLabel>{t("home.waiting")}</SectionLabel>
@@ -875,8 +900,13 @@ export function HomePage() {
                 tabIndex={0}
                 aria-labelledby="home-activity-label"
                 data-testid="activity-panel"
-                className="mt-2 max-h-[60dvh] overflow-y-auto overscroll-contain focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring min-[1024px]:max-h-none"
-                style={{ height: activityHeight, WebkitMaskImage: activityMaskImage, maskImage: activityMaskImage }}
+                className="mt-2 overflow-y-auto overscroll-contain focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                style={{
+                  height: activitySize.height,
+                  maxHeight: activitySize.maxHeight,
+                  WebkitMaskImage: activityMaskImage,
+                  maskImage: activityMaskImage,
+                }}
               >
                 <ul className="mt-1 flex flex-col">
                   <AnimatePresence initial={false}>

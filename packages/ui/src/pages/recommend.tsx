@@ -7,7 +7,7 @@ import { createPortal } from "react-dom";
 import { Link } from "react-router";
 import { PromptInput } from "@/components/agents/prompt-input";
 import { EXPORT_TARGETS, ExportModal } from "@/components/export-modal";
-import { DOCK_SPACE } from "@/components/layout";
+import { DOCK_HEIGHT, DOCK_OFFSET } from "@/components/layout";
 import {
   AdaptiveStepper,
   AdaptiveStepperDecrement,
@@ -19,7 +19,7 @@ import { CARD_TARGET_CLASS, Card, CardContent, CardHeader } from "@/components/m
 import { Checkbox } from "@/components/motion/checkbox";
 import { Loader } from "@/components/motion/loader";
 import { Tooltip } from "@/components/motion/tooltip";
-import { Page } from "@/components/page";
+import { PAGE_SECTIONS, Page } from "@/components/page";
 import { CreateProjectDialog } from "@/components/recommend/create-project-dialog";
 import { ErrorState } from "@/components/state";
 import { type TranslationKey, useT } from "@/i18n";
@@ -51,8 +51,7 @@ const PROFILE_COLUMNS = "grid gap-3 [grid-template-columns:repeat(auto-fill,minm
 const STAGGER_LIMIT = 10;
 const STAGGER_STEP = 0.02;
 /** The Dock floats 16px off the bottom edge and is 54px tall; the selection pill sits 12px above it. */
-const DOCK_BOTTOM = 16;
-const DOCK_HEIGHT = DOCK_SPACE - 24;
+const DOCK_BOTTOM = DOCK_OFFSET;
 const BAR_GAP = 12;
 
 const enter = (index: number, reduce: boolean) => ({
@@ -470,8 +469,8 @@ export function RecommendPage() {
   };
 
   return (
-    <div className="flex min-h-full flex-col">
-      <Page className={cn("flex flex-col gap-4", selected.size > 0 && "pb-16")}>
+    <div className="min-h-full">
+      <Page className={cn(PAGE_SECTIONS, selected.size > 0 && "pb-16")}>
         <div className="flex flex-col gap-1">
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-xl font-semibold tracking-tight">{t("page.recommend.title")}</h1>

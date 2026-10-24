@@ -10,7 +10,7 @@ import { Input } from "@/components/motion/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/motion/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/motion/tabs";
 import { TypeChip } from "@/components/note-form/note-preview";
-import { Page } from "@/components/page";
+import { PAGE_SECTIONS, Page } from "@/components/page";
 import { ErrorState, Loading } from "@/components/state";
 import { type TranslationKey, useT } from "@/i18n";
 import { EASE_OUT, SPRING_LAYOUT, SPRING_PRESS } from "@/lib/ease";
@@ -321,8 +321,8 @@ export function ExplorePage() {
   };
 
   return (
-    <Page className="flex flex-col pt-0">
-      <div className="sticky top-0 z-20 -mx-5 bg-background px-5 pt-4 pb-0 md:-mx-6 md:px-6 min-[1440px]:-mx-8 min-[1440px]:px-8">
+    <Page className={cn("pt-0", PAGE_SECTIONS)}>
+      <div className="mx-page-gutter sticky top-0 z-20 bg-background px-page-gutter pt-4 pb-0">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-baseline gap-2">
             <h1 className="text-xl font-semibold tracking-tight">{t("page.explore.title")}</h1>

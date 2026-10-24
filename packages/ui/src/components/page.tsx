@@ -1,8 +1,20 @@
 import type { HTMLAttributes, ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
-/** Shared side gutters so the top bar and every page content edge stay aligned. */
-export const PAGE_GUTTERS = "px-5 md:px-6 min-[1440px]:px-8";
+/**
+ * Shared side gutters so the top bar and every page content edge stay aligned.
+ * The values live as one token (`--spacing-gutter` in `index.css`): 24px below
+ * 768, 32px from 768, 40px from 1024 and 48px from 1440. The top bar uses the
+ * same class so both edges line up at every width.
+ */
+export const PAGE_GUTTERS = "px-page-gutter";
+
+/**
+ * Vertical rhythm shared by the routed pages: the page title block and the
+ * sections below it sit 32px apart (`--spacing-section`), which reads as one
+ * deliberate cadence instead of a stretched web page.
+ */
+export const PAGE_SECTIONS = "flex flex-col gap-page-section";
 
 interface PageProps extends HTMLAttributes<HTMLDivElement> {
   children: ReactNode;

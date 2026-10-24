@@ -9,7 +9,7 @@ import { AnimatedNumber } from "@/components/motion/animated-number";
 import { Button } from "@/components/motion/button/base";
 import { CenterMorphModal, CenterMorphModalContent } from "@/components/motion/center-morph-modal";
 import { Tabs, TabsList, TabsTrigger } from "@/components/motion/tabs";
-import { Page } from "@/components/page";
+import { PAGE_SECTIONS, Page } from "@/components/page";
 import { issuesToErrors, ProposalDetail, ProposalEditModal } from "@/components/proposal-detail";
 import { ErrorState, Loading } from "@/components/state";
 import { type TranslationKey, useI18n } from "@/i18n";
@@ -408,34 +408,39 @@ export function InboxPage() {
       </div>
     ) : null;
 
-  const emptyState =
-    packFiltered.length === 0 ? (
-      <div className="flex min-h-64 flex-col items-center justify-center gap-2 px-4 py-10 text-center min-[1280px]:min-h-full">
-        <span className="grid size-10 place-items-center rounded-full bg-muted/60 text-muted-foreground">
-          <InboxIcon className="size-5" aria-hidden="true" />
-        </span>
-        <p className="text-sm font-medium">{t("inbox.emptyZero")}</p>
-        <p className="max-w-md text-xs leading-5 text-muted-foreground">
-          {t("inbox.emptyHint")}{" "}
-          <a
-            href={README_PROPOSE}
-            target="_blank"
-            rel="noreferrer"
-            className="rounded-sm underline decoration-border underline-offset-2 transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-          >
-            {t("inbox.readme")}
-          </a>
-        </p>
-      </div>
-    ) : (
-      <div className="flex min-h-64 flex-col items-center justify-center gap-1 px-4 py-10 text-center">
-        <p className="text-sm font-medium">{t("state.empty.title")}</p>
-        <p className="text-xs text-muted-foreground">{t("state.empty.description")}</p>
-      </div>
-    );
+  const emptyState = (
+    <div className="flex min-h-64 flex-col items-center justify-center gap-1 px-4 py-10 text-center">
+      <p className="text-sm font-medium">{t("state.empty.title")}</p>
+      <p className="text-xs text-muted-foreground">{t("state.empty.description")}</p>
+    </div>
+  );
+
+  // With nothing pending the whole content area shows one empty state instead of
+  // a split list + detail, both claiming the inbox is empty.
+  const zeroState = (
+    <div className="flex flex-1 flex-col items-center justify-center gap-2 px-4 py-10 text-center min-[1280px]:min-h-full">
+      <span className="grid size-10 place-items-center rounded-full bg-muted/60 text-muted-foreground">
+        <InboxIcon className="size-5" aria-hidden="true" />
+      </span>
+      <p className="text-sm font-medium">{t("inbox.emptyZero")}</p>
+      <p className="max-w-md text-xs leading-5 text-muted-foreground">
+        {t("inbox.emptyHint")}{" "}
+        <a
+          href={README_PROPOSE}
+          target="_blank"
+          rel="noreferrer"
+          className="rounded-sm underline decoration-border underline-offset-2 transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        >
+          {t("inbox.readme")}
+        </a>
+      </p>
+    </div>
+  );
+
+  const nothingPending = !inbox.isPending && !inbox.error && packFiltered.length === 0;
 
   return (
-    <Page className="flex min-h-0 flex-col">
+    <Page className={`${PAGE_SECTIONS} min-h-0`}>
       <span className="sr-only">{t("inbox.shortcuts")}</span>
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-baseline gap-2">
@@ -500,130 +505,134 @@ export function InboxPage() {
         </div>
       </header>
 
-      <div className="mt-4 grid min-h-0 gap-4 min-[1280px]:h-[calc(100dvh-14rem)] min-[1280px]:grid-cols-[420px_minmax(0,1fr)]">
-        <div className="flex min-h-0 min-w-0 flex-col">
-          {packBar ? <div className="mb-3">{packBar}</div> : null}
+      {nothingPending ? (
+        zeroState
+      ) : (
+        <div className="grid min-h-0 gap-4 min-[1280px]:h-[calc(100dvh-16rem)] min-[1280px]:grid-cols-[420px_minmax(0,1fr)]">
+          <div className="flex min-h-0 min-w-0 flex-col">
+            {packBar ? <div className="mb-3">{packBar}</div> : null}
 
-          {/* Inset the scroll box so card rings and focus outlines are not cut at the edges;
-              the negative margin keeps the cards aligned with the page grid. */}
-          <div
-            data-testid="inbox-list"
-            className="min-h-0 flex-1 min-[1280px]:-m-1.5 min-[1280px]:overflow-y-auto min-[1280px]:overscroll-contain min-[1280px]:p-1.5"
+            {/* Inset the scroll box so card rings and focus outlines are not cut at the edges;
+                the negative margin keeps the cards aligned with the page grid. */}
+            <div
+              data-testid="inbox-list"
+              className="min-h-0 flex-1 min-[1280px]:-m-1.5 min-[1280px]:overflow-y-auto min-[1280px]:overscroll-contain min-[1280px]:p-1.5"
+            >
+              {inbox.isPending ? (
+                <div className="py-10">
+                  <Loading />
+                </div>
+              ) : inbox.error ? (
+                <div className="py-10">
+                  <ErrorState error={inbox.error} />
+                </div>
+              ) : visible.length === 0 ? (
+                emptyState
+              ) : (
+                <div className="grid gap-3 min-[640px]:grid-cols-2 min-[1280px]:grid-cols-1">
+                  <AnimatePresence initial mode="popLayout">
+                    {visible.map((proposal, index) => {
+                      const busy =
+                        (approve.isPending && approve.variables === proposal.id) || (reject.isPending && reject.variables === proposal.id);
+                      const typeLabel = t(`type.${proposal.type}` as TranslationKey);
+                      const name = proposal.meta.proposed_by;
+                      const pack = packProposer(name);
+                      return (
+                        <motion.div
+                          key={proposal.id}
+                          id={`proposal-card-${index}`}
+                          data-proposal-id={proposal.id}
+                          layout={!reduce}
+                          initial={reduce ? { opacity: 0 } : { opacity: 0, y: 6 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={
+                            reduce
+                              ? { opacity: 0, transition: { duration: 0 } }
+                              : { opacity: 0, scale: 0.97, transition: { type: "spring", stiffness: 420, damping: 34 } }
+                          }
+                          transition={
+                            reduce
+                              ? { duration: 0 }
+                              : {
+                                  layout: SPRING_LAYOUT,
+                                  opacity: { duration: 0.18, ease: EASE_OUT, delay: Math.min(index, 9) * 0.02 },
+                                  y: { duration: 0.18, ease: EASE_OUT, delay: Math.min(index, 9) * 0.02 },
+                                }
+                          }
+                          onKeyDown={(event) => onCardKeyDown(event, index)}
+                          className="min-w-0"
+                        >
+                          <ApprovalCard
+                            title={proposal.title || proposal.id}
+                            subtitle={proposal.id}
+                            actionLabel={t(proposal.meta.action === "create" ? "proposal.action.create" : "proposal.action.update")}
+                            action={proposal.meta.action}
+                            typeLabel={typeLabel}
+                            typeColor={`var(--type-${proposal.type})`}
+                            agentName={pack ? t("inbox.byPack", { name: pack.name, version: pack.version }) : t("inbox.by", { name })}
+                            agentInitial={agentInitial(name)}
+                            agentColor={agentColor(name)}
+                            agentForeground="#111113"
+                            agentKind={pack ? "pack" : "agent"}
+                            reason={proposal.meta.reason}
+                            time={
+                              <time dateTime={proposal.meta.created} title={proposal.meta.created}>
+                                {formatRelativeTime(proposal.meta.created, language)}
+                              </time>
+                            }
+                            status={busy ? "submitting" : "pending"}
+                            selected={index === selected}
+                            busy={busy}
+                            approveLabel={t("proposal.approve")}
+                            rejectLabel={t("proposal.reject")}
+                            rejectConfirmLabel={t("proposal.rejectConfirm")}
+                            rejectArmed={armed === proposal.id}
+                            onOpen={() => open(proposal.id)}
+                            onApprove={() => approve.mutate(proposal.id)}
+                            onReject={() => requestReject(proposal.id)}
+                          />
+                        </motion.div>
+                      );
+                    })}
+                  </AnimatePresence>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <aside
+            aria-label={t("page.inbox.title")}
+            className="hidden min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-border bg-card/20 min-[1280px]:flex"
           >
-            {inbox.isPending ? (
-              <div className="py-10">
+            {inbox.isPending || (Boolean(current) && detailQuery.isPending) ? (
+              <div className="grid h-full place-items-center">
                 <Loading />
               </div>
-            ) : inbox.error ? (
-              <div className="py-10">
-                <ErrorState error={inbox.error} />
+            ) : detailQuery.error ? (
+              <div className="p-4">
+                <ErrorState error={detailQuery.error} />
               </div>
-            ) : visible.length === 0 ? (
-              emptyState
+            ) : detail && current ? (
+              <ProposalDetail
+                variant="panel"
+                proposal={detail}
+                busy={
+                  (approve.isPending && approve.variables === current.id) ||
+                  (reject.isPending && reject.variables === current.id) ||
+                  editApprove.isPending
+                }
+                armed={armed === current.id}
+                editButtonRef={editButtonRef}
+                onApprove={() => approve.mutate(current.id)}
+                onReject={() => requestReject(current.id)}
+                onEdit={openEdit}
+              />
             ) : (
-              <div className="grid gap-3 min-[640px]:grid-cols-2 min-[1280px]:grid-cols-1">
-                <AnimatePresence initial mode="popLayout">
-                  {visible.map((proposal, index) => {
-                    const busy =
-                      (approve.isPending && approve.variables === proposal.id) || (reject.isPending && reject.variables === proposal.id);
-                    const typeLabel = t(`type.${proposal.type}` as TranslationKey);
-                    const name = proposal.meta.proposed_by;
-                    const pack = packProposer(name);
-                    return (
-                      <motion.div
-                        key={proposal.id}
-                        id={`proposal-card-${index}`}
-                        data-proposal-id={proposal.id}
-                        layout={!reduce}
-                        initial={reduce ? { opacity: 0 } : { opacity: 0, y: 6 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={
-                          reduce
-                            ? { opacity: 0, transition: { duration: 0 } }
-                            : { opacity: 0, scale: 0.97, transition: { type: "spring", stiffness: 420, damping: 34 } }
-                        }
-                        transition={
-                          reduce
-                            ? { duration: 0 }
-                            : {
-                                layout: SPRING_LAYOUT,
-                                opacity: { duration: 0.18, ease: EASE_OUT, delay: Math.min(index, 9) * 0.02 },
-                                y: { duration: 0.18, ease: EASE_OUT, delay: Math.min(index, 9) * 0.02 },
-                              }
-                        }
-                        onKeyDown={(event) => onCardKeyDown(event, index)}
-                        className="min-w-0"
-                      >
-                        <ApprovalCard
-                          title={proposal.title || proposal.id}
-                          subtitle={proposal.id}
-                          actionLabel={t(proposal.meta.action === "create" ? "proposal.action.create" : "proposal.action.update")}
-                          action={proposal.meta.action}
-                          typeLabel={typeLabel}
-                          typeColor={`var(--type-${proposal.type})`}
-                          agentName={pack ? t("inbox.byPack", { name: pack.name, version: pack.version }) : t("inbox.by", { name })}
-                          agentInitial={agentInitial(name)}
-                          agentColor={agentColor(name)}
-                          agentForeground="#111113"
-                          agentKind={pack ? "pack" : "agent"}
-                          reason={proposal.meta.reason}
-                          time={
-                            <time dateTime={proposal.meta.created} title={proposal.meta.created}>
-                              {formatRelativeTime(proposal.meta.created, language)}
-                            </time>
-                          }
-                          status={busy ? "submitting" : "pending"}
-                          selected={index === selected}
-                          busy={busy}
-                          approveLabel={t("proposal.approve")}
-                          rejectLabel={t("proposal.reject")}
-                          rejectConfirmLabel={t("proposal.rejectConfirm")}
-                          rejectArmed={armed === proposal.id}
-                          onOpen={() => open(proposal.id)}
-                          onApprove={() => approve.mutate(proposal.id)}
-                          onReject={() => requestReject(proposal.id)}
-                        />
-                      </motion.div>
-                    );
-                  })}
-                </AnimatePresence>
-              </div>
+              <p className="m-auto max-w-sm px-6 text-center text-sm text-muted-foreground">{t("inbox.empty")}</p>
             )}
-          </div>
+          </aside>
         </div>
-
-        <aside
-          aria-label={t("page.inbox.title")}
-          className="hidden min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-border bg-card/20 min-[1280px]:flex"
-        >
-          {inbox.isPending || (Boolean(current) && detailQuery.isPending) ? (
-            <div className="grid h-full place-items-center">
-              <Loading />
-            </div>
-          ) : detailQuery.error ? (
-            <div className="p-4">
-              <ErrorState error={detailQuery.error} />
-            </div>
-          ) : detail && current ? (
-            <ProposalDetail
-              variant="panel"
-              proposal={detail}
-              busy={
-                (approve.isPending && approve.variables === current.id) ||
-                (reject.isPending && reject.variables === current.id) ||
-                editApprove.isPending
-              }
-              armed={armed === current.id}
-              editButtonRef={editButtonRef}
-              onApprove={() => approve.mutate(current.id)}
-              onReject={() => requestReject(current.id)}
-              onEdit={openEdit}
-            />
-          ) : (
-            <p className="m-auto max-w-sm px-6 text-center text-sm text-muted-foreground">{t("inbox.empty")}</p>
-          )}
-        </aside>
-      </div>
+      )}
 
       {detail && current ? (
         <ProposalEditModal
