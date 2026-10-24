@@ -27,7 +27,9 @@
     "version-packages": "changeset version",
     "cli": "tsx packages/basics/src/cli.ts",
     "dev:mcp": "tsx packages/basics/src/mcp/server.ts",
-    "dev:ui": "npm run dev -w @marcozvd/basics-ui"
+    "dev:ui": "npm run dev -w @marcozvd/basics-ui",
+    "desktop:dev": "npm run dev --prefix apps/desktop",
+    "desktop:build": "npm run build --prefix apps/desktop"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.15",
