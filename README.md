@@ -40,7 +40,7 @@ Other clients (Cursor, VS Code, Codex, Windsurf) are covered in
 - **Agents that ask first** — agent writes become proposals in `inbox/` with a reason and a diff; you approve in the CLI or the UI.
 - **Recommended stacks** — rank technologies per layer from a project description, by keywords or with optional local embeddings.
 - **From stack to project** — export `STACK.md`, `AGENTS.md`, `CLAUDE.md` and Cursor rules, then run the stack checks in the project.
-- **Packs** — official starter packs in English and Spanish; updates arrive as inbox proposals, never as silent writes.
+- **Packs** — official starter packs in English and Spanish, plus community packs from any GitHub repo; new notes and updates arrive as inbox proposals, never as silent writes.
 - **Local web UI and MCP** — a React UI with editor, graph, inbox diff and recommendation playground, plus MCP over HTTP or stdio.
 
 _Screenshots (web UI, Inbox diff, graph): coming soon._

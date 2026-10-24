@@ -1,7 +1,7 @@
 # Packs
 
-A pack is a versioned bundle of notes. Official packs ship with the CLI; you install into your vault and later pull
-changes through the inbox.
+A pack is a versioned bundle of notes, either **bundled** with the CLI or **community** packs you add from a GitHub
+repository. Official packs install straight into your vault; community packs always land in the inbox for review.
 
 ## Install
 
@@ -42,12 +42,71 @@ basics inbox approve-all --pack python-api --version 1.1.0
 `--pack` is required; `--version` limits the batch to one pack version. In the UI, proposals from a pack are grouped with
 an **Approve all** button.
 
-## Author a pack
+## Community packs
 
-The official packs live under `packs/<name>/` in the repository, with this layout:
+Add a pack from any public GitHub repo with `basics pack add` or the UI's "Add from GitHub" input on Home:
+
+```bash
+basics pack add acme/my-pack
+basics pack add acme/my-pack@v2.1.0      # a specific branch, tag or commit
+basics pack add acme/my-pack --path packs/docker --lang en   # a subdirectory holding the pack
+```
+
+`pack add` downloads `https://codeload.github.com/<owner>/<repo>/tar.gz/<ref>` (default `HEAD`), extracts it into
+`<vault>/.basics/packs/<owner>/<repo>/` with a `source.json` describing the repo, ref, `--path` and version, and prints what
+it proposed — for example:
 
 ```
-packs/my-pack/
+added acme/my-pack@v2.1.0
+3 new, 1 changed, 0 unchanged, 0 skipped, 1 invalid
+  skipped invalid notes/en/layers/bad.layer.md: layer: invalid enum value
+Review the proposals in the inbox (`basics inbox` or the UI) before installing.
+```
+
+### Review flow
+
+Every note arrives as an **inbox proposal** from agent `pack:<owner>/<repo>@<version>` (updates come from the same
+agent). Nothing is installed automatically:
+
+```bash
+basics inbox approve-all --pack acme/my-pack
+```
+
+or, in the UI, open the filtered inbox and hit **Approve all**. Once approved, notes get
+`source: pack:<owner>/<repo>@<version>` and `pack_lang`, and `basics pack list` shows the installed version,
+`pack update <owner>/<repo>` re-fetches the cached ref and proposes only the changed notes (a no-op when the version did
+not increase), and `basics pack remove <owner>/<repo>` deletes the cache only — installed notes stay.
+
+### Safety rules
+
+A community pack is **untrusted content**: it is never executed and never written straight into the vault.
+
+- Only `pack.json` and `notes/<lang>/<type-dir>/*.md` are read from the archive. Everything else — READMEs, scripts,
+  config files, nested folders — is ignored.
+- Limits: the whole archive is rejected if any file is **> 256 KB**, it has **> 1000 entries**, or it unpacks to
+  **> 10 MB**.
+- Symlinks, hard links, absolute paths and `..` segments are rejected.
+- Note file names are limited to letters, digits, `.`, `_` and `-`; anything else is skipped and reported.
+- Refs (branches, tags, commits) and `--path` cannot contain `..`.
+- Every note is validated against the note schema; invalid notes are skipped and reported with the file and reason.
+- Optional `GITHUB_TOKEN` is sent as a bearer header to raise GitHub's rate limits. It is never required and never
+  prompted for.
+
+So adding a pack never changes your vault by itself: what reaches it is an inbox proposal you review and approve or
+reject. Read the diffs before approving, as you would any agent proposal.
+
+### Check notes need trust
+
+If a note carries a `command`, `basics check` asks for trust per directory + command before running it, exactly like any
+other check note.
+
+## Make your own pack
+
+A pack is a directory in a Git repository with a `pack.json` manifest and Markdown notes under `notes/<lang>/<type-dir>/`.
+Once your repo is public, anyone can add it with `basics pack add`.
+
+```
+my-pack/
   pack.json
   notes/
     en/
@@ -59,6 +118,9 @@ packs/my-pack/
     es/
       ... same ids as en/ ...
 ```
+
+A note also needs to sit in the type directory it declares — `layers/`, `tech/`, `practices/`, `checks/`, `profiles/`,
+`projects/`. Anything in other directories, or with other file names, is ignored.
 
 `pack.json`:
 
@@ -77,13 +139,46 @@ packs/my-pack/
 
 | Field | Rules |
 | --- | --- |
-| `name` | lowercase letters, digits and dashes; must match the folder name |
+| `name` | display name for the manifest (the community pack id is always `owner/repo`); bundled packs require lowercase letters, digits and dashes matching the folder |
 | `version` | dot-separated numbers, compared numerically (`1.10.0` is newer than `1.9.0`) |
 | `description` | short text per language |
 | `requires` | packs installed before this one, recursively |
 | `languages` | at least one; every language needs a `notes/<lang>/` folder |
 
-Rules for the notes:
+### A minimal example
+
+```bash
+mkdir my-pack && cd my-pack
+```
+
+```bash
+mkdir -p notes/en/tech notes/en/checks
+cat > pack.json <<'EOF'
+{ "name": "my-pack", "version": "1.0.0",
+  "description": { "en": "My stack notes" },
+  "languages": ["en"], "requires": [] }
+EOF
+cat > notes/en/tech/redis.md <<'EOF'
+---
+type: tech
+kind: database
+title: Redis
+layer: data
+tags: [cache]
+---
+# Redis
+EOF
+```
+
+Then publish your repo and install it from anywhere:
+
+```bash
+basics pack add <you>/my-pack
+basics inbox list            # see the proposed notes
+basics inbox approve-all --pack <you>/my-pack
+```
+
+### Language and versioning rules
 
 - Every declared language uses the same ids, so switching language keeps links and `basics.json` stacks valid.
 - Notes must pass `basics validate`; a pack note is a normal note with `type` and its type's fields.
