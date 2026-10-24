@@ -421,6 +421,8 @@ export const en = {
   "graph.toolbar": "Graph controls",
   "graph.types": "Note types",
   "graph.allLayers": "All layers",
+  "graph.bandProfiles": "Profiles & projects",
+  "graph.bandCrossLayer": "Cross-layer",
   "graph.searchPlaceholder": "Search nodes…",
   "graph.searchHint": "Enter jumps to the first match",
   "graph.matches": "{count} matches",

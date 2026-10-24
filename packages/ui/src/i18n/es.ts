@@ -424,6 +424,8 @@ export const es: typeof en = {
   "graph.toolbar": "Controles del grafo",
   "graph.types": "Tipos de nota",
   "graph.allLayers": "Todas las capas",
+  "graph.bandProfiles": "Perfiles y proyectos",
+  "graph.bandCrossLayer": "Entre capas",
   "graph.searchPlaceholder": "Buscar nodos…",
   "graph.searchHint": "Enter salta a la primera coincidencia",
   "graph.matches": "{count} coincidencias",

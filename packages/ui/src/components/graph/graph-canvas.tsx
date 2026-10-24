@@ -6,7 +6,16 @@ import { type Ref, useEffect, useImperativeHandle, useMemo, useRef, useState } f
 import { type TranslationKey, useT } from "@/i18n";
 import { EASE_OUT } from "@/lib/ease";
 import { cn } from "@/lib/utils";
-import { GRAPH_TYPES, localGraph, matchNodes } from "./graph-model";
+import {
+  computeGroupedLayout,
+  GRAPH_TYPES,
+  GROUPED_DOT_MAX,
+  GROUPED_LABEL_FONT_MAX,
+  type GroupedLayout,
+  localGraph,
+  matchNodes,
+  nodeDiameter,
+} from "./graph-model";
 
 cytoscape.use(fcose);
 
@@ -33,6 +42,8 @@ export interface GraphCanvasProps {
   visibleIds?: Set<string> | null;
   /** Highlights matching nodes and dims the rest. */
   query?: string;
+  /** Draw layer notes as compound boxes around their members (full graph only). */
+  grouped?: boolean;
   selectedId?: string | null;
   /** Free space kept around the graph when fitting (floating toolbar, dock). */
   insets?: Insets;
@@ -46,7 +57,10 @@ interface Palette {
   types: Record<GraphNodeType, string>;
   foreground: string;
   muted: string;
+  surface: string;
   background: string;
+  border: string;
+  borderOpacity: number;
   broken: string;
 }
 
@@ -64,6 +78,12 @@ const FONT = '"Geist Variable", ui-sans-serif, system-ui, sans-serif';
 const LABEL_SIZE = 11;
 /** Labels disappear once the zoom drops below 0.6 (cytoscape compares font size × zoom). */
 const LABEL_MIN_ZOOM = 0.6;
+/** Grouped mode: the box title must read at the fit zoom, so it is scaled by it. */
+const BOX_LABEL_SIZE = 14;
+const NODE_LABEL_MIN_SCREEN = 9;
+const BOX_LABEL_MIN_SCREEN = 14;
+/** Titles in a box grid are cut short; the hover tooltip and the panel keep the full one. */
+const LABEL_TRUNCATE = 16;
 const MAX_FIT_ZOOM = 1.6;
 const LAYOUT_MS = 400;
 const CAMERA_MS = 280;
@@ -71,20 +91,44 @@ const CAMERA_MS = 280;
 const LARGE_GRAPH = 300;
 const NO_INSETS: Insets = { top: 16, right: 16, bottom: 16, left: 16 };
 
-const nodeSize = (degree: number) => 18 + 4 * Math.sqrt(degree);
 const edgeId = (source: string, target: string) => `edge:${source}|${target}`;
+
+/** Cytoscape keeps colour and opacity apart; split alpha out of hex or rgba() tokens. */
+function splitAlpha(value: string): { color: string; opacity: number } {
+  const rgba = /^rgba?\(\s*([\d.]+)[ ,]+([\d.]+)[ ,]+([\d.]+)(?:\s*[,/]\s*([\d.]+%?))?\s*\)$/i.exec(value);
+  if (rgba) {
+    const alpha = rgba[4] ? (rgba[4].endsWith("%") ? Number.parseFloat(rgba[4]) / 100 : Number.parseFloat(rgba[4])) : 1;
+    return { color: `rgb(${rgba[1]}, ${rgba[2]}, ${rgba[3]})`, opacity: alpha };
+  }
+  const hex = /^#([0-9a-f]{6})([0-9a-f]{2})?$/i.exec(value);
+  if (hex) return { color: `#${hex[1]}`, opacity: hex[2] ? Number.parseInt(hex[2], 16) / 255 : 1 };
+  return { color: value, opacity: 1 };
+}
 
 function readPalette(): Palette {
   const css = getComputedStyle(document.documentElement);
-  const read = (name: string) => css.getPropertyValue(name).trim();
+  // Cytoscape's colour parser only takes 3/6-digit hex, rgb() and rgba(); tokens like
+  // `--border: #00000014` need the alpha split out.
+  const read = (name: string) => {
+    const value = css.getPropertyValue(name).trim();
+    const hex = /^#([0-9a-f]{6})([0-9a-f]{2})$/i.exec(value);
+    if (!hex) return value;
+    const rgb = Number.parseInt(hex[1], 16);
+    return `rgba(${(rgb >> 16) & 255}, ${(rgb >> 8) & 255}, ${rgb & 255}, ${Number.parseInt(hex[2], 16) / 255})`;
+  };
   const types = Object.fromEntries(
     GRAPH_TYPES.map((type) => [type, read(type === "missing" ? "--destructive" : `--type-${type}`)]),
   ) as Record<GraphNodeType, string>;
+  const rawBorder = splitAlpha(css.getPropertyValue("--border").trim());
   return {
     types,
     foreground: read("--foreground"),
     muted: read("--muted-foreground"),
+    surface: read("--muted"),
     background: read("--background"),
+    // Border tokens carry their alpha in the colour; cytoscape keeps colour and opacity apart.
+    border: rawBorder.color,
+    borderOpacity: rawBorder.opacity,
     broken: read("--destructive"),
   };
 }
@@ -97,7 +141,7 @@ function buildStyle(palette: Palette, reduce: boolean): StylesheetJson {
         "background-color": (node: NodeSingular) => palette.types[node.data("type") as GraphNodeType] ?? palette.muted,
         width: "data(size)",
         height: "data(size)",
-        label: "data(title)",
+        label: "data(label)",
         "font-family": FONT,
         "font-size": LABEL_SIZE,
         "font-weight": 500,
@@ -126,6 +170,85 @@ function buildStyle(palette: Palette, reduce: boolean): StylesheetJson {
       },
     },
     {
+      selector: "node:parent",
+      style: {
+        // The layer box: a quiet surface behind its techs, with the layer name on top.
+        shape: "round-rectangle",
+        "corner-radius": "16px",
+        padding: "24px",
+        "background-color": palette.surface,
+        "background-opacity": 0.45,
+        "border-width": 1,
+        "border-color": palette.border,
+        "border-opacity": palette.borderOpacity,
+        label: "data(boxLabel)",
+        "text-valign": "top",
+        "text-halign": "center",
+        "text-margin-y": 10,
+        "text-wrap": "none",
+        "text-max-width": "2000px",
+        "font-size": BOX_LABEL_SIZE,
+        "font-weight": 600,
+        color: palette.muted,
+        "min-zoomed-font-size": 0,
+        "text-outline-color": palette.background,
+        "text-outline-width": 3,
+        "overlay-opacity": 0,
+      },
+    },
+    {
+      // Band headers ("Profiles & projects", "Cross-layer") are label-only nodes.
+      selector: "node[bandLabel]",
+      style: {
+        width: 1,
+        height: 1,
+        "background-opacity": 0,
+        "border-width": 0,
+        label: "data(label)",
+        "text-valign": "center",
+        "text-halign": "center",
+        "text-wrap": "none",
+        "text-max-width": "2000px",
+        "font-size": BOX_LABEL_SIZE,
+        "font-weight": 600,
+        color: palette.muted,
+        "min-zoomed-font-size": 0,
+        "text-outline-color": palette.background,
+        "text-outline-width": 3,
+        "overlay-opacity": 0,
+      },
+    },
+    {
+      // Invisible child that reserves the box header above the member grid.
+      selector: "node[spacer]",
+      style: {
+        width: 2,
+        height: 2,
+        "background-opacity": 0,
+        "border-width": 0,
+        label: "",
+        "text-opacity": 0,
+        "overlay-opacity": 0,
+      },
+    },
+    {
+      // In a box grid the cells are tight; labels stay inside them. Box parents are
+      // excluded: their layer title must render in full, however wide it is.
+      selector:
+        'node[grouped = 1][type = "tech"], node[grouped = 1][type = "practice"], node[grouped = 1][type = "check"], node[grouped = 1][type = "profile"], node[grouped = 1][type = "project"], node[grouped = 1][type = "missing"]',
+      style: { "text-max-width": "112px" },
+    },
+    {
+      // Practice and check labels appear on hover, selection or search only.
+      selector: 'node[grouped = 1][type = "practice"], node[grouped = 1][type = "check"]',
+      style: { "text-opacity": 0 },
+    },
+    {
+      selector:
+        'node[grouped = 1].lit[type = "practice"], node[grouped = 1].lit[type = "check"], node[grouped = 1].picked[type = "practice"], node[grouped = 1].picked[type = "check"], node[grouped = 1].hit[type = "practice"], node[grouped = 1].hit[type = "check"]',
+      style: { "text-opacity": 1 },
+    },
+    {
       selector: "edge",
       style: {
         width: 1,
@@ -148,6 +271,8 @@ function buildStyle(palette: Palette, reduce: boolean): StylesheetJson {
         "line-opacity": 0.75,
       },
     },
+    // Grouped mode hides the web of cross-box links; only the active node's edges show.
+    { selector: "edge.veiled", style: { display: "none" } },
     { selector: ".dim", style: { opacity: 0.2 } },
     {
       selector: "node.hit",
@@ -159,7 +284,7 @@ function buildStyle(palette: Palette, reduce: boolean): StylesheetJson {
         "border-style": "solid",
       },
     },
-    { selector: ".fade", style: { opacity: 0.15 } },
+    { selector: ".fade", style: { opacity: 0.25 } },
     { selector: "node.lit", style: { opacity: 1, color: palette.foreground, "z-index": 10 } },
     { selector: "edge.lit", style: { opacity: 1, width: 1.5, "line-opacity": 0.7 } },
     { selector: 'edge.lit[kind = "link"]', style: { "line-color": palette.foreground } },
@@ -182,21 +307,69 @@ function buildStyle(palette: Palette, reduce: boolean): StylesheetJson {
   ];
 }
 
-function toElements(data: GraphData): ElementDefinition[] {
+function truncateLabel(title: string): string {
+  return title.length > LABEL_TRUNCATE ? `${title.slice(0, LABEL_TRUNCATE - 1)}…` : title;
+}
+
+function toElements(data: GraphData, layout: GroupedLayout | null): ElementDefinition[] {
+  const parents = layout?.parents ?? new Map<string, string>();
+  const boxCounts = new Map<string, number>();
+  for (const parent of parents.values()) boxCounts.set(parent, (boxCounts.get(parent) ?? 0) + 1);
+
   return [
-    ...data.nodes.map((node) => ({
+    ...data.nodes.map((node) => {
+      const parent = parents.get(node.id);
+      const boxed = layout !== null && node.type === "layer" && boxCounts.has(node.id);
+      return {
+        group: "nodes" as const,
+        data: {
+          id: node.id,
+          type: node.type,
+          title: node.title,
+          degree: node.degree,
+          size: layout ? Math.min(nodeDiameter(node.degree), GROUPED_DOT_MAX) : nodeDiameter(node.degree),
+          // Box grids cut long titles; the tooltip and the panel keep the full one.
+          label: layout && node.type === "tech" ? truncateLabel(node.title) : node.title,
+          ...(parent ? { parent } : {}),
+          ...(boxed ? { boxLabel: `${node.title} · ${boxCounts.get(node.id)}` } : {}),
+          ...(layout && !parent && node.type !== "layer" ? { band: layout.bands.get(node.id) ?? "bottom" } : {}),
+          ...(layout ? { grouped: 1 } : {}),
+        },
+      };
+    }),
+    ...(layout
+      ? [...layout.boxes.keys()].map((layer) => ({
+          group: "nodes" as const,
+          data: { id: `spacer:${layer}`, type: "spacer", title: "", label: "", parent: layer, spacer: 1, size: 2 },
+        }))
+      : []),
+    ...(layout?.labels ?? []).map((label) => ({
       group: "nodes" as const,
-      data: { id: node.id, type: node.type, title: node.title, degree: node.degree, size: nodeSize(node.degree) },
+      data: { id: label.id, type: "band", title: label.title, label: label.title, bandLabel: 1, band: label.band, size: 1 },
     })),
     ...data.edges.map((edge) => ({
       group: "edges" as const,
-      data: { id: edgeId(edge.source, edge.target), source: edge.source, target: edge.target, kind: edge.kind },
+      data: {
+        id: edgeId(edge.source, edge.target),
+        source: edge.source,
+        target: edge.target,
+        kind: edge.kind,
+      },
     })),
   ];
 }
 
 /** Final positions of nodes still gliding into place after a layout. */
 const gliding = new WeakMap<Core, Map<string, Position>>();
+/** Instances that have already run a full layout, so refreshes stay incremental. */
+const laidOut = new WeakSet<Core>();
+
+/** Stable 0..1 jitter from an id, so new nodes land beside their neighbours the same way. */
+function hashJitter(id: string): number {
+  let hash = 2166136261;
+  for (let i = 0; i < id.length; i++) hash = Math.imul(hash ^ id.charCodeAt(i), 16777619);
+  return (hash >>> 0) / 4294967296;
+}
 
 /** Bounding box of `eles` where they will end up, so a fit during a glide lands right. */
 function settledBox(cy: Core, eles: cytoscape.Collection) {
@@ -232,6 +405,61 @@ function fitTo(cy: Core, eles: cytoscape.Collection, insets: Insets, animate: bo
   cy.stop(true);
   if (animate) cy.animate({ zoom, pan }, { duration: CAMERA_MS, easing: "ease-out-cubic" });
   else cy.viewport({ zoom, pan });
+  scaleLabelsToFit(cy, zoom);
+}
+
+/**
+ * fcose seeds its initial positions with `Math.random`. Swapping in a small LCG for the
+ * synchronous layout run keeps the first picture identical between visits.
+ */
+function withSeededRandom<T>(run: () => T): T {
+  const original = Math.random;
+  let state = 0x9e3779b9;
+  Math.random = () => {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+    return state / 4294967296;
+  };
+  try {
+    return run();
+  } finally {
+    Math.random = original;
+  }
+}
+
+/**
+ * Scale labels so a box title reads at least 14 screen px at the current (fit) zoom.
+ * Base sizes are in graph units, so they must be divided by the zoom. Member labels
+ * stop at `GROUPED_LABEL_FONT_MAX`: that keeps one label line inside a grid cell next
+ * to the largest dot, even when the fit zoom drops.
+ */
+function scaleLabelsToFit(cy: Core, zoom: number): void {
+  if (cy.nodes("[grouped]").empty()) return;
+  const safeZoom = Math.max(zoom, 0.05);
+  const nodeFont = Math.min(GROUPED_LABEL_FONT_MAX, Math.max(LABEL_SIZE, NODE_LABEL_MIN_SCREEN / safeZoom));
+  const boxFont = Math.min(64, Math.max(BOX_LABEL_SIZE, BOX_LABEL_MIN_SCREEN / safeZoom));
+  cy.batch(() => {
+    cy.nodes().not(":parent, [bandLabel]").style("font-size", nodeFont);
+    cy.nodes(":parent, [bandLabel]").style("font-size", boxFont);
+  });
+}
+
+/**
+ * Deterministic grouped layout: positions come from `computeGroupedLayout`; no force
+ * simulation runs, so first paint is instant and identical between visits.
+ */
+function runPresetLayout(cy: Core, layout: GroupedLayout): void {
+  const started = performance.now();
+  const labelPositions = new Map(layout.labels.map((label) => [label.id, label.position]));
+  cy.batch(() => {
+    cy.nodes().forEach((node) => {
+      const position = layout.positions.get(node.id()) ?? labelPositions.get(node.id());
+      if (position) node.position(position);
+    });
+  });
+  if (import.meta.env.DEV) {
+    const elapsed = (performance.now() - started).toFixed(2);
+    console.debug(`[graph] preset ${layout.positions.size} nodes in ${elapsed}ms`);
+  }
 }
 
 /**
@@ -242,7 +470,7 @@ function runLayout(cy: Core, opts: { randomize: boolean; animate: boolean; compa
   const nodes = cy.nodes();
   if (nodes.empty()) return;
   const before = new Map<string, Position>(nodes.map((node) => [node.id(), { ...node.position() }]));
-  cy.layout({
+  const options = {
     name: "fcose",
     // "proof" is the nicer layout but costs ~2x; big vaults trade it for a faster first paint.
     // Incremental runs (randomize false) require "proof".
@@ -257,7 +485,14 @@ function runLayout(cy: Core, opts: { randomize: boolean; animate: boolean; compa
     nodeSeparation: opts.compact ? 60 : 90,
     gravity: 0.3,
     numIter: 2500,
-  } as cytoscape.LayoutOptions).run();
+  } as cytoscape.LayoutOptions;
+  const started = performance.now();
+  if (opts.randomize) withSeededRandom(() => cy.layout(options).run());
+  else cy.layout(options).run();
+  if (import.meta.env.DEV) {
+    const elapsed = Math.round(performance.now() - started);
+    console.debug(`[graph] fcose ${nodes.length} nodes in ${elapsed}ms`);
+  }
   const after = new Map<string, Position>(nodes.map((node) => [node.id(), { ...node.position() }]));
   opts.fit?.();
   if (!opts.animate) return;
@@ -281,9 +516,28 @@ function runLayout(cy: Core, opts: { randomize: boolean; animate: boolean; compa
   glide.run();
 }
 
-/** Mirrors `data` into the graph in place; returns how many nodes were added or removed. */
-function syncElements(cy: Core, data: GraphData): number {
-  const wanted = toElements(data);
+/**
+ * Grouped mode reads by structure, not by links: all edges stay veiled except those of
+ * the hovered/selected node, whose neighbours are lit and the rest dimmed.
+ */
+function emphasizeNode(cy: Core, activeId: string | null): void {
+  cy.batch(() => {
+    cy.edges().addClass("veiled").removeClass("lit");
+    cy.nodes().removeClass("fade lit");
+    if (!activeId) return;
+    const node = cy.getElementById(activeId);
+    // A layer box has no useful edges, and dimming its own members would erase the box.
+    if (node.empty() || node.isParent()) return;
+    const ring = node.closedNeighborhood();
+    ring.addClass("lit");
+    cy.nodes().not(ring).not(":parent, [bandLabel], [spacer]").addClass("fade");
+    node.connectedEdges().removeClass("veiled").addClass("lit");
+  });
+}
+
+/** Mirrors `data` into the graph in place; returns how many nodes were added, removed or re-parented. */
+function syncElements(cy: Core, data: GraphData, layout: GroupedLayout | null): number {
+  const wanted = toElements(data, layout);
   const ids = new Set(wanted.map((element) => element.data.id as string));
   let changed = 0;
   cy.batch(() => {
@@ -292,28 +546,44 @@ function syncElements(cy: Core, data: GraphData): number {
       if (element.isNode()) changed += 1;
       element.remove();
     });
-    const added: cytoscape.NodeSingular[] = [];
-    for (const element of wanted) {
-      const existing = cy.getElementById(element.data.id as string);
-      if (existing.nonempty()) {
-        existing.data(element.data);
-        continue;
-      }
-      if (element.group === "nodes") {
+    const nodes = wanted.filter((element) => element.group === "nodes");
+    const added: NodeSingular[] = [];
+    // Add the parent boxes before their children, so no node ever references a missing parent.
+    for (const pass of [false, true]) {
+      for (const element of nodes) {
+        if (Boolean(element.data.parent) !== pass) continue;
+        if (cy.getElementById(element.data.id as string).nonempty()) continue;
         added.push(cy.add(element) as unknown as NodeSingular);
         changed += 1;
       }
     }
+    for (const element of nodes) {
+      const existing = cy.getElementById(element.data.id as string);
+      if (existing.empty() || !existing.isNode()) continue;
+      const next = element.data.parent as string | undefined;
+      // Parent changes only go through `move`; a `parent` key in `data` is not allowed.
+      const patch = { ...element.data };
+      delete patch.parent;
+      existing.data(patch);
+      const current = existing.parent() as NodeSingular;
+      if ((current.nonempty() ? current.id() : undefined) === next) continue;
+      // `move` is the only supported way to change a compound parent after the fact.
+      (existing as NodeSingular).move({ parent: next ?? null });
+      changed += 1;
+    }
     for (const element of wanted) {
-      if (element.group === "edges" && cy.getElementById(element.data.id as string).empty()) cy.add(element);
+      if (element.group !== "edges") continue;
+      const existing = cy.getElementById(element.data.id as string);
+      if (existing.empty()) cy.add(element);
+      else existing.data(element.data);
     }
     // New nodes start next to the neighbours they already have, so the refresh barely moves.
     for (const node of added) {
       const placed = node.neighborhood("node").filter((other) => !added.includes(other as NodeSingular));
       const anchor = placed.nonempty() ? placed.boundingBox({}) : cy.extent();
       node.position({
-        x: anchor.x1 + anchor.w / 2 + (Math.random() - 0.5) * 60,
-        y: anchor.y1 + anchor.h / 2 + (Math.random() - 0.5) * 60,
+        x: anchor.x1 + anchor.w / 2 + (hashJitter(node.id()) - 0.5) * 60,
+        y: anchor.y1 + anchor.h / 2 + (hashJitter(`${node.id()}:y`) - 0.5) * 60,
       });
     }
   });
@@ -326,6 +596,7 @@ export default function GraphCanvas({
   centerId,
   visibleIds = null,
   query = "",
+  grouped = true,
   selectedId = null,
   insets = NO_INSETS,
   onNodeClick,
@@ -342,10 +613,14 @@ export default function GraphCanvas({
   const [palette, setPalette] = useState<Palette | null>(null);
 
   const elements = useMemo(() => (mode === "local" && centerId ? localGraph(data, centerId) : data), [data, mode, centerId]);
+  // The editor's local graph is a small strip and stays flat; so does focus mode.
+  const boxed = mode === "full" && grouped;
 
   // Callbacks and options change every render; handlers read the latest through refs.
-  const latest = useRef({ onNodeClick, onBackgroundClick, insets, reduce, mode });
-  latest.current = { onNodeClick, onBackgroundClick, insets, reduce, mode };
+  const latest = useRef({ onNodeClick, onBackgroundClick, insets, reduce, mode, boxed, selectedId });
+  latest.current = { onNodeClick, onBackgroundClick, insets, reduce, mode, boxed, selectedId };
+  /** Grouping switched on/off: the picture changes shape, so fit it again. */
+  const lastBoxed = useRef(boxed);
 
   const fitVisible = (animate: boolean) => {
     const cy = cyRef.current;
@@ -391,6 +666,10 @@ export default function GraphCanvas({
       pixelRatio: "auto",
     });
     cyRef.current = cy;
+    // Dev (and the Playwright probe) can read positions; production keeps it private.
+    if (import.meta.env.DEV || (window as { __BASICS_E2E__?: boolean }).__BASICS_E2E__) {
+      (window as { __basicsCy?: Core }).__basicsCy = cy;
+    }
     setPalette(initialPalette);
 
     const hoverFrom = (node: NodeSingular): Hover => {
@@ -408,15 +687,20 @@ export default function GraphCanvas({
 
     cy.on("mouseover", "node", (event) => {
       const node = event.target as NodeSingular;
-      cy.batch(() => {
-        cy.elements().addClass("fade");
-        node.closedNeighborhood().removeClass("fade").addClass("lit");
-      });
+      if (node.data("bandLabel") || node.data("spacer")) return;
+      if (latest.current.boxed) emphasizeNode(cy, node.id());
+      else {
+        cy.batch(() => {
+          cy.elements().addClass("fade");
+          node.closedNeighborhood().removeClass("fade").addClass("lit");
+        });
+      }
       container.style.cursor = "pointer";
       setHover(hoverFrom(node));
     });
     cy.on("mouseout", "node", () => {
-      cy.batch(() => cy.elements().removeClass("fade lit"));
+      if (latest.current.boxed) emphasizeNode(cy, latest.current.selectedId ?? null);
+      else cy.batch(() => cy.elements().removeClass("fade lit"));
       container.style.cursor = "";
       setHover(null);
     });
@@ -432,7 +716,8 @@ export default function GraphCanvas({
         latest.current.onBackgroundClick?.();
         return;
       }
-      if ((event.target as cytoscape.SingularElementArgument).isNode?.()) latest.current.onNodeClick?.((event.target as NodeSingular).id());
+      const target = event.target as NodeSingular;
+      if (target.isNode?.() && !target.data("bandLabel") && !target.data("spacer")) latest.current.onNodeClick?.(target.id());
     });
 
     // Follow the theme: the provider toggles `.dark` on <html>, so watch the class itself.
@@ -464,28 +749,80 @@ export default function GraphCanvas({
   useEffect(() => {
     const cy = cyRef.current;
     if (!cy) return;
-    const changed = syncElements(cy, elements);
+    // Grouped mode gets a computed preset; flat and local graphs keep fcose.
+    const layout = boxed
+      ? computeGroupedLayout(elements, {
+          aspect: cy.width() / Math.max(cy.height(), 1),
+          titles: { top: t("graph.bandProfiles"), bottom: t("graph.bandCrossLayer") },
+        })
+      : null;
+    const changed = syncElements(cy, elements, layout);
     const first = firstRun.current;
     firstRun.current = false;
-    if (!first && changed === 0) return;
+    // StrictMode mounts, destroys and remounts the instance: a fresh one needs its first fit.
+    const freshInstance = cy.nodes().nonempty() && !laidOut.has(cy);
+    if (cy.nodes().nonempty()) laidOut.add(cy);
+    const boxedChanged = lastBoxed.current !== boxed;
+    lastBoxed.current = boxed;
+    if (!first && changed === 0 && !boxedChanged && !freshInstance) return;
     const animate = !reduce;
     if (mode === "local") {
+      cy.nodes().removeStyle("font-size");
       runLayout(cy, { randomize: true, animate: false, compact: true, fit: () => fitVisible(false) });
       return;
     }
-    runLayout(cy, { randomize: first, animate, fit: first ? () => fitVisible(false) : undefined });
-  }, [elements, mode, reduce]);
+    if (layout) {
+      runPresetLayout(cy, layout);
+      if (first || boxedChanged || freshInstance) fitVisible(false);
+      else scaleLabelsToFit(cy, cy.zoom());
+      emphasizeNode(cy, latest.current.selectedId ?? null);
+      return;
+    }
+    cy.nodes().removeStyle("font-size");
+    runLayout(cy, {
+      randomize: freshInstance,
+      animate,
+      fit: first || boxedChanged || freshInstance ? () => fitVisible(false) : undefined,
+    });
+  }, [elements, mode, reduce, boxed, t]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: re-apply after the elements sync
   useEffect(() => {
     const cy = cyRef.current;
     if (!cy) return;
+    const inView = (id: string) => visibleIds === null || visibleIds.has(id);
     cy.batch(() => {
-      cy.nodes().forEach((node) => {
-        node.toggleClass("gone", visibleIds !== null && !visibleIds.has(node.id()));
+      // Members first: a hidden layer box disappears together with its members.
+      cy.nodes()
+        .not(":parent, [bandLabel], [spacer]")
+        .forEach((node) => {
+          const parent = node.parent() as NodeSingular;
+          const parentHidden = parent.nonempty() && !inView(parent.id());
+          node.toggleClass("gone", !inView(node.id()) || parentHidden);
+        });
+      // Empty boxes disappear, and a layer with no member in this data set is not a box.
+      cy.nodes(":parent").forEach((node) => {
+        const box = node.children().not("[spacer]").not(".gone").nonempty();
+        node.toggleClass("gone", !inView(node.id()) || (boxed && !box));
+      });
+      // Spacers only exist to reserve header room; they follow their box.
+      cy.nodes("[spacer]").forEach((node) => {
+        const parent = node.parent() as NodeSingular;
+        node.toggleClass("gone", parent.empty() || parent.hasClass("gone"));
+      });
+      // A layer note without members is not a box: hide it in grouped mode.
+      cy.nodes('[type = "layer"]').forEach((node) => {
+        if (node.isParent()) return;
+        node.toggleClass("gone", !inView(node.id()) || boxed);
+      });
+      // Band headers stay only while the band has something to show.
+      cy.nodes("[bandLabel]").forEach((node) => {
+        const band = node.data("band") as "top" | "bottom";
+        const anyVisible = cy.nodes(`[band = "${band}"]`).not("[bandLabel]").not(".gone").not(":parent").nonempty();
+        node.toggleClass("gone", !anyVisible);
       });
     });
-  }, [elements, visibleIds]);
+  }, [elements, visibleIds, boxed]);
 
   useEffect(() => {
     const cy = cyRef.current;
@@ -498,6 +835,8 @@ export default function GraphCanvas({
       cy.nodes().forEach((node) => {
         node.addClass(hits.has(node.id()) ? "hit" : "dim");
       });
+      // Boxes and band headers are structure, not search results.
+      cy.nodes(":parent, [bandLabel], [spacer]").removeClass("dim hit");
       cy.edges().addClass("dim");
     });
   }, [elements, query]);
@@ -511,7 +850,9 @@ export default function GraphCanvas({
       cy.nodes(".picked").removeClass("picked");
       if (picked) cy.getElementById(picked).addClass("picked");
     });
-  }, [elements, selectedId, mode, centerId]);
+    if (boxed) emphasizeNode(cy, picked ?? null);
+    else cy.batch(() => cy.elements().removeClass("fade lit veiled"));
+  }, [elements, selectedId, mode, centerId, boxed]);
 
   return (
     <div className={cn("relative overflow-hidden", className)}>

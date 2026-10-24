@@ -189,6 +189,7 @@ export function GraphPage() {
           mode="full"
           visibleIds={visibleIds}
           query={search}
+          grouped={!focusId}
           selectedId={selectedId}
           insets={insets}
           onNodeClick={setSelectedId}
