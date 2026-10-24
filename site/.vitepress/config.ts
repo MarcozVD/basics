@@ -49,6 +49,7 @@ export default defineConfig({
             { text: "Notes", link: "/guide/notes" },
             { text: "Packs", link: "/guide/packs" },
             { text: "MCP clients", link: "/guide/mcp-clients" },
+            { text: "Agent skill", link: "/guide/agent-skill" },
             { text: "Web UI", link: "/guide/web-ui" },
             { text: "Desktop app", link: "/guide/desktop" },
             { text: "Recommend", link: "/guide/recommend" },

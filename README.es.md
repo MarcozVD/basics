@@ -44,6 +44,7 @@ El resto de clientes (Cursor, VS Code, Codex, Windsurf) están en
 - **Packs** — packs iniciales oficiales en inglés y español, además de packs comunitarios de cualquier repositorio de GitHub; las notas y actualizaciones nuevas llegan como propuestas al inbox, nunca como escrituras silenciosas.
 - **UI web local y MCP** — interfaz React con editor, grafo, diff del inbox y banco de pruebas de recomendación, y MCP por HTTP o stdio.
 - **Aplicación de escritorio** — la misma UI y servidor MCP en una ventana independiente residente en la bandeja, con su propio runtime de Node incluido; no hace falta npm. Ver [Aplicación de escritorio](https://marcozvd.github.io/basics/guide/desktop.html).
+- **Skill para agentes** — un `SKILL.md` que enseña a Claude Code, OpenCode o Codex cuándo usar cada herramienta de Basics. Ver [Skill para agentes](https://marcozvd.github.io/basics/guide/agent-skill.html).
 
 _Capturas (UI web, diff del Inbox, grafo): próximamente._
 
