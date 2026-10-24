@@ -3,6 +3,7 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useRef, useState } from "react";
 import { Link, useLocation, useOutlet } from "react-router";
 import { AppCommandPalette } from "@/components/app/command-palette";
+import { Logo } from "@/components/app/logo";
 import { NewNoteDialog } from "@/components/app/new-note-dialog";
 import { AnimatedNumber } from "@/components/motion/animated-number";
 import { AnimatedToastStack } from "@/components/motion/animated-toast-stack";
@@ -80,12 +81,9 @@ export function Layout() {
         )}
       >
         <div className="flex min-w-0 items-center gap-2">
-          <div
-            aria-hidden="true"
-            className="grid size-7 shrink-0 place-items-center rounded-lg bg-primary font-mono text-[13px] font-semibold text-primary-foreground"
-          >
-            b
-          </div>
+          <span data-testid="brand-logo" className="shrink-0">
+            <Logo size={28} />
+          </span>
           <Link
             to="/"
             className="rounded-full text-sm font-semibold tracking-tight focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
