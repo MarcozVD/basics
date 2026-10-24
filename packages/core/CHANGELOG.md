@@ -1,5 +1,11 @@
 # @marcozvd/basics-core
 
+## 1.1.0
+
+### Minor Changes
+
+- Community packs from GitHub: `basics pack add <owner>/<repo>[@ref]`, `pack update` and `pack remove`, plus "Add from GitHub" in the web UI. Pack notes always arrive as Inbox proposals; the archive reader enforces size, entry and path limits.
+
 ## 1.0.0
 
 ### Major Changes

@@ -1,5 +1,17 @@
 # @marcozvd/basics
 
+## 1.1.0
+
+### Minor Changes
+
+- Community packs from GitHub: `basics pack add <owner>/<repo>[@ref]`, `pack update` and `pack remove`, plus "Add from GitHub" in the web UI. Pack notes always arrive as Inbox proposals; the archive reader enforces size, entry and path limits.
+- Web UI: full-width layout, a Projects screen (stack, last checks, export), a dense Explore table, a two-column editor, a title-first New note dialog with inline note creation from relation fields, and Explore/Recommend state that survives navigation.
+
+### Patch Changes
+
+- Updated dependencies
+  - @marcozvd/basics-core@1.1.0
+
 ## 1.0.0
 
 ### Major Changes
