@@ -162,12 +162,16 @@ async function downloadNode() {
 
   if (distName === "darwin-universal") {
     // nodejs.org ships no universal macOS build: fetch both slices and merge them with lipo.
-    const arm = await fetchNodeBinary(version, "darwin-arm64", shasums);
-    const x64 = await fetchNodeBinary(version, "darwin-x64", shasums);
+    // `tauri build --target universal-apple-darwin` compiles each architecture first and
+    // looks up the per-arch sidecar for each, so keep both slices next to the universal one.
+    const arm = path.join(binariesDir, "node-aarch64-apple-darwin");
+    const x64 = path.join(binariesDir, "node-x86_64-apple-darwin");
+    fs.renameSync(await fetchNodeBinary(version, "darwin-arm64", shasums), arm);
+    fs.renameSync(await fetchNodeBinary(version, "darwin-x64", shasums), x64);
+    fs.chmodSync(arm, 0o755);
+    fs.chmodSync(x64, 0o755);
     const res = spawnSync("lipo", ["-create", arm, x64, "-output", dest], { stdio: "inherit" });
     if (res.status !== 0) throw new Error("lipo failed to create the universal node binary");
-    fs.rmSync(arm, { force: true });
-    fs.rmSync(x64, { force: true });
   } else {
     const bin = await fetchNodeBinary(version, distName, shasums);
     fs.renameSync(bin, dest);
