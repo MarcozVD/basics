@@ -135,11 +135,26 @@ export function buildGraph(vault: Vault, opts: { broken?: boolean } = {}): Graph
     degree.set(edge.source, (degree.get(edge.source) ?? 0) + 1);
     degree.set(edge.target, (degree.get(edge.target) ?? 0) + 1);
   }
+  const groupOf = (note: Note): string | undefined => {
+    const data = note.data;
+    if (data.type === "tech") return [data.layer].flat().map(toId)[0];
+    if (data.type !== "practice" && data.type !== "check") return undefined;
+    // A practice/check belongs to a layer only when every tech it applies to does.
+    const groups = new Set(
+      data.applies_to.map((id) => {
+        const target = vault.get(toId(id));
+        return target?.data.type === "tech" ? [target.data.layer].flat().map(toId)[0] : undefined;
+      }),
+    );
+    return groups.size === 1 ? [...groups][0] : undefined;
+  };
+  const groups = new Map([...vault.notes.values()].map((note) => [note.id, groupOf(note)] as const));
   const nodes: GraphNode[] = listNotes(vault).map((n) => ({
     id: n.id,
     type: n.type,
     title: n.title,
     layers: n.layers,
+    group: groups.get(n.id),
     degree: degree.get(n.id) ?? 0,
   }));
   for (const id of [...missing].sort()) nodes.push({ id, type: "missing", title: id, layers: [], degree: degree.get(id) ?? 0 });

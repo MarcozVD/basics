@@ -168,6 +168,12 @@ export interface GraphNode {
   type: GraphNodeType;
   title: string;
   layers: string[];
+  /**
+   * Layer id this node belongs to for grouping: a tech's first layer, or the shared
+   * layer of a practice/check's `applies_to` techs. Absent for layers, profiles,
+   * projects, missing notes and practices/checks that span layers.
+   */
+  group?: string;
   /** Number of distinct neighbours among the returned edges. */
   degree: number;
 }
