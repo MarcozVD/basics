@@ -20,7 +20,14 @@ The skill needs the MCP server connected; see [MCP clients](./mcp-clients.md).
 
 ## Install
 
-Copy the `skills/basics` folder into the agent's skills directory.
+`basics connect` installs the skill together with the MCP server, for every agent it detects:
+
+```bash
+basics connect             # server + skill
+basics connect --no-skill  # server only
+```
+
+To install it by hand, copy the `skills/basics` folder into the agent's skills directory.
 
 | Agent | Directory |
 | --- | --- |

@@ -56,6 +56,7 @@ import {
   writeVaultMeta,
 } from "@marcozvd/basics-core";
 import { Command } from "commander";
+import { CONNECT_CLIENTS, type ConnectResult, connect } from "./connect.js";
 import {
   createEmbedder,
   directorySize,
@@ -900,6 +901,52 @@ function printRecommendation(rec: Recommendation): void {
   }
 }
 
+interface ConnectCliOptions {
+  client?: string[];
+  transport?: string;
+  port?: string;
+  skill: boolean;
+  dryRun?: boolean;
+}
+
+function printConnect(result: ConnectResult): void {
+  printTable([
+    ["CLIENT", "DETECTED", "CHANGE", "RESULT"],
+    ...result.entries.map((entry) => [entry.client, entry.detected ? "yes" : "no", entry.change, entry.result]),
+  ]);
+
+  for (const entry of result.entries) {
+    if (entry.message) console.log(`\n${entry.client}: ${entry.message}`);
+    if (entry.diff) console.log(`\n--- ${entry.target}\n+++ ${entry.target} (proposed)\n${entry.diff}`);
+    if (!entry.skill) continue;
+    console.log(`\nskill ${entry.client}: ${entry.skill.path} (${entry.skill.result})`);
+    if (entry.skill.message) console.log(entry.skill.message);
+    if (entry.skill.diff) console.log(`--- ${entry.skill.path}\n+++ ${entry.skill.path} (proposed)\n${entry.skill.diff}`);
+  }
+
+  if (result.skillError) console.log(`\nwarning: ${result.skillError}`);
+  console.log(`\nMCP ${result.transport}: ${result.url ?? result.command.join(" ")}`);
+  console.log(`vault: ${result.vault}`);
+}
+
+function connectCli(opts: ConnectCliOptions): void {
+  const transport = opts.transport ?? "stdio";
+  if (transport !== "stdio" && transport !== "http") fail(`unknown transport "${transport}"`, "use --transport stdio or --transport http");
+  const port = Number(opts.port ?? 4747);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) fail(`invalid port "${opts.port}"`, "use --port <1-65535>");
+
+  const result = connect({
+    vault: resolveVaultDir(program.opts().vault),
+    clients: opts.client,
+    transport,
+    port,
+    skill: opts.skill,
+    dryRun: opts.dryRun,
+  });
+  printConnect(result);
+  if (result.entries.some((entry) => entry.result === "error")) process.exitCode = 1;
+}
+
 /** Build the CLI without parsing argv, so references and tests can walk the commands. */
 export function buildProgram(): Command {
   program = new Command("basics")
@@ -969,6 +1016,16 @@ export function buildProgram(): Command {
     .option("--packs <names>", "comma-separated pack names, or none")
     .option("--yes", "accept defaults and install all packs")
     .action((dir: string | undefined, opts: InitOptions) => init(dir, opts));
+
+  program
+    .command("connect")
+    .description("register the Basics MCP server and skill with your coding agents")
+    .option("--client <names...>", `clients to register (${CONNECT_CLIENTS.join(", ")}); default: every client detected`)
+    .option("--transport <transport>", "stdio or http", "stdio")
+    .option("--port <n>", "port for the http transport", "4747")
+    .option("--no-skill", "do not install the Basics skill")
+    .option("--dry-run", "print every change without writing anything")
+    .action((opts: ConnectCliOptions) => connectCli(opts));
 
   const pack = program.command("pack").description("manage official and community note packs");
   pack

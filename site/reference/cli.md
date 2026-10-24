@@ -140,6 +140,22 @@ basics init [options] [dir]
 | `--packs <names>` | comma-separated pack names, or none | — |
 | `--yes` | accept defaults and install all packs | — |
 
+### `basics connect`
+
+register the Basics MCP server and skill with your coding agents
+
+```
+basics connect [options]
+```
+
+| Flag | Description | Default |
+| --- | --- | --- |
+| `--client <names...>` | clients to register (claude-code, opencode, codex, cursor, claude-desktop); default: every client detected | — |
+| `--transport <transport>` | stdio or http | `stdio` |
+| `--port <n>` | port for the http transport | `4747` |
+| `--no-skill` | do not install the Basics skill | — |
+| `--dry-run` | print every change without writing anything | — |
+
 ### `basics pack`
 
 manage official and community note packs

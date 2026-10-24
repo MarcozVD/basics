@@ -44,6 +44,7 @@ import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { ZodError, z } from "zod";
+import { CONNECT_CLIENTS, connect } from "../connect.js";
 import { runtimeInstalled } from "../embeddings-runtime.js";
 import { createMcpServer } from "../mcp/tools.js";
 import { packsDir } from "../packs-dir.js";
@@ -76,6 +77,13 @@ const packAddRequestSchema = z.object({
   lang: z.enum(["en", "es"]).optional(),
 });
 const approveAllRequestSchema = z.object({ pack: z.string().min(1), version: z.string().min(1).optional() });
+const connectRequestSchema = z.object({
+  clients: z.array(z.enum(CONNECT_CLIENTS)).optional(),
+  transport: z.enum(["stdio", "http"]).optional(),
+  port: z.number().int().min(1).max(65535).optional(),
+  skill: z.boolean().optional(),
+  dryRun: z.boolean().optional(),
+});
 
 /** A sessionless POST only creates a session when it carries the initialize request. */
 async function isInitializeRequest(req: Request): Promise<boolean> {
@@ -289,6 +297,11 @@ export function createApp(opts: { root: string; uiDir?: string; events?: EventHu
   app.get("/api/graph", (c) => c.json(buildGraph(vault(), { broken: c.req.query("broken") === "1" })));
 
   app.get("/api/config", (c) => c.json({ language: loadConfig().language }));
+
+  app.post("/api/connect", async (c) => {
+    const body = connectRequestSchema.parse(await c.req.json().catch(() => ({})));
+    return c.json(connect({ vault: opts.root, ...body }));
+  });
 
   app.get("/api/embeddings", (c) => {
     const cfg = loadConfig();

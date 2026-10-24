@@ -9,6 +9,25 @@ Basics exposes the same twelve tools over two transports:
 Pass the vault as an absolute path for stdio. If you omit it, `basics-mcp` resolves it like the CLI: `BASICS_DIR`,
 then the global config, then `~/basics-vault`.
 
+## One step: `basics connect`
+
+`basics connect` registers the server for every coding agent it finds, always at user scope and always pointing at the
+same global vault (`basics config get` shows which):
+
+```bash
+basics connect                    # every detected client, stdio
+basics connect --client cursor    # only the clients you name
+basics connect --transport http   # http://127.0.0.1:4747/mcp, while `basics ui` or the desktop app runs
+basics connect --port 5000        # another port for the http transport
+basics connect --dry-run          # print the diff of every file and write nothing
+basics connect --no-skill         # register the server, skip the skill
+```
+
+It knows `claude-code`, `opencode`, `codex`, `cursor` and `claude-desktop`, prints a table (client, detected, what
+changes, result), backs each edited file up as `<file>.basics-backup` once, and installs the Basics skill for Claude
+Code, OpenCode and Codex. Cursor and Claude Desktop get the server only. The desktop app calls the same code through
+`POST /api/connect`.
+
 ## Claude Code
 
 ```bash
