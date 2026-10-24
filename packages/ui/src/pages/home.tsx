@@ -20,7 +20,7 @@ import { agentColor, agentInitial } from "@/lib/agent-color";
 import { ApiRequestError, addPack, approveProposal, installPack, type Language, rejectProposal } from "@/lib/api";
 import { SPRING_LAYOUT } from "@/lib/ease";
 import { packProposer } from "@/lib/packs";
-import { useActivity, useInbox, useNotes, usePacks, useStats } from "@/lib/queries";
+import { useActivity, useInbox, useLayers, useNotes, usePacks, useStats } from "@/lib/queries";
 import { formatCompactRelativeTime, formatFullDateTime, formatRelativeTime } from "@/lib/relative-time";
 import { toast } from "@/lib/toast";
 import { tintStyle, typeColor } from "@/lib/type-color";
@@ -539,6 +539,7 @@ export function HomePage() {
   const stats = useStats();
   const inbox = useInbox();
   const notes = useNotes();
+  const layers = useLayers();
   const timeline = useActivity({ limit: 20 });
   const dayActivity = useActivity({ limit: 200 });
   const [searchParams] = useSearchParams();
@@ -561,6 +562,22 @@ export function HomePage() {
   useEffect(() => () => window.clearTimeout(armTimer.current), []);
 
   const typeById = useMemo(() => new Map((notes.data ?? []).map((note) => [note.id, note.type])), [notes.data]);
+  const techById = useMemo(
+    () => new Map((notes.data ?? []).map((note) => [note.id, { id: note.id, title: note.title || note.id, kind: note.kind }])),
+    [notes.data],
+  );
+  const layerTechs = useMemo(() => {
+    const map = new Map<string, { id: string; title: string; kind?: string }[]>();
+    for (const layer of layers.data ?? []) {
+      map.set(
+        layer.id,
+        layer.techs
+          .map((id) => techById.get(id) ?? { id, title: id, kind: undefined })
+          .sort((a, b) => a.title.localeCompare(b.title) || a.id.localeCompare(b.id)),
+      );
+    }
+    return map;
+  }, [layers.data, techById]);
 
   const proposals = useMemo<ProposalSummary[]>(
     () => [...(inbox.data ?? [])].sort((a, b) => Date.parse(b.meta.created) - Date.parse(a.meta.created)).slice(0, 4),
@@ -1005,6 +1022,58 @@ export function HomePage() {
                 </StatTile>
               </div>
             </div>
+
+            {layers.data && layers.data.length > 0 ? (
+              <div className="mt-4">
+                <SectionLabel>{t("home.layers")}</SectionLabel>
+                <div className="mt-2 grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-2 min-[1440px]:grid-cols-3">
+                  {layers.data.map((layer) => (
+                    <StatTile
+                      key={layer.id}
+                      stat={`layer-${layer.id}`}
+                      label={layer.title || layer.id}
+                      value={layer.techs.length}
+                      dot="var(--muted-foreground)"
+                    >
+                      {(close) => (
+                        <div className="flex flex-col">
+                          <ul className="flex max-h-[18rem] flex-col gap-0.5 overflow-y-auto overscroll-contain p-1">
+                            {(layerTechs.get(layer.id) ?? []).map((tech) => (
+                              <li key={tech.id}>
+                                <button
+                                  type="button"
+                                  data-layer-tech={tech.id}
+                                  onClick={() => {
+                                    close();
+                                    navigate(`/notes/${encodeURIComponent(tech.id)}`);
+                                  }}
+                                  className="flex w-full items-baseline gap-2 rounded-md px-1.5 py-1 text-left transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
+                                >
+                                  <span className="min-w-0 flex-1 truncate text-xs">{tech.title}</span>
+                                  {tech.kind ? (
+                                    <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{tech.kind}</span>
+                                  ) : null}
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                          <div className="mt-1 border-t border-border/60 pt-1">
+                            <Link
+                              to={`/explore?type=tech&layer=${encodeURIComponent(layer.id)}`}
+                              onClick={close}
+                              className="flex w-full items-center justify-between gap-2 rounded-md px-1.5 py-1 text-[11px] font-medium text-primary-text transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
+                            >
+                              {t("home.viewInExplore")}
+                              <ArrowRight aria-hidden="true" className="size-3.5" />
+                            </Link>
+                          </div>
+                        </div>
+                      )}
+                    </StatTile>
+                  ))}
+                </div>
+              </div>
+            ) : null}
 
             <div className="mt-5 hidden min-w-0 min-[1440px]:block">
               <SectionLabel>{t("home.recent")}</SectionLabel>

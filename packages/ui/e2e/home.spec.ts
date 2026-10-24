@@ -52,6 +52,32 @@ test("home shows the agent loop and approves from the queue", async ({ page }) =
   await expect(page.getByText("Nothing to review", { exact: true })).toBeVisible();
 });
 
+test("vault health shows every layer and opens its techs", async ({ page, request }) => {
+  const layers = (await (await request.get("/api/layers")).json()) as { id: string; title: string; techs: string[] }[];
+  const backend = layers.find((layer) => layer.id === "backend");
+  expect(backend).toBeTruthy();
+  if (!backend) return;
+
+  await page.goto("/");
+
+  const backendTile = page.locator('[data-stat="layer-backend"]');
+  await expect(backendTile).toContainText(backend.title);
+  await expect(backendTile.getByText(String(backend.techs.length), { exact: true })).toBeVisible();
+
+  const infraTile = page.locator('[data-stat="layer-infra"]');
+  await expect(infraTile).toContainText("Infra");
+  await expect(infraTile.getByText("0", { exact: true })).toBeVisible();
+  await infraTile.click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+
+  await backendTile.click();
+  const fastapi = page.getByRole("dialog").locator('[data-layer-tech="fastapi"]');
+  await expect(fastapi).toContainText("FastAPI");
+  await expect(fastapi).toContainText("framework");
+  await fastapi.click();
+  await expect(page).toHaveURL(/\/notes\/fastapi$/);
+});
+
 test("creates the missing note from the broken links tile", async ({ page }) => {
   const file = path.join(vaultPath(), "tech", "broken-source.md");
   fs.writeFileSync(

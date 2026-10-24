@@ -364,6 +364,8 @@ export const es: typeof en = {
   "home.brokenLinkCreateShort": "Crear",
   "home.orphans": "Huérfanas",
   "home.recent": "Editadas recientemente",
+  "home.layers": "Capas",
+  "home.viewInExplore": "Ver en Explorar",
   "home.showDetails": "Ver detalles",
   "home.packs.title": "Empieza con un pack inicial",
   "home.packs.description":

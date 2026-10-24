@@ -362,6 +362,8 @@ export const en = {
   "home.brokenLinkCreateShort": "Create",
   "home.orphans": "Orphans",
   "home.recent": "Recently edited",
+  "home.layers": "Layers",
+  "home.viewInExplore": "View in Explore",
   "home.showDetails": "Show details",
   "home.packs.title": "Start with a starter pack",
   "home.packs.description": "Install notes for your stack — layers, technologies, practices and checks — so agents know how you build.",
