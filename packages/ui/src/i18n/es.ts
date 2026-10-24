@@ -175,6 +175,7 @@ export const es: typeof en = {
   "editor.more": "Más acciones",
   "editor.addItem": "Añadir elemento",
   "editor.addLayer": "Añadir capa",
+  "editor.addLayerNamed": "Añadir capa {title}",
   "editor.emptyBody": "Aún no hay nada que previsualizar.",
   "editor.lastChecks": "Últimos chequeos",
   "editor.checkStatus.pass": "pasó",

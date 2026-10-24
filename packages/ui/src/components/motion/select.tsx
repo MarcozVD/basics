@@ -14,6 +14,7 @@ import {
 } from "motion/react";
 import {
   createContext,
+  type MutableRefObject,
   type ReactNode,
   useCallback,
   useContext,
@@ -24,9 +25,11 @@ import {
   useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 import { EASE_OUT } from "@/lib/ease";
 import { type ListboxRow, useListbox } from "@/lib/hooks/use-listbox";
 import { cn } from "@/lib/utils";
+import { useAnchoredPanel } from "./anchored-panel";
 
 // One progress value drives the surface, gap, corners and chevron. This short
 // spring suits the full reveal distance; each reader clamps its small internal
@@ -73,6 +76,9 @@ interface SelectContextValue {
   disabled: boolean;
   placement: Placement;
   setPlacement: (p: Placement) => void;
+  triggerRef: MutableRefObject<HTMLButtonElement | null>;
+  /** The portalled panel; outside clicks must not close through it. */
+  contentRef: MutableRefObject<HTMLDivElement | null>;
 }
 
 const SelectContext = createContext<SelectContextValue | null>(null);
@@ -122,6 +128,8 @@ export function Select({
   const reduce = useReducedMotion() ?? false;
   const baseId = useId();
   const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   const [internalOpen, setInternalOpen] = useState(defaultOpen);
   const [internal, setInternal] = useState(defaultValue);
   const [labels, setLabels] = useState<
@@ -146,14 +154,13 @@ export function Select({
   // The panel turns inert as it closes, which would drop focus held inside it
   // on the page body. Hand it back to the trigger before that happens.
   const close = useCallback(() => {
-    const trigger = document.getElementById(`${baseId}-trigger`);
-    if (
-      rootRef.current?.contains(document.activeElement) &&
-      document.activeElement !== trigger
-    )
-      trigger?.focus();
+    const trigger = triggerRef.current;
+    const active = document.activeElement;
+    const inside =
+      rootRef.current?.contains(active) || contentRef.current?.contains(active);
+    if (inside && active !== trigger) trigger?.focus();
     setOpen(false);
-  }, [baseId, setOpen]);
+  }, [setOpen]);
 
   const select = useCallback(
     (next: string) => {
@@ -195,7 +202,12 @@ export function Select({
     if (!open) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && close();
     const onPointer = (e: PointerEvent) => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node))
+      const target = e.target as Node;
+      if (
+        rootRef.current &&
+        !rootRef.current.contains(target) &&
+        !contentRef.current?.contains(target)
+      )
         setOpen(false);
     };
     window.addEventListener("keydown", onKey);
@@ -234,6 +246,8 @@ export function Select({
       disabled,
       placement,
       setPlacement,
+      triggerRef,
+      contentRef,
     }),
     [
       current,
@@ -285,6 +299,7 @@ export function SelectTrigger({ className, children }: SelectTriggerProps) {
     <motion.button
       type="button"
       id={ctx.triggerId}
+      ref={ctx.triggerRef}
       disabled={ctx.disabled}
       aria-haspopup="listbox"
       aria-expanded={ctx.open}
@@ -348,8 +363,11 @@ export interface SelectContentProps {
 
 export function SelectContent({ className, children }: SelectContentProps) {
   const ctx = useSelectContext("SelectContent");
-  const panelRef = useRef<HTMLDivElement>(null);
+  // The panel's ref lives on the context: the outside-pointer check has to
+  // treat it as part of the field even though it is portalled to the body.
+  const panelRef = ctx.contentRef;
   const [height, setHeight] = useState(0);
+  const [portalReady, setPortalReady] = useState(false);
   const { open, progress, reduce, setPlacement } = ctx;
   const { activeId, onKeyDown } = useListbox({
     open,
@@ -357,6 +375,14 @@ export function SelectContent({ className, children }: SelectContentProps) {
     selected: ctx.value,
     list: panelRef,
   });
+  const panel = useAnchoredPanel({
+    open: open && portalReady,
+    anchorRef: ctx.triggerRef,
+    panelRef,
+    gap: GAP,
+  });
+
+  useEffect(() => setPortalReady(true), []);
 
   // Keep descendants laid out while hidden: display:none resets nested
   // scrollers in Chromium. Collapse only the hidden outer footprint after
@@ -383,20 +409,13 @@ export function SelectContent({ className, children }: SelectContentProps) {
     return () => observer.disconnect();
   }, [present]);
 
-  // On open, flip upward when there isn't room below and there's more above.
+  // The trigger's flat near edge follows whichever side the panel landed on.
+  const side = panel?.side ?? ctx.placement;
   useLayoutEffect(() => {
-    if (!open) return;
-    const trigger = document.getElementById(ctx.triggerId);
-    const node = panelRef.current;
-    if (!trigger || !node) return;
-    const rect = trigger.getBoundingClientRect();
-    const h = node.offsetHeight;
-    const below = window.innerHeight - rect.bottom;
-    const above = rect.top;
-    setPlacement(below < h + 16 && above > below ? "top" : "bottom");
-  }, [open, ctx.triggerId, setPlacement]);
+    if (panel) setPlacement(panel.side);
+  }, [panel, setPlacement]);
 
-  const isTop = ctx.placement === "top";
+  const isTop = side === "top";
 
   // Reveal a full-size panel from its near edge. No ancestor scales the list,
   // so rows, borders and shadow keep their natural thickness. The clip and
@@ -429,10 +448,14 @@ export function SelectContent({ className, children }: SelectContentProps) {
   // a lip; with reduced motion the fade is the whole entrance.
   const opacity = useTransform(progress, reduce ? [0, 1] : [0, 0.12], [0, 1]);
 
-  return (
+  if (!portalReady) return null;
+
+  return createPortal(
     <motion.div
       ref={panelRef}
       id={ctx.listId}
+      data-select-content=""
+      data-side={side}
       role="listbox"
       aria-labelledby={ctx.triggerId}
       aria-hidden={!open}
@@ -445,21 +468,21 @@ export function SelectContent({ className, children }: SelectContentProps) {
       }}
       style={{
         visibility: present ? undefined : "hidden",
-        maxHeight: present ? undefined : 0,
+        maxHeight: present ? panel?.maxHeight : 0,
         borderWidth: present ? undefined : 0,
+        left: panel?.x ?? 0,
+        top: panel?.y ?? 0,
+        width: panel?.width,
         y,
         clipPath,
         borderRadius,
         opacity,
         pointerEvents: open ? "auto" : "none",
-        marginTop: isTop ? 0 : GAP,
-        marginBottom: isTop ? GAP : 0,
       }}
       // flush against the trigger, then separates into its own rounded pill;
       // sits above or below depending on available space
       className={cn(
-        "absolute left-0 right-0 z-20 overflow-hidden border border-border bg-background shadow-lg",
-        isTop ? "bottom-full" : "top-full",
+        "fixed z-[9999] overflow-hidden border border-border bg-background shadow-lg",
         className,
       )}
     >
@@ -467,12 +490,13 @@ export function SelectContent({ className, children }: SelectContentProps) {
         <motion.div
           initial={false}
           animate={open ? "show" : "hidden"}
-          className="p-1"
+          className="max-h-[inherit] overflow-y-auto overscroll-contain p-1"
         >
           {children}
         </motion.div>
       </ActiveOptionContext.Provider>
-    </motion.div>
+    </motion.div>,
+    document.body,
   );
 }
 

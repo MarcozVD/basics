@@ -173,6 +173,7 @@ export const en = {
   "editor.more": "More actions",
   "editor.addItem": "Add item",
   "editor.addLayer": "Add layer",
+  "editor.addLayerNamed": "Add {title} layer",
   "editor.emptyBody": "Nothing to preview yet.",
   "editor.lastChecks": "Last checks",
   "editor.checkStatus.pass": "pass",

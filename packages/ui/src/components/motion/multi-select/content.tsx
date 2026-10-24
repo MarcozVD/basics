@@ -105,6 +105,18 @@ export function MultiSelectContent({
   );
   const left = Math.min(Math.max(desiredLeft, VIEWPORT_PADDING), maxLeft);
   const surfaceHeight = layout?.content.height ?? 0;
+  // Keep the portalled surface inside the viewport: the list scrolls on its
+  // own, so the trigger's ancestors can never clip its options.
+  const availableHeight = layout
+    ? Math.max(
+        0,
+        (actualSide === "bottom"
+          ? window.innerHeight - (layout.trigger.top + layout.trigger.height)
+          : layout.trigger.top) -
+          sideOffset -
+          VIEWPORT_PADDING,
+      )
+    : undefined;
 
   return createPortal(
     <motion.div
@@ -138,10 +150,12 @@ export function MultiSelectContent({
               ? window.innerHeight - layout.trigger.top
               : undefined,
           minWidth: triggerWidth,
+          maxHeight: availableHeight,
           pointerEvents: context.open ? "auto" : "none",
           transformOrigin: actualSide === "bottom" ? "top" : "bottom",
           visibility: layout ? "visible" : "hidden",
           "--multi-select-trigger-width": `${triggerWidth}px`,
+          "--multi-select-list-max-height": `${Math.max(0, (availableHeight ?? 256) - 2)}px`,
         } as CSSProperties
       }
       className={cn(

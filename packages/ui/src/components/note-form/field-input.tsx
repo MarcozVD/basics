@@ -1,7 +1,16 @@
 import type { NoteSummary, NoteType } from "@marcozvd/basics-core";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, X } from "lucide-react";
-import { Fragment, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type Ref, useLayoutEffect, useRef, useState } from "react";
+import {
+  Fragment,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+  type Ref,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { useNavigate } from "react-router";
 import { Input } from "@/components/motion/input";
 import {
@@ -393,6 +402,7 @@ function StackLayerRow({
   title,
   ids,
   techs,
+  autoFocus = false,
   onIdsChange,
   onRemove,
 }: {
@@ -400,6 +410,7 @@ function StackLayerRow({
   title: string;
   ids: string[];
   techs: NoteSummary[] | undefined;
+  autoFocus?: boolean;
   onIdsChange: (ids: string[]) => void;
   onRemove: () => void;
 }) {
@@ -408,6 +419,12 @@ function StackLayerRow({
   const queryClient = useQueryClient();
   const [query, setQuery] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // A layer pill adds this row and puts the caret in its tech search, ready
+  // for the first keystroke.
+  useEffect(() => {
+    if (autoFocus) inputRef.current?.focus();
+  }, [autoFocus]);
 
   const addValue = (nextId: string) => {
     if (ids.includes(nextId)) return;
@@ -543,11 +560,13 @@ function StackField({ value, onChange }: { value: unknown; onChange: (value: unk
   const layers = useLayers();
   const techs = useNotes({ type: "tech" });
   const stack = value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, string[]>) : {};
+  const [focusLayer, setFocusLayer] = useState<string | null>(null);
 
   const setLayer = (layer: string, next: string[]) => onChange({ ...stack, [layer]: next });
   const addLayer = (layer: string) => {
     if (!layer || layer in stack) return;
     onChange({ ...stack, [layer]: [] });
+    setFocusLayer(layer);
   };
   const remaining = (layers.data ?? []).filter((layer) => !(layer.id in stack));
 
@@ -560,6 +579,7 @@ function StackField({ value, onChange }: { value: unknown; onChange: (value: unk
           title={layers.data?.find((item) => item.id === layer)?.title || layer}
           ids={Array.isArray(ids) ? ids : []}
           techs={techs.data}
+          autoFocus={focusLayer === layer}
           onIdsChange={(next) => setLayer(layer, next)}
           onRemove={() => {
             const next = { ...stack };
@@ -569,19 +589,19 @@ function StackField({ value, onChange }: { value: unknown; onChange: (value: unk
         />
       ))}
       {remaining.length > 0 ? (
-        <div className="w-40">
-          <Select value="" onValueChange={addLayer}>
-            <SelectTrigger className="h-7 rounded-lg border-dashed bg-transparent px-2 text-xs">
-              <SelectValue placeholder={t("editor.addLayer")} />
-            </SelectTrigger>
-            <SelectContent>
-              {remaining.map((layer) => (
-                <SelectItem key={layer.id} value={layer.id}>
-                  {layer.title || layer.id}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <div className="flex flex-wrap items-center gap-1 pt-0.5">
+          {remaining.map((layer) => (
+            <button
+              key={layer.id}
+              type="button"
+              onClick={() => addLayer(layer.id)}
+              aria-label={t("editor.addLayerNamed", { title: layer.title || layer.id })}
+              className="inline-flex h-6 items-center gap-1 rounded-full border border-dashed border-border px-2 text-[11px] font-medium text-muted-foreground transition-colors hover:border-(--color-border-strong) hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
+            >
+              <Plus className="size-3" aria-hidden="true" />
+              {layer.title || layer.id}
+            </button>
+          ))}
         </div>
       ) : null}
     </div>

@@ -37,7 +37,7 @@ export function MultiSelectList({
       aria-label={ariaLabel}
       aria-multiselectable="true"
       className={cn(
-        "relative isolate max-h-64 overflow-y-auto overscroll-contain p-1.5 [-ms-overflow-style:none] scrollbar-none [&::-webkit-scrollbar]:hidden",
+        "relative isolate max-h-[var(--multi-select-list-max-height,16rem)] overflow-y-auto overscroll-contain p-1.5 [-ms-overflow-style:none] scrollbar-none [&::-webkit-scrollbar]:hidden",
         className,
       )}
     >
