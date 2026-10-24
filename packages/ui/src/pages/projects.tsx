@@ -991,7 +991,8 @@ export function ProjectsPage() {
             aria-label={t("projects.list")}
             aria-activedescendant={visible[selected] ? `project-row-${selected}` : undefined}
             tabIndex={-1}
-            className="min-h-0 flex-1 min-[1280px]:overflow-y-auto min-[1280px]:overscroll-contain min-[1280px]:pr-1"
+            // Inset the scroll box so the selected row's rounded highlight is not cut at the edges.
+            className="min-h-0 flex-1 min-[1280px]:-m-1.5 min-[1280px]:overflow-y-auto min-[1280px]:overscroll-contain min-[1280px]:p-1.5"
           >
             {notes.isPending ? (
               <div className="py-10">

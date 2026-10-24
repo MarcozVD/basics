@@ -449,7 +449,12 @@ export function InboxPage() {
         <div className="flex min-h-0 min-w-0 flex-col">
           {packBar ? <div className="mb-3">{packBar}</div> : null}
 
-          <div className="min-h-0 flex-1 min-[1280px]:overflow-y-auto min-[1280px]:overscroll-contain min-[1280px]:pr-1">
+          {/* Inset the scroll box so card rings and focus outlines are not cut at the edges;
+              the negative margin keeps the cards aligned with the page grid. */}
+          <div
+            data-testid="inbox-list"
+            className="min-h-0 flex-1 min-[1280px]:-m-1.5 min-[1280px]:overflow-y-auto min-[1280px]:overscroll-contain min-[1280px]:p-1.5"
+          >
             {inbox.isPending ? (
               <div className="py-10">
                 <Loading />

@@ -71,3 +71,45 @@ test("approves a proposal directly from the list card", async ({ page }) => {
   await expect(page.getByText(/Inbox zero/)).toBeVisible();
   await expect(page.getByText("Approved", { exact: true })).toBeVisible();
 });
+
+test("the inbox list does not clip its cards", async ({ page }) => {
+  const ids = ["clip-one", "clip-two", "clip-three"];
+  for (const [index, id] of ids.entries()) writeProposal(id, `Clip card ${index + 1}`, "Rounded card clipping check.");
+  try {
+    await page.setViewportSize({ width: 1440, height: 720 });
+    await page.goto("/inbox");
+
+    const list = page.getByTestId("inbox-list");
+    const cards = list.locator("[data-proposal-id]");
+    await expect(cards.first()).toBeVisible();
+    expect(await cards.count()).toBeGreaterThanOrEqual(ids.length);
+
+    const inside = (index: number) =>
+      list.evaluate((element, cardIndex) => {
+        const container = element.getBoundingClientRect();
+        const found = element.querySelectorAll("[data-proposal-id]");
+        const node = found[cardIndex < 0 ? found.length - 1 : cardIndex];
+        if (!node) return false;
+        const card = node.getBoundingClientRect();
+        // The card plus its 4px ring/outline halo must stay fully inside the scroll box.
+        return (
+          card.left - 4 >= container.left - 0.5 &&
+          card.top - 4 >= container.top - 0.5 &&
+          card.right + 4 <= container.right + 0.5 &&
+          card.bottom + 4 <= container.bottom + 0.5
+        );
+      }, index);
+
+    await list.evaluate((element) => {
+      element.scrollTop = 0;
+    });
+    await expect.poll(() => inside(0)).toBe(true);
+
+    await list.evaluate((element) => {
+      element.scrollTop = element.scrollHeight;
+    });
+    await expect.poll(() => inside(-1)).toBe(true);
+  } finally {
+    for (const id of ids) fs.rmSync(path.join(vaultPath(), "inbox", `${id}.md`), { force: true });
+  }
+});
