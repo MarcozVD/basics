@@ -119,6 +119,9 @@ function TypeChip({ id, type }: { id: string; type: NoteType | undefined }) {
   );
 }
 
+const TILE_ACTION =
+  "shrink-0 rounded-md px-1.5 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring";
+
 interface TileProps {
   label: string;
   value: number;
@@ -127,12 +130,14 @@ interface TileProps {
   dot?: string;
   alert?: boolean;
   onClick?: () => void;
-  children?: ReactNode;
+  /** Popover details; a function receives `close` for actions that leave the popover. */
+  children?: ReactNode | ((close: () => void) => ReactNode);
 }
 
 /** Compact stat tile; turns into a popover trigger when it has details to show. */
 function StatTile({ label, value, stat, dot, alert, onClick, children }: TileProps) {
   const { t } = useI18n();
+  const [open, setOpen] = useState(false);
   const body = (
     <>
       <span className="flex min-w-0 max-w-full items-center gap-1.5 text-[11px] text-muted-foreground">
@@ -165,14 +170,14 @@ function StatTile({ label, value, stat, dot, alert, onClick, children }: TilePro
   // The popover wraps its trigger in its own element; stretch that wrapper to fill the grid cell.
   return (
     <div className="min-w-0 *:w-full">
-      <MorphPopover>
+      <MorphPopover open={open} onOpenChange={setOpen}>
         <MorphPopoverTrigger>
           <button type="button" data-stat={stat} aria-label={`${label}: ${value} — ${t("home.showDetails")}`} className={className}>
             {body}
           </button>
         </MorphPopoverTrigger>
         <MorphPopoverContent side="top" align="start" className="w-80 p-2">
-          {children}
+          {typeof children === "function" ? children(() => setOpen(false)) : children}
         </MorphPopoverContent>
       </MorphPopover>
     </div>
@@ -823,13 +828,36 @@ export function HomePage() {
                 value={stats.data?.brokenLinks.length ?? 0}
                 alert={(stats.data?.brokenLinks.length ?? 0) > 0}
               >
-                <ul className="flex flex-col gap-1 p-1">
-                  {(stats.data?.brokenLinks ?? []).map((link) => (
-                    <li key={`${link.from}-${link.to}`} className="truncate font-mono text-[11px] text-muted-foreground">
-                      {link.from} <span className="text-foreground/50">→</span> {link.to}
-                    </li>
-                  ))}
-                </ul>
+                {(close) => (
+                  <ul className="flex flex-col gap-0.5 p-1">
+                    {(stats.data?.brokenLinks ?? []).map((link) => (
+                      <li key={`${link.from}-${link.to}`} data-broken-link={link.to} className="flex min-w-0 items-center gap-1">
+                        <span className="min-w-0 flex-1 truncate px-1.5 font-mono text-[11px] text-muted-foreground">
+                          {link.from} <span className="text-foreground/50">→</span> {link.to}
+                        </span>
+                        <button
+                          type="button"
+                          aria-label={t("home.brokenLinkOpen", { id: link.from })}
+                          onClick={() => navigate(`/notes/${encodeURIComponent(link.from)}`)}
+                          className={TILE_ACTION}
+                        >
+                          {t("home.brokenLinkOpenShort")}
+                        </button>
+                        <button
+                          type="button"
+                          aria-label={t("home.brokenLinkCreate", { id: link.to })}
+                          onClick={() => {
+                            close();
+                            window.dispatchEvent(new CustomEvent("basics:new-note", { detail: { id: link.to } }));
+                          }}
+                          className={`${TILE_ACTION} text-primary-text`}
+                        >
+                          {t("home.brokenLinkCreateShort")}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </StatTile>
 
               <StatTile stat="orphans" label={t("home.orphans")} value={stats.data?.orphans.length ?? 0}>

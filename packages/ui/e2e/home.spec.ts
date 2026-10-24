@@ -51,3 +51,42 @@ test("home shows the agent loop and approves from the queue", async ({ page }) =
 
   await expect(page.getByText("Nothing to review", { exact: true })).toBeVisible();
 });
+
+test("creates the missing note from the broken links tile", async ({ page }) => {
+  const file = path.join(vaultPath(), "tech", "broken-source.md");
+  fs.writeFileSync(
+    file,
+    [
+      "---",
+      "type: tech",
+      "kind: library",
+      "title: Broken source",
+      "layer: backend",
+      "---",
+      "# Broken source",
+      "",
+      "Depends on [[ghost-tech]].",
+      "",
+    ].join("\n"),
+  );
+  try {
+    await page.goto("/");
+    // Other specs may leave broken links behind; only this one matters here.
+    const tile = page.getByRole("button", { name: /^Broken links: \d+ — Show details$/ });
+    await tile.click();
+
+    const row = page.locator('[data-broken-link="ghost-tech"]');
+    await expect(row).toContainText("broken-source");
+    await row.getByRole("button", { name: "Create note ghost-tech" }).click();
+
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByLabel("ID", { exact: true })).toHaveValue("ghost-tech");
+    await page.keyboard.press("Escape");
+
+    await tile.click();
+    await row.getByRole("button", { name: /^Open broken-source/ }).click();
+    await expect(page).toHaveURL(/\/notes\/broken-source$/);
+  } finally {
+    fs.rmSync(file, { force: true });
+  }
+});

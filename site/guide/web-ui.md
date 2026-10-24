@@ -16,7 +16,7 @@ are no sidebars; secondary panels are overlays closed with `Esc`.
 
 | Screen | What it does |
 | --- | --- |
-| **Home** | Pending proposals you can approve inline, the agent activity timeline, and vault health (notes per type, broken links, orphans, recent notes). An empty vault shows the starter-pack onboarding. |
+| **Home** | Pending proposals you can approve inline, the agent activity timeline, and vault health (notes per type, broken links, orphans, recent notes). Each broken link can open the note that holds it or create the missing note. An empty vault shows the starter-pack onboarding. |
 | **Explore** | Filters by layer and type with counts, search, list or grid, keyboard navigation, and the new-note dialog. |
 | **Editor** | Frontmatter form generated from the note type, Markdown body in edit / preview / split, `[[` wikilink autocomplete, connections (links, backlinks, unresolved) and a local graph. A conflict banner appears if the file changed on disk. |
 | **Graph** | Every note and link, with type and layer filters in a floating toolbar, node search, broken links and neighborhood focus. |
