@@ -14,17 +14,27 @@ import {
 } from "../packages/core/dist/index.js";
 
 const root = path.resolve(import.meta.dirname, "..");
-const packsDir = path.join(root, "packs");
-const casesFile = path.join(root, "packages/core/test/fixtures/recommend-eval.json");
-const cases = JSON.parse(fs.readFileSync(casesFile, "utf8"));
+const fixturesDir = path.join(root, "packages/core/test/fixtures");
 const flags = new Set(process.argv.slice(2));
 const asJson = flags.has("--json");
 const grid = flags.has("--grid");
+const realistic = flags.has("--realistic");
 const hybrid = flags.has("--hybrid") || grid;
+// `--realistic` runs the same scorer against a bigger synthetic vault written in the style of a
+// real one (hyphenated tags, many notes with no `use_when`), so the numbers are not just the
+// 9 starter-pack techs. Both vaults ship as `.md` notes in the repo.
+const realisticDir = path.join(fixturesDir, "realistic-vault");
+const packsDir = path.join(root, "packs");
+const casesFile = path.join(fixturesDir, realistic ? "realistic-eval.json" : "recommend-eval.json");
+const cases = JSON.parse(fs.readFileSync(casesFile, "utf8"));
 const packs = listPacks(packsDir).map((pack) => pack.name);
 const vaults = {};
 
 function makeVault(lang) {
+  if (realistic) {
+    // The realistic vault mixes both languages in one set of notes.
+    return { dir: realisticDir, vault: Vault.load(realisticDir) };
+  }
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), `basics-eval-${lang}-`));
   const vault = Vault.load(dir);
   for (const pack of packs) installPack(vault, packsDir, pack, { lang });
@@ -208,5 +218,9 @@ try {
     print({ ...summary(perCase), perCase }, hybrid ? "hybrid" : "keywords");
   }
 } finally {
-  for (const { dir } of Object.values(vaults)) fs.rmSync(dir, { recursive: true, force: true });
+  // The realistic vault is a checked-in fixture; only the temp vaults are removed.
+  for (const { dir } of Object.values(vaults)) {
+    if (realistic) continue;
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 }

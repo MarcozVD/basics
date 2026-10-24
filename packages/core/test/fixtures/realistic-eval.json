@@ -1,0 +1,146 @@
+[
+  {
+    "description": "API REST en Rust de alto rendimiento con async",
+    "lang": "es",
+    "expect": { "backend": { "top1": "axum", "top3": ["axum"] } }
+  },
+  {
+    "description": "Pruebas de carga de una API con miles de usuarios concurrentes",
+    "lang": "es",
+    "indirect": true,
+    "expect": { "testing": { "top1": "k6", "top3": ["k6", "locust"] } }
+  },
+  {
+    "description": "Datos relacionales con transacciones y consistencia ACID",
+    "lang": "es",
+    "expect": { "data": { "top1": "postgresql" } }
+  },
+  {
+    "description": "Búsqueda de texto completo sobre muchos documentos",
+    "lang": "es",
+    "indirect": true,
+    "expect": { "data": { "top3": ["elasticsearch", "postgresql"] } }
+  },
+  {
+    "description": "Caché de latencia muy baja para respuestas repetidas",
+    "lang": "es",
+    "indirect": true,
+    "expect": { "data": { "top1": "redis" } }
+  },
+  {
+    "description": "Cola de trabajos en segundo plano para procesar la subida de imágenes",
+    "lang": "es",
+    "indirect": true,
+    "expect": { "messaging": { "top1": "rabbitmq" } }
+  },
+  {
+    "description": "Orquestar contenedores en varios servidores con escalado automático",
+    "lang": "es",
+    "indirect": true,
+    "expect": { "infra": { "top1": "kubernetes" } }
+  },
+  {
+    "description": "Desplegar frontends en el edge sin gestionar servidores",
+    "lang": "es",
+    "indirect": true,
+    "expect": { "infra": { "top3": ["vercel", "cloudflare"] } }
+  },
+  {
+    "description": "Inicio de sesión sin contraseña resistente al phishing",
+    "lang": "es",
+    "indirect": true,
+    "expect": { "auth": { "top1": "passkeys" } }
+  },
+  {
+    "description": "Autenticación e identidad con inicio de sesión único sobre OAuth 2.0",
+    "lang": "es",
+    "indirect": true,
+    "expect": { "auth": { "top3": ["oidc", "keycloak"] } }
+  },
+  {
+    "description": "App móvil multiplataforma escrita una vez para iOS y Android",
+    "lang": "es",
+    "indirect": true,
+    "expect": { "mobile": { "top3": ["flutter", "react-native"] } }
+  },
+  {
+    "description": "Aplicación de escritorio con un binario nativo ligero usando Rust",
+    "lang": "es",
+    "expect": { "desktop": { "top1": "tauri" } }
+  },
+  {
+    "description": "Seguir errores y excepciones en producción con trazas distribuidas",
+    "lang": "es",
+    "indirect": true,
+    "expect": { "observability": { "top3": ["sentry", "opentelemetry", "jaeger"] } }
+  },
+  {
+    "description": "Rust API with high performance and async handlers",
+    "lang": "en",
+    "expect": { "backend": { "top1": "axum", "top3": ["axum"] } }
+  },
+  {
+    "description": "Load testing an API with thousands of concurrent users",
+    "lang": "en",
+    "indirect": true,
+    "expect": { "testing": { "top1": "k6", "top3": ["k6", "locust"] } }
+  },
+  {
+    "description": "Relational data with transactions and referential integrity",
+    "lang": "en",
+    "expect": { "data": { "top1": "postgresql" } }
+  },
+  {
+    "description": "Full-text search over a very large document collection with relevance ranking",
+    "lang": "en",
+    "indirect": true,
+    "expect": { "data": { "top3": ["elasticsearch", "postgresql"] } }
+  },
+  {
+    "description": "Very low latency cache for repeated reads",
+    "lang": "en",
+    "indirect": true,
+    "expect": { "data": { "top1": "redis" } }
+  },
+  {
+    "description": "Background job queue that decouples uploads from the web server",
+    "lang": "en",
+    "indirect": true,
+    "expect": { "messaging": { "top1": "rabbitmq" } }
+  },
+  {
+    "description": "Orchestrate containers across servers with automatic scaling",
+    "lang": "en",
+    "indirect": true,
+    "expect": { "infra": { "top1": "kubernetes" } }
+  },
+  {
+    "description": "Secrets kept encrypted and audited instead of in plain environment variables",
+    "lang": "en",
+    "indirect": true,
+    "expect": { "security": { "top3": ["vault-secrets", "sops"] } }
+  },
+  {
+    "description": "Scanning container images for known vulnerabilities on every build",
+    "lang": "en",
+    "indirect": true,
+    "expect": { "security": { "top3": ["trivy", "snyk"] } }
+  },
+  {
+    "description": "Web with SEO and server-side rendering",
+    "lang": "en",
+    "expect": { "frontend": { "top1": "nextjs" } }
+  },
+  {
+    "description": "Cross-platform desktop app using web technologies",
+    "lang": "en",
+    "indirect": true,
+    "expect": { "desktop": { "top1": "electron" } }
+  },
+  {
+    "description": "Collect metrics from services and build alerting dashboards over time",
+    "lang": "en",
+    "indirect": true,
+    "expect": { "observability": { "top3": ["prometheus", "grafana"] } }
+  }
+]

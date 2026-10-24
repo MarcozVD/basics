@@ -50,6 +50,25 @@ test("recommend keeps its state across navigation and clears it", async ({ page 
   await expect(page.getByRole("button", { name: "Clear", exact: true })).toHaveCount(0);
 });
 
+test("an empty layer shows the quiet no-match line", async ({ page }) => {
+  await page.goto("/recommend");
+  await expect(page.getByRole("button", { name: "Backend", exact: true })).toBeVisible();
+
+  // Only data + testing are asked for; this description has nothing to match in testing.
+  for (const layer of ["Backend", "Frontend", "Infra"]) {
+    await page.getByRole("button", { name: layer, exact: true }).click();
+  }
+
+  await page.getByLabel("Describe the project", { exact: true }).fill("Postgres para cobros y devoluciones que se confirman o se deshacen");
+  await page.getByRole("button", { name: "Recommend", exact: true }).click();
+
+  await expect(page.getByRole("heading", { name: "Data", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Testing", exact: true })).toBeVisible();
+  // Layers the user did not ask for are not rendered at all.
+  await expect(page.getByRole("heading", { name: "Backend", exact: true })).toHaveCount(0);
+  await expect(page.getByText("No match in your vault for this layer", { exact: true })).toBeVisible();
+});
+
 test("creates a project from the recommendation and merges its stack on repeat", async ({ page }) => {
   const description = "API REST para servir modelos de machine learning";
 

@@ -87,18 +87,21 @@ test("fuses keyword and semantic scores into a known ranking", async () => {
     const candidates = result.layers.data;
 
     assert.equal(result.mode, "hybrid");
+    // `panel` has no keyword signal and a similarity below the fused floor, so it is dropped.
     assert.deepEqual(
       candidates.map((candidate) => candidate.id),
-      ["ledger", "panel"],
+      ["ledger"],
     );
-    // No keyword hits, so semantics (on the fixed cosine scale) decide.
-    assert.equal(candidates[0].score, 0);
+    // The only keyword signal is a synonym ("money" in the body); semantics land on the fixed
+    // cosine scale's top, so the fused score is 0.4 * keyword(3/6) + 0.6 * semantic(1).
+    assert.equal(candidates[0].score, 3);
     assert.equal(candidates[0].score_breakdown.keywords, 0);
+    assert.equal(candidates[0].score_breakdown.text, 0);
+    assert.equal(candidates[0].score_breakdown.synonyms, 3);
     assert.equal(candidates[0].score_breakdown.semantic, 1);
-    assert.equal(candidates[0].hybrid, 0.6);
-    assert.equal(candidates[1].hybrid, 0);
+    assert.equal(candidates[0].hybrid, 0.8);
     assert.equal(result.profiles[0].id, "payments");
-    assert.equal(result.profiles[0].hybrid, 0.8);
+    assert.equal(result.profiles[0].hybrid, 1);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

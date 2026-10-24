@@ -141,6 +141,8 @@ function CandidateCard({ candidate, maxScore, selected, reduce, onToggle }: Cand
   const negated = [...new Set([...candidate.negated_use_when, ...candidate.negated_avoid_when])];
   const detail = [
     `${t("recommend.breakdown.keywords")} ${breakdown.keywords}`,
+    `${t("recommend.breakdown.text")} ${breakdown.text}`,
+    `${t("recommend.breakdown.synonyms")} ${breakdown.synonyms}`,
     breakdown.semantic === undefined ? "" : `${t("recommend.breakdown.semantic")} ${breakdown.semantic.toFixed(3)}`,
     `${t("recommend.breakdown.negation")} ${breakdown.negation}`,
     `${t("recommend.breakdown.language")} ${breakdown.language}`,
