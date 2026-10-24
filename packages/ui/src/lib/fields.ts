@@ -54,62 +54,98 @@ export const FIELDS: Record<NoteType, Field[]> = {
   ],
 };
 
+type TechKind = Extract<NoteData, { type: "tech" }>["kind"];
+type CheckKind = Extract<NoteData, { type: "check" }>["kind"];
+
 export type TemplateOptions = {
   title?: string;
   layer?: string | string[];
+  /** Tech or check kind, depending on the template. */
+  kind?: string;
+  description?: string;
+  version?: string;
+  language?: string;
+  use_when?: string[];
+  avoid_when?: string[];
+  applies_to?: string[];
+  since?: string;
+  until?: string;
+  command?: string;
+  path?: string;
+  status?: "active" | "paused" | "archived";
+  profile?: string;
+  stack?: Record<string, string[]>;
 };
+
+/** Only write a string field when it carries real content; never persist "". */
+function text(key: string, value: string | undefined): Record<string, string> {
+  const trimmed = value?.trim();
+  return trimmed ? { [key]: trimmed } : {};
+}
 
 export const TEMPLATES: Record<NoteType, (opts?: TemplateOptions) => NoteData> = {
   layer: (opts = {}) => ({
     type: "layer",
     tags: [],
     source: "manual",
-    ...(opts.title ? { title: opts.title } : {}),
+    ...text("title", opts.title),
+    ...text("description", opts.description),
   }),
   tech: (opts = {}) => ({
     type: "tech",
-    kind: "framework",
+    kind: (opts.kind as TechKind) ?? "framework",
     layer: opts.layer ?? "backend",
     tags: [],
     source: "manual",
-    use_when: [],
-    avoid_when: [],
+    use_when: opts.use_when ?? [],
+    avoid_when: opts.avoid_when ?? [],
     performs_best: [],
     related: [],
     practices: [],
     checks: [],
-    ...(opts.title ? { title: opts.title } : {}),
+    ...text("title", opts.title),
+    ...text("version", opts.version),
+    ...text("language", opts.language),
   }),
   practice: (opts = {}) => ({
     type: "practice",
-    applies_to: [],
+    applies_to: opts.applies_to ?? [],
     tags: [],
     source: "manual",
-    ...(opts.title ? { title: opts.title } : {}),
+    ...text("title", opts.title),
+    ...text("since", opts.since),
+    ...text("until", opts.until),
   }),
   check: (opts = {}) => ({
     type: "check",
-    kind: "test",
-    applies_to: [],
+    kind: (opts.kind as CheckKind) ?? "test",
+    applies_to: opts.applies_to ?? [],
     tags: [],
     source: "manual",
-    ...(opts.title ? { title: opts.title } : {}),
+    ...text("title", opts.title),
+    ...text("command", opts.command),
+    ...text("since", opts.since),
+    ...text("until", opts.until),
   }),
   profile: (opts = {}) => ({
     type: "profile",
-    use_when: [],
-    stack: {},
+    use_when: opts.use_when ?? [],
+    stack: opts.stack ?? {},
     tags: [],
     source: "manual",
-    ...(opts.title ? { title: opts.title } : {}),
+    ...text("title", opts.title),
+    ...text("description", opts.description),
   }),
   project: (opts = {}) => ({
     type: "project",
-    status: "active",
-    stack: {},
+    status: opts.status ?? "active",
+    stack: opts.stack ?? {},
     lessons: [],
     tags: [],
     source: "manual",
-    ...(opts.title ? { title: opts.title } : {}),
+    ...text("title", opts.title),
+    ...text("description", opts.description),
+    ...text("path", opts.path),
+    ...text("profile", opts.profile),
   }),
 };

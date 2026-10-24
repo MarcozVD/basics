@@ -35,6 +35,57 @@ test("creates a tech note from the dialog with kind and layers", async ({ page }
   expect(note.body).not.toContain("TODO");
 });
 
+test("creates a practice with two techs and a rule line", async ({ page }) => {
+  await page.goto("/explore");
+
+  await page.getByRole("button", { name: "New note", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Title", { exact: true }).fill("Strict request validation");
+  await dialog.getByRole("tab", { name: "Practice", exact: true }).click();
+
+  const appliesTo = dialog.getByLabel("Applies to", { exact: true });
+  await appliesTo.fill("FastAPI");
+  await page.getByRole("option", { name: "FastAPI fastapi", exact: true }).click();
+  await expect(dialog).toBeVisible();
+  await expect(appliesTo).toBeFocused();
+
+  await appliesTo.fill("React");
+  await page.getByRole("option", { name: "React react", exact: true }).click();
+  await dialog.getByLabel("The rule in one line", { exact: true }).fill("Validate request bodies with the shared schema");
+  await dialog.getByRole("button", { name: "Create", exact: true }).click();
+
+  await expect(page).toHaveURL(/\/notes\/strict-request-validation$/);
+  const response = await page.request.get("/api/notes/strict-request-validation");
+  expect(response.ok()).toBe(true);
+  const note = (await response.json()) as { data: { applies_to: string[] }; body: string };
+  expect(note.data.applies_to).toEqual(["fastapi", "react"]);
+  expect(note.body).toContain("Validate request bodies with the shared schema");
+});
+
+test("creates a check with command", async ({ page }) => {
+  await page.goto("/explore");
+
+  await page.getByRole("button", { name: "New note", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Title", { exact: true }).fill("Lint the UI");
+  await dialog.getByRole("tab", { name: "Check", exact: true }).click();
+  await dialog.getByRole("tab", { name: "Lint", exact: true }).click();
+
+  const appliesTo = dialog.getByLabel("Applies to", { exact: true });
+  await appliesTo.fill("React");
+  await page.getByRole("option", { name: "React react", exact: true }).click();
+  await dialog.getByLabel("Command", { exact: true }).fill("npm run lint");
+  await dialog.getByRole("button", { name: "Create", exact: true }).click();
+
+  await expect(page).toHaveURL(/\/notes\/lint-the-ui$/);
+  const response = await page.request.get("/api/notes/lint-the-ui");
+  expect(response.ok()).toBe(true);
+  const note = (await response.json()) as { data: { kind: string; applies_to: string[]; command: string } };
+  expect(note.data.kind).toBe("lint");
+  expect(note.data.applies_to).toEqual(["react"]);
+  expect(note.data.command).toBe("npm run lint");
+});
+
 test("creates a note from a related field", async ({ page }) => {
   await page.goto("/notes/nextjs");
 

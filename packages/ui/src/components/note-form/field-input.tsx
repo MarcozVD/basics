@@ -26,7 +26,7 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/motion/select";
 import { type TranslationKey, useT } from "@/i18n";
 import { ApiRequestError, createNote } from "@/lib/api";
-import type { Field } from "@/lib/fields";
+import type { Field, TemplateOptions } from "@/lib/fields";
 import { TEMPLATES } from "@/lib/fields";
 import { useLayers, useNotes } from "@/lib/queries";
 import { slugify } from "@/lib/slug";
@@ -103,13 +103,30 @@ function AutoGrowTextarea({
   );
 }
 
-function LinkField({ id, field, value, onChange }: { id: string; field: Field; value: unknown; onChange: (value: unknown) => void }) {
+export function LinkField({
+  id,
+  field,
+  value,
+  onChange,
+  filter,
+  createOptions,
+}: {
+  id: string;
+  field: Field;
+  value: unknown;
+  onChange: (value: unknown) => void;
+  /** Narrow the candidates, e.g. only `kind: language` techs. */
+  filter?: (note: NoteSummary) => boolean;
+  /** Template options used when the inline create action makes a note. */
+  createOptions?: TemplateOptions;
+}) {
   const t = useT();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const notes = useNotes(field.linkType ? { type: field.linkType } : {});
   const values = linkItems(value);
   const label = t(`field.${field.key}` as TranslationKey);
+  const candidates = (notes.data ?? []).filter((note) => !filter || filter(note));
   const [query, setQuery] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -126,7 +143,7 @@ function LinkField({ id, field, value, onChange }: { id: string; field: Field; v
     mutationFn: ({ title, id: nextId }: { title: string; id: string }) => {
       const type = field.linkType;
       if (!type) throw new Error("This field cannot create notes");
-      return createNote({ id: nextId, data: TEMPLATES[type]({ title }), body: `# ${title}\n` });
+      return createNote({ id: nextId, data: TEMPLATES[type]({ ...createOptions, title }), body: `# ${title}\n` });
     },
     onSuccess: (note, input) => {
       void queryClient.invalidateQueries({ queryKey: ["notes"] });
@@ -150,7 +167,7 @@ function LinkField({ id, field, value, onChange }: { id: string; field: Field; v
 
   const requested = query.trim();
   const requestedId = slugify(requested);
-  const exactMatch = (notes.data ?? []).some(
+  const exactMatch = candidates.some(
     (note) => note.id.toLowerCase() === requested.toLowerCase() || (note.title || note.id).toLowerCase() === requested.toLowerCase(),
   );
   const showCreate = Boolean(field.linkType && requested && requestedId && !exactMatch);
@@ -160,7 +177,7 @@ function LinkField({ id, field, value, onChange }: { id: string; field: Field; v
     const title = query.trim();
     const nextId = slugify(title);
     if (!title || !nextId || !field.linkType) return;
-    const existing = (notes.data ?? []).find((note) => note.id === nextId);
+    const existing = candidates.find((note) => note.id === nextId);
     if (existing) {
       addValue(existing.id);
       setQuery("");
@@ -202,7 +219,7 @@ function LinkField({ id, field, value, onChange }: { id: string; field: Field; v
       </MultiSelectTrigger>
       <MultiSelectContent>
         <MultiSelectList>
-          {(notes.data ?? []).map((note) => (
+          {candidates.map((note) => (
             <MultiSelectItem key={note.id} value={note.id} keywords={[note.title]}>
               <span className="flex min-w-0 items-center gap-1.5">
                 <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full" style={{ backgroundColor: typeColor(note.type) }} />
@@ -555,7 +572,7 @@ function StackLayerRow({
   );
 }
 
-function StackField({ value, onChange }: { value: unknown; onChange: (value: unknown) => void }) {
+export function StackField({ value, onChange }: { value: unknown; onChange: (value: unknown) => void }) {
   const t = useT();
   const layers = useLayers();
   const techs = useNotes({ type: "tech" });
