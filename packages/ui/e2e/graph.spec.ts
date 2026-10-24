@@ -23,9 +23,22 @@ interface CyCollection {
   filter: (fn: (node: CyNodeHandle) => boolean) => CyCollection;
 }
 
+interface CyEdgeHandle {
+  id: () => string;
+  source: () => CyNodeHandle;
+  target: () => CyNodeHandle;
+  visible: () => boolean;
+}
+
+interface CyEdgeCollection {
+  length: number;
+  forEach: (fn: (edge: CyEdgeHandle) => void) => void;
+}
+
 interface CyHandle {
   getElementById: (id: string) => CyNodeHandle;
   nodes: (selector?: string) => CyCollection;
+  edges: (selector?: string) => CyEdgeCollection;
   zoom: () => number;
 }
 
@@ -150,4 +163,67 @@ test("grouped graph boxes its layers on a grid and the switch flattens it", asyn
   expect(flat?.parentCount).toBe(0);
   expect(flat?.fastapiParent).toBe("");
   expect(await page.evaluate(() => localStorage.getItem("basics:graph-group"))).toBe("0");
+});
+
+test("grouped mode hides edges to a node's own layer box", async ({ page }) => {
+  await page.goto("/graph");
+  // The preset layout is synchronous; polling also covers the first fit.
+  await expect.poll(async () => (await readGraph(page))?.fastapiParent).toBe("backend");
+
+  // Every edge joining a node to its own compound parent must be hidden in grouped mode.
+  const grouped = await page.evaluate(() => {
+    const cy = (window as unknown as { __basicsCy?: CyHandle }).__basicsCy;
+    const intra: { id: string; visible: boolean }[] = [];
+    let total = 0;
+    cy?.edges().forEach((edge) => {
+      total += 1;
+      const source = edge.source();
+      const target = edge.target();
+      const isIntra =
+        (target.isParent() && source.parent().id() === target.id()) || (source.isParent() && target.parent().id() === source.id());
+      if (isIntra) intra.push({ id: edge.id(), visible: edge.visible() });
+    });
+    return { total, intra };
+  });
+
+  expect(grouped.total).toBeGreaterThan(0);
+  // The vault has tech-in-layer edges, so the rule is actually exercised.
+  expect(grouped.intra.length).toBeGreaterThan(0);
+  expect(grouped.intra.filter((edge) => edge.visible)).toEqual([]);
+
+  // Selecting the box lights its members instead of drawing the hidden edges.
+  const boxPoint = await page.evaluate(() => {
+    const cy = (window as unknown as { __basicsCy?: CyHandle }).__basicsCy;
+    if (!cy) return null;
+    const box = cy.getElementById("backend").renderedBoundingBox({ includeLabels: false });
+    return { x: box.x1 + 30, y: box.y1 + 12 };
+  });
+  const canvas = page.getByTestId("graph-canvas");
+  const origin = await canvas.boundingBox();
+  if (!origin || !boxPoint) throw new Error("graph canvas has no geometry");
+  await page.mouse.click(origin.x + boxPoint.x, origin.y + boxPoint.y);
+
+  const litMembers = await page.evaluate(() => {
+    const cy = (window as unknown as { __basicsCy?: CyHandle }).__basicsCy;
+    const box = cy?.getElementById("backend");
+    if (!cy || !box) return null;
+    const members = cy.nodes(".lit").filter((node) => node.parent().id() === "backend");
+    return members.length;
+  });
+  expect(litMembers).toBeGreaterThan(0);
+
+  // Close the drawer before touching the toolbar (its backdrop covers it).
+  await page.getByRole("dialog", { name: "Note details" }).getByRole("button", { name: "Close" }).click();
+
+  // Flat mode keeps drawing the same edges (no compound parents, so they are plain links).
+  await page.getByTestId("graph-group").getByRole("switch").click();
+  await expect.poll(async () => (await readGraph(page))?.childCount).toBe(0);
+  const flatVisible = await page.evaluate(
+    (ids: string[]) => {
+      const cy = (window as unknown as { __basicsCy?: CyHandle }).__basicsCy;
+      return ids.every((id) => cy?.getElementById(id).visible() ?? false);
+    },
+    grouped.intra.map((edge) => edge.id),
+  );
+  expect(flatVisible).toBe(true);
 });

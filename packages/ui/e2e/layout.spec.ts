@@ -26,8 +26,9 @@ function seedActivity(count: number): () => void {
   };
 }
 
-/** Wait for the late Geist swap so measurements are stable. */
+/** Wait for the route to render, then for the late Geist swap so measurements are stable. */
 async function settle(page: import("@playwright/test").Page) {
+  await page.waitForFunction(() => document.querySelector("main h1") !== null);
   await page.evaluate(
     () =>
       new Promise<void>((resolve) => {

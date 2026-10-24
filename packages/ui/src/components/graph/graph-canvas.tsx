@@ -280,6 +280,9 @@ function buildStyle(palette: Palette, reduce: boolean): StylesheetJson {
     },
     // Grouped mode hides the web of cross-box links; only the active node's edges show.
     { selector: "edge.veiled", style: { display: "none" } },
+    // An edge between a node and its own layer box repeats what containment already shows,
+    // and draws a line into the middle of its own box. Never rendered in grouped mode.
+    { selector: "edge.intraBox", style: { display: "none" } },
     { selector: ".dim", style: { opacity: 0.2 } },
     {
       selector: "node.hit",
@@ -538,6 +541,9 @@ function runLayout(cy: Core, opts: { randomize: boolean; animate: boolean; compa
 /**
  * Grouped mode reads by structure, not by links: all edges stay veiled except those of
  * the hovered/selected node, whose neighbours are lit and the rest dimmed.
+ *
+ * A layer box has no useful edges (its members are joined to it by containment), so when
+ * the box itself is active its members are lit instead of drawing those edges.
  */
 function emphasizeNode(cy: Core, activeId: string | null): void {
   cy.batch(() => {
@@ -545,8 +551,16 @@ function emphasizeNode(cy: Core, activeId: string | null): void {
     cy.nodes().removeClass("fade lit");
     if (!activeId) return;
     const node = cy.getElementById(activeId);
-    // A layer box has no useful edges, and dimming its own members would erase the box.
-    if (node.empty() || node.isParent()) return;
+    if (node.empty()) return;
+    // Padding and spacer nodes are structure, not members worth highlighting.
+    const members = node.isParent() ? node.children().not(":parent, [bandLabel], [spacer]") : null;
+    if (members?.nonempty()) {
+      members.addClass("lit");
+      cy.nodes().not(members).not(":parent, [bandLabel], [spacer]").addClass("fade");
+      return;
+    }
+    // A layer box with no member on screen has no useful edges either.
+    if (node.isParent()) return;
     const ring = node.closedNeighborhood();
     ring.addClass("lit");
     cy.nodes().not(ring).not(":parent, [bandLabel], [spacer]").addClass("fade");
@@ -596,6 +610,15 @@ function syncElements(cy: Core, data: GraphData, layout: GroupedLayout | null): 
       if (existing.empty()) cy.add(element);
       else existing.data(element.data);
     }
+    // Grouped mode: an edge to the node's own layer box only repeats containment and would
+    // draw a line into the middle of that box, so mark it hidden. Flat mode draws it.
+    const boxParents = layout?.parents;
+    cy.edges().forEach((edge) => {
+      const source = edge.source().id();
+      const target = edge.target().id();
+      const intra = Boolean(boxParents && (boxParents.get(source) === target || boxParents.get(target) === source));
+      edge.toggleClass("intraBox", intra);
+    });
     // New nodes start next to the neighbours they already have, so the refresh barely moves.
     for (const node of added) {
       const placed = node.neighborhood("node").filter((other) => !added.includes(other as NodeSingular));
