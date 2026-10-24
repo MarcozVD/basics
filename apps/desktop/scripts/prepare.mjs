@@ -17,7 +17,6 @@ import { spawnSync } from "node:child_process";
  */
 import { createHash } from "node:crypto";
 import fs from "node:fs";
-import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -97,16 +96,13 @@ function copyDist() {
  * package directory into resources/basics/node_modules preserving scoped paths.
  */
 function copyNodeModules() {
-  const rootNm = path.join(repoRoot, "node_modules");
   const target = path.join(basicsResources, "node_modules");
   fs.rmSync(target, { recursive: true, force: true });
   fs.mkdirSync(target, { recursive: true });
 
-  const req = createRequire(path.join(basicsPkg, "dist", "cli.js"));
-
   const basicsManifest = JSON.parse(fs.readFileSync(path.join(basicsPkg, "package.json"), "utf8"));
-  const pending = Object.keys(basicsManifest.dependencies ?? {});
-  const visited = new Set();
+  // [package name, directory whose node_modules chain resolves it]
+  const pending = Object.keys(basicsManifest.dependencies ?? {}).map((name) => [name, basicsPkg]);
   const copied = new Set();
 
   const readPkg = (dir) => {
@@ -117,34 +113,37 @@ function copyNodeModules() {
     }
   };
 
-  while (pending.length) {
-    const name = pending.pop();
-    if (visited.has(name)) continue;
-    visited.add(name);
-
-    let realDir = null;
-    try {
-      const resolved = req.resolve(`${name}/package.json`, { paths: [basicsPkg, rootNm] });
-      realDir = fs.realpathSync(path.dirname(resolved));
-    } catch {
-      // Optional/peer not installed here; skip.
+  // Walk node_modules directories upwards like Node does. require.resolve("<pkg>/package.json")
+  // fails for packages whose "exports" hide package.json, which silently dropped most of them.
+  const findPackageDir = (name, fromDir) => {
+    for (let dir = fromDir; ; dir = path.dirname(dir)) {
+      const candidate = path.join(dir, "node_modules", name);
+      if (fs.existsSync(path.join(candidate, "package.json"))) return fs.realpathSync(candidate);
+      if (path.dirname(dir) === dir) return null;
     }
-    if (!realDir || !fs.existsSync(realDir)) continue;
+  };
+
+  while (pending.length) {
+    const [name, fromDir] = pending.pop();
+    const realDir = findPackageDir(name, fromDir);
+    if (!realDir) throw new Error(`dependency ${name} is not installed (looked up from ${fromDir})`);
+    if (copied.has(name)) continue;
+    copied.add(name);
 
     const pkg = readPkg(realDir);
-    if (pkg?.dependencies) {
-      for (const dep of Object.keys(pkg.dependencies)) if (!visited.has(dep)) pending.push(dep);
-    }
+    for (const dep of Object.keys(pkg?.dependencies ?? {})) pending.push([dep, realDir]);
 
-    if (copied.has(realDir)) continue;
-    copied.add(realDir);
-
-    // Relative path name under node_modules, e.g. "@scope/name" or "name".
-    const relName = name.startsWith("@") ? `${name.split("/")[0]}/${name.split("/")[1]}` : name;
-    const dest = path.join(target, relName);
+    const dest = path.join(target, ...name.split("/"));
     fs.rmSync(dest, { recursive: true, force: true });
     fs.mkdirSync(path.dirname(dest), { recursive: true });
-    fs.cpSync(realDir, dest, { recursive: true });
+    // Workspace packages (symlinked into the repo) ship only what npm would publish.
+    if (realDir.startsWith(path.join(repoRoot, "packages"))) {
+      fs.mkdirSync(dest, { recursive: true });
+      fs.copyFileSync(path.join(realDir, "package.json"), path.join(dest, "package.json"));
+      fs.cpSync(path.join(realDir, "dist"), path.join(dest, "dist"), { recursive: true });
+    } else {
+      fs.cpSync(realDir, dest, { recursive: true });
+    }
   }
   console.log(`copied prod node_modules closure → resources/basics/node_modules (${copied.size} pkgs)`);
 }
