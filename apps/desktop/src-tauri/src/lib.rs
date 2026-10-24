@@ -18,7 +18,7 @@ use tauri::webview::NewWindowResponse;
 use tauri::{AppHandle, Manager, RunEvent, Url, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt as _};
 use tauri_plugin_clipboard_manager::ClipboardExt;
-use tauri_plugin_dialog::DialogExt;
+use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 use tauri_plugin_opener::OpenerExt;
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
@@ -310,6 +310,66 @@ async fn choose_vault(app: AppHandle) -> Result<bool, String> {
     Ok(true)
 }
 
+/// Tray "Connect agents…": run the bundled `basics connect` so every detected coding agent
+/// gets the MCP server (stdio through this app's Node, so it works while the app is closed)
+/// and the Basics skill, for the vault the running server uses.
+fn connect_agents(app: AppHandle) {
+    let vault = app.state::<ServerState>().0.lock().unwrap().vault.clone();
+    let Some(vault) = vault else {
+        app.dialog()
+            .message("Basics is not running yet. Choose or create a vault first, then try again.")
+            .title("Connect agents")
+            .kind(MessageDialogKind::Warning)
+            .blocking_show();
+        return;
+    };
+    let confirmed = app
+        .dialog()
+        .message(format!(
+            "Register Basics with the coding agents found on this computer (Claude Code, OpenCode, Codex, Cursor, Claude Desktop) and install the Basics skill?
+
+Vault: {vault}
+
+Each changed config file is backed up once as <file>.basics-backup."
+        ))
+        .title("Connect agents")
+        .buttons(MessageDialogButtons::OkCancelCustom("Connect".into(), "Cancel".into()))
+        .blocking_show();
+    if !confirmed {
+        return;
+    }
+    let (kind, text) = match tauri::async_runtime::block_on(run_connect(&app, &vault)) {
+        Ok(report) => (MessageDialogKind::Info, format!("{report}
+
+Restart your agents to load Basics.")),
+        Err(err) => (MessageDialogKind::Error, err),
+    };
+    app.dialog().message(text).title("Connect agents").kind(kind).blocking_show();
+}
+
+async fn run_connect(app: &AppHandle, vault: &str) -> Result<String, String> {
+    let resources = app.path().resource_dir().map_err(|err| err.to_string())?;
+    let cli = plain_path(resources).join("basics").join("dist").join("cli.js");
+    let output = app
+        .shell()
+        .sidecar("node")
+        .map_err(|err| err.to_string())?
+        .args([cli.to_string_lossy().into_owned(), "--vault".into(), vault.to_owned(), "connect".into()])
+        .output()
+        .await
+        .map_err(|err| err.to_string())?;
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    if !output.status.success() {
+        let detail: String = format!("{stdout}
+{stderr}").trim().chars().take(2000).collect();
+        return Err(if detail.is_empty() { "basics connect failed".into() } else { detail });
+    }
+    // The table is all a person needs; per-file diffs and paths stay in the CLI.
+    Ok(stdout.lines().take_while(|line| !line.trim().is_empty()).collect::<Vec<_>>().join("
+"))
+}
+
 fn show_main(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
@@ -367,12 +427,13 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     let open = MenuItem::with_id(app, "open", "Open Basics", true, None::<&str>)?;
     let copy_mcp = MenuItem::with_id(app, "copy-mcp", "Copy MCP URL", true, None::<&str>)?;
     let vault = MenuItem::with_id(app, "open-vault", "Open vault folder", true, None::<&str>)?;
+    let connect = MenuItem::with_id(app, "connect", "Connect agents…", true, None::<&str>)?;
     let autostart = CheckMenuItem::with_id(app, "autostart", "Start at login", true, autostart_on, None::<&str>)?;
     let updates = MenuItem::with_id(app, "updates", "Check for updates", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit Basics", true, None::<&str>)?;
     let separator_a = PredefinedMenuItem::separator(app)?;
     let separator_b = PredefinedMenuItem::separator(app)?;
-    let menu = Menu::with_items(app, &[&open, &copy_mcp, &vault, &separator_a, &autostart, &updates, &separator_b, &quit])?;
+    let menu = Menu::with_items(app, &[&open, &copy_mcp, &vault, &connect, &separator_a, &autostart, &updates, &separator_b, &quit])?;
 
     let autostart_item = autostart.clone();
     let mut tray = TrayIconBuilder::with_id("main").tooltip("Basics").menu(&menu).show_menu_on_left_click(false);
@@ -392,6 +453,11 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
             if let Some(vault) = vault {
                 let _ = app.opener().open_path(vault, None::<&str>);
             }
+        }
+        "connect" => {
+            // Dialogs block until answered, so keep them off the event loop.
+            let app = app.clone();
+            std::thread::spawn(move || connect_agents(app));
         }
         "autostart" => {
             let launcher = app.autolaunch();
