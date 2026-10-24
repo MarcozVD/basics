@@ -16,6 +16,8 @@ export interface EvalCase {
   lang: "en" | "es";
   /** Describes the project without naming the expected technology; tracked separately. */
   indirect?: boolean;
+  /** `holdout` cases are authored separately from the cases used while tuning scoring. */
+  split?: "dev" | "holdout";
   expect: Record<string, EvalExpectation>;
 }
 
@@ -34,6 +36,7 @@ export interface EvalCaseResult {
   description: string;
   lang: "en" | "es";
   indirect: boolean;
+  split?: "dev" | "holdout";
   layers: EvalLayerResult[];
   hit1: boolean;
   hit3: boolean;
@@ -80,6 +83,7 @@ export function evaluate(vault: Vault, cases: EvalCase[], recommendFn: (vault: V
       description: testCase.description,
       lang: testCase.lang,
       indirect: testCase.indirect === true,
+      split: testCase.split,
       layers,
       hit1: layers.every((layer) => layer.hit1),
       hit3: layers.every((layer) => layer.hit3),

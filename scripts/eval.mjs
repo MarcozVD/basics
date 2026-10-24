@@ -114,6 +114,8 @@ function summary(perCase) {
   const layers = perCase.flatMap((entry) => entry.layers);
   const indirect = perCase.filter((entry) => entry.indirect);
   const indirectLayers = indirect.flatMap((entry) => entry.layers);
+  const holdout = perCase.filter((entry) => entry.split === "holdout");
+  const holdoutLayers = holdout.flatMap((entry) => entry.layers);
   const ratio = (rows, key) => (rows.length ? rows.filter((row) => row[key]).length / rows.length : 0);
   return {
     cases: cases.length,
@@ -125,6 +127,12 @@ function summary(perCase) {
       hit1: ratio(indirectLayers, "hit1"),
       hit3: ratio(indirectLayers, "hit3"),
       forbidViolations: indirect.reduce((sum, entry) => sum + entry.forbidViolations, 0),
+    },
+    holdout: {
+      cases: holdout.length,
+      hit1: ratio(holdoutLayers, "hit1"),
+      hit3: ratio(holdoutLayers, "hit3"),
+      forbidViolations: holdout.reduce((sum, entry) => sum + entry.forbidViolations, 0),
     },
   };
 }
@@ -147,6 +155,11 @@ function print(result, mode) {
   console.log(
     `indirect cases=${result.indirect.cases} hit@1=${result.indirect.hit1.toFixed(3)} hit@3=${result.indirect.hit3.toFixed(3)} forbid=${result.indirect.forbidViolations}`,
   );
+  if (result.holdout.cases) {
+    console.log(
+      `holdout cases=${result.holdout.cases} hit@1=${result.holdout.hit1.toFixed(3)} hit@3=${result.holdout.hit3.toFixed(3)} forbid=${result.holdout.forbidViolations}`,
+    );
+  }
 }
 
 try {

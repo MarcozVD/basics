@@ -315,5 +315,260 @@
     "expect": {
       "frontend": { "top1": "react" }
     }
+  },
+  {
+    "description": "FastAPI endpoint that scores loan applications with a model and returns JSON",
+    "lang": "en",
+    "split": "holdout",
+    "expect": {
+      "backend": { "top1": "fastapi" }
+    }
+  },
+  {
+    "description": "PostgreSQL orders and refunds where each movement commits or rolls back as a unit",
+    "lang": "en",
+    "split": "holdout",
+    "expect": {
+      "data": { "top1": "postgresql" }
+    }
+  },
+  {
+    "description": "pytest with TestClient for the FastAPI invoice endpoints",
+    "lang": "en",
+    "split": "holdout",
+    "expect": {
+      "testing": { "top1": "pytest" }
+    }
+  },
+  {
+    "description": "Vitest unit checks for a React date-picker component",
+    "lang": "en",
+    "split": "holdout",
+    "expect": {
+      "testing": { "top1": "vitest" }
+    }
+  },
+  {
+    "description": "Playwright runs that pay with a test card in Firefox",
+    "lang": "en",
+    "split": "holdout",
+    "expect": {
+      "testing": { "top1": "playwright" }
+    }
+  },
+  {
+    "description": "Next.js storefront with product pages that search engines can index",
+    "lang": "en",
+    "split": "holdout",
+    "expect": {
+      "frontend": { "top1": "nextjs" }
+    }
+  },
+  {
+    "description": "React dashboard where analysts keep several charts and filters in sync",
+    "lang": "en",
+    "split": "holdout",
+    "expect": {
+      "frontend": { "top1": "react" }
+    }
+  },
+  {
+    "description": "Sign-in and permission checks for a web panel backed by an async API",
+    "lang": "en",
+    "split": "holdout",
+    "indirect": true,
+    "expect": {
+      "backend": { "top1": "fastapi" }
+    }
+  },
+  {
+    "description": "A shared package of type definitions used by both the web client and a Node command-line tool",
+    "lang": "en",
+    "split": "holdout",
+    "indirect": true,
+    "expect": {
+      "frontend": { "top1": "typescript" }
+    }
+  },
+  {
+    "description": "An online store's orders kept in related tables where a failed step undoes the whole change",
+    "lang": "en",
+    "split": "holdout",
+    "indirect": true,
+    "expect": {
+      "data": { "top1": "postgresql" }
+    }
+  },
+  {
+    "description": "Search by words inside thousands of product descriptions stored in the database",
+    "lang": "en",
+    "split": "holdout",
+    "indirect": true,
+    "expect": {
+      "data": { "top1": "postgresql" }
+    }
+  },
+  {
+    "description": "Python script that turns months of export files into a forecast for finance",
+    "lang": "en",
+    "split": "holdout",
+    "indirect": true,
+    "expect": {
+      "backend": { "top1": "python" }
+    }
+  },
+  {
+    "description": "A service that answers async JSON calls with predictions for a mobile client",
+    "lang": "en",
+    "split": "holdout",
+    "indirect": true,
+    "expect": {
+      "backend": { "top1": "fastapi" }
+    }
+  },
+  {
+    "description": "A back-office dashboard with live counters, drag-and-drop and filters that update in the tab",
+    "lang": "en",
+    "split": "holdout",
+    "indirect": true,
+    "expect": {
+      "frontend": { "top1": "react" }
+    }
+  },
+  {
+    "description": "The shop's public catalogue must appear in search results and arrive already rendered from the server",
+    "lang": "en",
+    "split": "holdout",
+    "indirect": true,
+    "expect": {
+      "frontend": { "top1": "nextjs" }
+    }
+  },
+  {
+    "description": "API FastAPI que devuelve predicciones de demanda en JSON",
+    "lang": "es",
+    "split": "holdout",
+    "expect": {
+      "backend": { "top1": "fastapi" }
+    }
+  },
+  {
+    "description": "Control de sesión y permisos para un panel web que consume una API async",
+    "lang": "es",
+    "split": "holdout",
+    "expect": {
+      "backend": { "top1": "fastapi" }
+    }
+  },
+  {
+    "description": "PostgreSQL para cobros y devoluciones que se confirman o se deshacen juntos",
+    "lang": "es",
+    "split": "holdout",
+    "expect": {
+      "data": { "top1": "postgresql" }
+    }
+  },
+  {
+    "description": "pytest con TestClient para los endpoints de facturas en FastAPI",
+    "lang": "es",
+    "split": "holdout",
+    "expect": {
+      "testing": { "top1": "pytest" }
+    }
+  },
+  {
+    "description": "Pruebas Vitest de un componente React de calendario",
+    "lang": "es",
+    "split": "holdout",
+    "expect": {
+      "testing": { "top1": "vitest" }
+    }
+  },
+  {
+    "description": "Playwright que completa una compra de prueba en Firefox",
+    "lang": "es",
+    "split": "holdout",
+    "expect": {
+      "testing": { "top1": "playwright" }
+    }
+  },
+  {
+    "description": "Panel React donde los analistas combinan gráficos y filtros",
+    "lang": "es",
+    "split": "holdout",
+    "expect": {
+      "frontend": { "top1": "react" }
+    }
+  },
+  {
+    "description": "Tienda Next.js con fichas de producto que los buscadores pueden indexar",
+    "lang": "es",
+    "split": "holdout",
+    "expect": {
+      "frontend": { "top1": "nextjs" }
+    }
+  },
+  {
+    "description": "Librería de definiciones de tipo compartida entre el cliente web y una herramienta de línea de comandos en Node",
+    "lang": "es",
+    "split": "holdout",
+    "indirect": true,
+    "expect": {
+      "frontend": { "top1": "typescript" }
+    }
+  },
+  {
+    "description": "Una transacción sobre una ficha compartida no puede quedar a medias si dos personas la editan a la vez",
+    "lang": "es",
+    "split": "holdout",
+    "indirect": true,
+    "expect": {
+      "data": { "top1": "postgresql" }
+    }
+  },
+  {
+    "description": "Buscar por palabras dentro de miles de descripciones guardadas en la base de datos",
+    "lang": "es",
+    "split": "holdout",
+    "indirect": true,
+    "expect": {
+      "data": { "top1": "postgresql" }
+    }
+  },
+  {
+    "description": "Script en Python que convierte meses de ventas exportadas en una previsión para finanzas",
+    "lang": "es",
+    "split": "holdout",
+    "indirect": true,
+    "expect": {
+      "backend": { "top1": "python" }
+    }
+  },
+  {
+    "description": "Servicio que contesta llamadas JSON async con predicciones para una app móvil",
+    "lang": "es",
+    "split": "holdout",
+    "indirect": true,
+    "expect": {
+      "backend": { "top1": "fastapi" }
+    }
+  },
+  {
+    "description": "Interfaz de trabajo con contadores en vivo, arrastrar y soltar y filtros que cambian en la pestaña",
+    "lang": "es",
+    "split": "holdout",
+    "indirect": true,
+    "expect": {
+      "frontend": { "top1": "react" }
+    }
+  },
+  {
+    "description": "La web pública de una tienda debe salir en Google y abrirse rápido, con las páginas ya renderizadas en el servidor",
+    "lang": "es",
+    "split": "holdout",
+    "indirect": true,
+    "expect": {
+      "frontend": { "top1": "nextjs" }
+    }
   }
 ]

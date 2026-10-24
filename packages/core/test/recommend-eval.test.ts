@@ -43,11 +43,13 @@ test("keyword recommendation eval meets hit@3 and forbid thresholds", () => {
     const all = metrics(perCase);
     const direct = metrics(perCase.filter((entry) => !entry.indirect));
     const indirect = metrics(perCase.filter((entry) => entry.indirect));
+    const holdout = metrics(perCase.filter((entry) => entry.split === "holdout"));
     console.log(
       `recommend eval (keywords): cases=${all.cases} hit@1=${all.hit1.toFixed(3)} hit@3=${all.hit3.toFixed(3)} forbid=${all.forbid}`,
     );
     console.log(`  direct: cases=${direct.cases} hit@1=${direct.hit1.toFixed(3)} hit@3=${direct.hit3.toFixed(3)}`);
     console.log(`  indirect: cases=${indirect.cases} hit@1=${indirect.hit1.toFixed(3)} hit@3=${indirect.hit3.toFixed(3)}`);
+    console.log(`  holdout: cases=${holdout.cases} hit@1=${holdout.hit1.toFixed(3)} hit@3=${holdout.hit3.toFixed(3)}`);
     assert.equal(all.forbid, 0);
     assert.ok(direct.hit3 >= 0.8, `direct hit@3 ${direct.hit3.toFixed(3)} below 0.8`);
     assert.ok(indirect.hit3 >= 0.8, `indirect hit@3 ${indirect.hit3.toFixed(3)} below 0.8`);
