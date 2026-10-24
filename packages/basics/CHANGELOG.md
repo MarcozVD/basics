@@ -1,5 +1,16 @@
 # @marcozvd/basics
 
+## 1.2.0
+
+### Minor Changes
+
+- Web UI: dropdowns no longer clip inside the editor sidebar, Add-layer pills, a New project button on Projects, a New note dialog that asks type-specific fields, Create project (or update its stack) from Recommend, and quiet hover-only scrollbars. A desktop app (Tauri) now ships separately with the same server and UI.
+
+### Patch Changes
+
+- Updated dependencies
+  - @marcozvd/basics-core@1.2.0
+
 ## 1.1.0
 
 ### Minor Changes
