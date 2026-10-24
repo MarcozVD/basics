@@ -70,6 +70,7 @@ export function InboxPage() {
   const lastParam = useRef<string | null>(null);
   const pendingParam = useRef<string | null>(null);
   const pParam = searchParams.get("p");
+  const packFilter = searchParams.get("pack");
 
   useReturnFocus(editOpen, editButtonRef);
 
@@ -78,17 +79,30 @@ export function InboxPage() {
     [inbox.data],
   );
 
-  const counts = useMemo(() => {
-    const create = proposals.filter((proposal) => proposal.meta.action === "create").length;
-    return { all: proposals.length, create, update: proposals.length - create };
-  }, [proposals]);
-
-  const visible = useMemo(
-    () => (filter === "all" ? proposals : proposals.filter((proposal) => proposal.meta.action === filter)),
-    [filter, proposals],
+  // A `?pack=` filter shows only proposals proposed by that pack, so links like
+  // "Review in Inbox" from Home land on exactly the right proposals.
+  const packFiltered = useMemo(
+    () => (packFilter ? proposals.filter((proposal) => packProposer(proposal.meta.proposed_by)?.name === packFilter) : proposals),
+    [proposals, packFilter],
   );
 
-  const packGroups = useMemo(() => groupPackProposals(proposals).filter((group) => group.proposals.length >= 2), [proposals]);
+  const counts = useMemo(() => {
+    const create = packFiltered.filter((proposal) => proposal.meta.action === "create").length;
+    return { all: packFiltered.length, create, update: packFiltered.length - create };
+  }, [packFiltered]);
+
+  const visible = useMemo(
+    () => (filter === "all" ? packFiltered : packFiltered.filter((proposal) => proposal.meta.action === filter)),
+    [filter, packFiltered],
+  );
+
+  const packGroups = useMemo(
+    () =>
+      groupPackProposals(proposals)
+        .filter((group) => (packFilter ? group.name === packFilter : true))
+        .filter((group) => group.proposals.length >= 2),
+    [proposals, packFilter],
+  );
 
   const current = visible[selected];
   const currentId = current?.id;
@@ -357,7 +371,7 @@ export function InboxPage() {
     ) : null;
 
   const emptyState =
-    proposals.length === 0 ? (
+    packFiltered.length === 0 ? (
       <div className="flex min-h-64 flex-col items-center justify-center gap-2 px-4 py-10 text-center min-[1280px]:min-h-full">
         <span className="grid size-10 place-items-center rounded-full bg-muted/60 text-muted-foreground">
           <InboxIcon className="size-5" aria-hidden="true" />
@@ -389,8 +403,27 @@ export function InboxPage() {
         <div className="flex items-baseline gap-2">
           <h1 className="text-xl font-semibold tracking-tight">{t("page.inbox.title")}</h1>
           <span className="inline-flex items-baseline gap-1.5 text-xs text-muted-foreground">
-            <AnimatedNumber value={proposals.length} startOnView={false} duration={0.5} className="text-sm font-medium text-foreground" />
+            <AnimatedNumber
+              value={packFiltered.length}
+              startOnView={false}
+              duration={0.5}
+              className="text-sm font-medium text-foreground"
+            />
             {t("inbox.pending")}
+            {packFilter ? (
+              <button
+                type="button"
+                onClick={() => {
+                  const params = new URLSearchParams(searchParams);
+                  params.delete("pack");
+                  setSearchParams(params, { replace: true });
+                  setSelected(0);
+                }}
+                className="ml-2 rounded-sm text-xs text-muted-foreground underline decoration-border underline-offset-2 transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              >
+                {t("inbox.clearPackFilter", { pack: packFilter })}
+              </button>
+            ) : null}
           </span>
         </div>
 

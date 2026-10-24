@@ -13,6 +13,7 @@ import type {
   NoteDetail,
   NoteSummary,
   NoteType,
+  PackAddResult,
   PackInfo,
   PackInstallResult,
   ProposalDetail,
@@ -147,6 +148,10 @@ export function installPack(name: string, lang: Language): Promise<PackInstallRe
     method: "POST",
     body: JSON.stringify({ lang }),
   });
+}
+
+export function addPack(body: { repo: string; ref?: string; path?: string; lang?: Language }): Promise<PackAddResult> {
+  return request<PackAddResult>("/api/packs/add", { method: "POST", body: JSON.stringify(body) });
 }
 
 export function getInbox(): Promise<ProposalSummary[]> {

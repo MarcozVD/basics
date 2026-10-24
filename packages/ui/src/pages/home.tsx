@@ -1,6 +1,6 @@
 import type { ActivityEvent, NoteType, PackInfo, ProposalSummary } from "@marcozvd/basics-core";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, Check, Copy, Package } from "lucide-react";
+import { ArrowRight, Check, Copy, GitFork, Package } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
@@ -16,7 +16,7 @@ import { Page } from "@/components/page";
 import { ErrorState, Loading } from "@/components/state";
 import { type TranslationKey, useI18n } from "@/i18n";
 import { agentColor, agentInitial } from "@/lib/agent-color";
-import { ApiRequestError, approveProposal, installPack, type Language, rejectProposal } from "@/lib/api";
+import { ApiRequestError, addPack, approveProposal, installPack, type Language, rejectProposal } from "@/lib/api";
 import { SPRING_LAYOUT } from "@/lib/ease";
 import { packProposer } from "@/lib/packs";
 import { useActivity, useInbox, useNotes, usePacks, useStats } from "@/lib/queries";
@@ -187,6 +187,8 @@ interface StarterPacksProps {
   packLanguage: Language;
   selected: Set<string>;
   installing: boolean;
+  /** Pack ids that currently have proposals pending in the inbox. */
+  pendingPacks: Set<string>;
   onToggle: (name: string) => void;
   onLanguageChange: (language: Language) => void;
   onInstall: () => void;
@@ -205,11 +207,28 @@ function StarterPacks({
   packLanguage,
   selected,
   installing,
+  pendingPacks,
   onToggle,
   onLanguageChange,
   onInstall,
 }: StarterPacksProps) {
   const { t } = useI18n();
+  const queryClient = useQueryClient();
+  const [repoInput, setRepoInput] = useState("");
+  const [added, setAdded] = useState<import("@marcozvd/basics-core").PackAddResult | null>(null);
+
+  const add = useMutation({
+    mutationFn: (repo: string) => addPack({ repo, lang: language }),
+    onSuccess: (result) => {
+      setAdded(result);
+      setRepoInput("");
+      void queryClient.invalidateQueries({ queryKey: ["packs"] });
+      void queryClient.invalidateQueries({ queryKey: ["inbox"] });
+      void queryClient.invalidateQueries({ queryKey: ["stats"] });
+    },
+  });
+
+  const addError = add.error ? (add.error instanceof ApiRequestError ? add.error.body : (add.error as Error)) : null;
   const canInstall = Boolean(packs?.some((pack) => !pack.installed));
   const allInstalled = Boolean(packs?.length) && !canInstall;
 
@@ -237,54 +256,152 @@ function StarterPacks({
         </div>
       ) : packs && packs.length > 0 ? (
         <div className="mt-5 grid grid-cols-[repeat(auto-fill,minmax(min(320px,100%),1fr))] gap-2">
-          {packs.map((pack) => (
-            <div
-              key={pack.name}
-              className="relative flex h-full items-start gap-3 rounded-xl border border-border/70 bg-card/40 px-3 py-2.5"
-            >
-              {!pack.installed && !installing ? (
-                <label htmlFor={`pack-${pack.name}`} aria-label={pack.name} className="absolute inset-0 cursor-pointer rounded-xl" />
-              ) : null}
-              {pack.installed ? (
-                <span
-                  aria-hidden="true"
-                  className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-[6px] border border-border bg-muted/50 text-muted-foreground"
-                >
-                  <Check className="size-3" strokeWidth={2.5} />
-                </span>
-              ) : (
-                <Checkbox
-                  id={`pack-${pack.name}`}
-                  checked={selected.has(pack.name)}
-                  disabled={installing}
-                  onCheckedChange={() => onToggle(pack.name)}
-                  aria-label={pack.name}
-                  className="-mx-1 -my-0.5 rounded-lg p-1 transition-colors hover:bg-muted/40"
-                />
-              )}
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                  <span className="text-sm font-medium">{pack.name}</span>
-                  <span className="font-mono text-[10.5px] text-muted-foreground">{t("home.packs.notes", { count: pack.notes })}</span>
-                  {pack.installed ? (
-                    <span className="basis-full font-mono text-[10.5px] text-muted-foreground sm:basis-auto">
-                      {t("home.packs.installed", { version: pack.installed })}
-                    </span>
+          {packs.map((pack) => {
+            const community = pack.origin === "github";
+            const id = pack.repo ?? pack.name;
+            return (
+              <div
+                key={id}
+                data-pack={community ? id : undefined}
+                className="relative flex h-full items-start gap-3 rounded-xl border border-border/70 bg-card/40 px-3 py-2.5"
+              >
+                {!pack.installed && !installing && !community ? (
+                  <label htmlFor={`pack-${id}`} aria-label={id} className="absolute inset-0 cursor-pointer rounded-xl" />
+                ) : null}
+                {community ? (
+                  <span
+                    aria-hidden="true"
+                    title={t("home.packs.github")}
+                    className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-[6px] border border-border bg-muted/50 text-muted-foreground"
+                  >
+                    <GitFork className="size-3" strokeWidth={2.5} />
+                  </span>
+                ) : pack.installed ? (
+                  <span
+                    aria-hidden="true"
+                    className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-[6px] border border-border bg-muted/50 text-muted-foreground"
+                  >
+                    <Check className="size-3" strokeWidth={2.5} />
+                  </span>
+                ) : (
+                  <Checkbox
+                    id={`pack-${id}`}
+                    checked={selected.has(pack.name)}
+                    disabled={installing}
+                    onCheckedChange={() => onToggle(pack.name)}
+                    aria-label={id}
+                    className="-mx-1 -my-0.5 rounded-lg p-1 transition-colors hover:bg-muted/40"
+                  />
+                )}
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                    <span className="text-sm font-medium">{id}</span>
+                    <span className="font-mono text-[10.5px] text-muted-foreground">{t("home.packs.notes", { count: pack.notes })}</span>
+                    {community ? (
+                      <span className="rounded-full border border-border/70 bg-muted/60 px-1.5 py-px font-mono text-[9.5px] uppercase text-muted-foreground">
+                        {t("home.packs.github")}
+                      </span>
+                    ) : null}
+                    {pack.installed ? (
+                      <span className="basis-full font-mono text-[10.5px] text-muted-foreground sm:basis-auto">
+                        {t("home.packs.installed", { version: pack.installed })}
+                      </span>
+                    ) : null}
+                  </div>
+                  <p className="mt-0.5 text-xs leading-4 text-muted-foreground">{packDescription(pack, language)}</p>
+                  {community && !pack.installed && pendingPacks.has(id) ? (
+                    <Link
+                      to={`/inbox?pack=${encodeURIComponent(id)}`}
+                      className="mt-1 inline-flex items-center gap-1 rounded-sm text-xs font-medium text-muted-foreground underline decoration-border underline-offset-2 transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                    >
+                      {t("home.packs.reviewInbox")}
+                      <ArrowRight className="size-3" aria-hidden="true" />
+                    </Link>
+                  ) : null}
+                  {pack.requires.length > 0 ? (
+                    <p className="mt-1 font-mono text-[10px] text-muted-foreground">
+                      {t("home.packs.requires", { packs: pack.requires.join(", ") })}
+                    </p>
                   ) : null}
                 </div>
-                <p className="mt-0.5 text-xs leading-4 text-muted-foreground">{packDescription(pack, language)}</p>
-                {pack.requires.length > 0 ? (
-                  <p className="mt-1 font-mono text-[10px] text-muted-foreground">
-                    {t("home.packs.requires", { packs: pack.requires.join(", ") })}
-                  </p>
-                ) : null}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       ) : (
         <p className="mt-5 text-sm text-muted-foreground">{t("home.packs.none")}</p>
       )}
+
+      <div className="mt-4 rounded-xl border border-border/70 bg-card/40 p-3">
+        <label htmlFor="pack-add-repo" className="text-xs font-medium">
+          {t("home.packs.addFromGithub")}
+        </label>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <input
+            id="pack-add-repo"
+            data-testid="pack-add-repo"
+            value={repoInput}
+            onChange={(event) => setRepoInput(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && repoInput.trim() && !add.isPending) add.mutate(repoInput.trim());
+            }}
+            placeholder={t("home.packs.addPlaceholder")}
+            disabled={add.isPending}
+            spellCheck={false}
+            autoComplete="off"
+            className="h-8 min-w-0 flex-1 rounded-lg border border-border bg-background px-2.5 font-mono text-xs focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          />
+          <Button
+            size="sm"
+            pressScale={0.97}
+            disabled={!repoInput.trim() || add.isPending}
+            onClick={() => add.mutate(repoInput.trim())}
+            className="h-8 px-4"
+          >
+            {add.isPending ? (
+              <Loader variant="spinner" size={14} label={t("home.packs.adding")} />
+            ) : (
+              <GitFork className="size-3.5" aria-hidden="true" />
+            )}
+            {t("home.packs.add")}
+          </Button>
+        </div>
+        {addError ? (
+          <p role="alert" className="mt-2 text-xs text-destructive-text">
+            {addError.message}
+            {"hint" in addError && addError.hint ? ` — ${addError.hint}` : ""}
+          </p>
+        ) : null}
+        {added ? (
+          <div data-testid="pack-add-result" className="mt-2 rounded-lg border border-border/60 bg-background/60 p-3">
+            <p className="text-xs font-medium">{t("home.packs.added", { name: added.name, version: added.version })}</p>
+            <p className="mt-0.5 font-mono text-[10.5px] text-muted-foreground">
+              {t("home.packs.summary", {
+                new: added.proposed_new.length,
+                changed: added.proposed_changed.length,
+                unchanged: added.unchanged.length,
+                invalid: added.invalid.length,
+              })}
+            </p>
+            {added.invalid.length > 0 ? (
+              <ul className="mt-1 flex flex-col gap-0.5">
+                {added.invalid.map((item) => (
+                  <li key={item.file} className="truncate font-mono text-[10px] text-muted-foreground">
+                    {t("home.packs.invalidNote", { file: item.file, reason: item.reason })}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            <Link
+              to={`/inbox?pack=${encodeURIComponent(added.name)}`}
+              className="mt-2 inline-flex items-center gap-1 rounded-sm text-xs font-medium underline decoration-border underline-offset-2 transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            >
+              {t("home.packs.reviewInbox")}
+              <ArrowRight className="size-3" aria-hidden="true" />
+            </Link>
+          </div>
+        ) : null}
+      </div>
 
       <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
         {canInstall ? (
@@ -375,6 +492,14 @@ export function HomePage() {
   );
 
   const groups = useMemo(() => groupActivity(timeline.data ?? []), [timeline.data]);
+
+  const pendingCommunityPacks = useMemo(
+    () =>
+      new Set(
+        (inbox.data ?? []).map((proposal) => packProposer(proposal.meta.proposed_by)?.name).filter((name): name is string => Boolean(name)),
+      ),
+    [inbox.data],
+  );
 
   const agentsToday = useMemo(
     () => new Set((dayActivity.data ?? []).filter((event) => isToday(event.ts)).map((event) => event.agent)).size,
@@ -507,6 +632,7 @@ export function HomePage() {
           packLanguage={packLanguage}
           selected={selectedPacks}
           installing={install.isPending}
+          pendingPacks={pendingCommunityPacks}
           onToggle={togglePack}
           onLanguageChange={setPackLanguage}
           onInstall={() => install.mutate([...selectedPacks])}
