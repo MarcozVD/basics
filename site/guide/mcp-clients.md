@@ -1,6 +1,6 @@
 # MCP clients
 
-Basics exposes the same eleven tools over two transports:
+Basics exposes the same twelve tools over two transports:
 
 - **stdio** — the `basics-mcp` binary, available after installing `@marcozvd/basics`. No server to start.
 - **HTTP** — `http://127.0.0.1:4747/mcp` while `basics ui` is running. Streamable HTTP with `mcp-session-id`
@@ -164,9 +164,15 @@ path to `dist/mcp/server.js`.
 
 | Tools | Effect |
 | --- | --- |
-| `list_layers`, `search_vault`, `get_note`, `recommend_stack`, `get_stack_context`, `detect_stack`, `get_check_templates`, `export_project` | read-only; `export_project` returns file contents and writes nothing |
+| `list_layers`, `search_vault`, `get_note`, `get_vault_overview`, `recommend_stack`, `get_stack_context`, `detect_stack`, `get_check_templates`, `export_project` | read-only; `export_project` returns file contents and writes nothing |
 | `propose_note`, `record_project_outcome` | create inbox proposals, never direct writes |
 | `list_proposals` | read the pending inbox |
+
+Prompts are MCP prompts the client can insert into the conversation:
+
+| Prompt | Effect |
+| --- | --- |
+| `plan-stack` | takes the project description, reads `get_vault_overview` and `recommend_stack`, reads the deciding notes, proposes one tech per layer with reasons from the vault, and asks for confirmation before writing files |
 
 Inputs, defaults and minimal calls for each tool are in the [MCP tools reference](../reference/mcp-tools.md). After
 changing a client config, restart the client; tools appear only when the connection succeeds.

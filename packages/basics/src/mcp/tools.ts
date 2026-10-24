@@ -4,6 +4,7 @@ import {
   appendActivity,
   detectStack,
   NOTE_TYPES,
+  type NoteData,
   noteSchema,
   recordOutcome,
   renderContext,
@@ -11,6 +12,7 @@ import {
   search,
   stackTemplates,
   title,
+  toId,
   UnknownTechError,
   Vault,
   VaultNotFoundError,
@@ -75,7 +77,199 @@ function defineTool<S extends z.ZodRawShape>(spec: {
   return spec as unknown as ToolSpec;
 }
 
+// The overview is a whole-vault catalog, so it is bounded instead of trimmed by ranking.
+const OVERVIEW_LIMIT = 60 * 1024;
+const OVERVIEW_LIST_CAP = 3;
+
+interface OverviewTech {
+  id: string;
+  title: string;
+  kind: string;
+  use_when?: string[];
+  avoid_when?: string[];
+  performs_best?: string[];
+  version?: string;
+  language?: string;
+}
+
+interface OverviewLayer {
+  id: string;
+  title: string;
+  techs: OverviewTech[];
+  omitted?: string[];
+}
+
+interface OverviewProfile {
+  id: string;
+  title: string;
+  use_when?: string[];
+  stack?: Record<string, string[]>;
+}
+
+interface OverviewProject {
+  id: string;
+  title: string;
+  status: string;
+  stack?: Record<string, string[]>;
+  lessons?: string[];
+}
+
+interface VaultOverview {
+  layers: OverviewLayer[];
+  profiles: OverviewProfile[];
+  projects: OverviewProject[];
+  truncated?: boolean;
+}
+
+/** Drop fields the agent cannot use: undefined, empty strings, empty lists and empty maps. */
+function withoutEmpty<T extends Record<string, unknown>>(value: T): Partial<T> {
+  return Object.fromEntries(
+    Object.entries(value).filter(([, item]) => {
+      if (item === undefined || item === "") return false;
+      if (Array.isArray(item)) return item.length > 0;
+      if (typeof item === "object" && item !== null) return Object.keys(item).length > 0;
+      return true;
+    }),
+  ) as Partial<T>;
+}
+
+function capList(list: string[] | undefined): string[] | undefined {
+  return list && list.length > OVERVIEW_LIST_CAP ? list.slice(0, OVERVIEW_LIST_CAP) : list;
+}
+
+function capStack(stack: Record<string, string[]> | undefined): void {
+  if (!stack) return;
+  for (const [layer, techs] of Object.entries(stack)) {
+    const capped = capList(techs);
+    if (capped) stack[layer] = capped;
+  }
+}
+
+function buildOverview(vault: Vault, layers?: string[]): VaultOverview {
+  const only = layers?.length ? new Set(layers.map(toId)) : undefined;
+
+  return {
+    layers: vault
+      .byType("layer")
+      .filter((layer) => !only || only.has(toId(layer.id)))
+      .map((layer) => ({
+        id: layer.id,
+        title: title(layer),
+        techs: vault
+          .techInLayer(layer.id)
+          .map((note) => {
+            const d = note.data as Extract<NoteData, { type: "tech" }>;
+            return {
+              id: note.id,
+              title: title(note),
+              kind: d.kind,
+              ...withoutEmpty({
+                use_when: d.use_when,
+                avoid_when: d.avoid_when,
+                performs_best: d.performs_best,
+                version: d.version,
+                language: d.language,
+              }),
+            } as OverviewTech;
+          })
+          .sort((a, b) => a.id.localeCompare(b.id)),
+      })),
+    profiles: vault.byType("profile").map((note) => {
+      const d = note.data as Extract<NoteData, { type: "profile" }>;
+      return {
+        id: note.id,
+        title: title(note),
+        ...withoutEmpty({ use_when: d.use_when, stack: d.stack }),
+      } as OverviewProfile;
+    }),
+    projects: vault
+      .byType("project")
+      .map((note) => ({ note, d: note.data as Extract<NoteData, { type: "project" }> }))
+      .filter(({ d }) => d.status !== "archived")
+      .map(({ note, d }) => ({
+        id: note.id,
+        title: title(note),
+        status: d.status,
+        ...withoutEmpty({ stack: d.stack, lessons: d.lessons.slice(-3) }),
+      })) as OverviewProject[],
+  };
+}
+
+/** Serialize the catalog, degrading it step by step until it fits the size budget. */
+function renderOverview(overview: VaultOverview): string {
+  const render = () => JSON.stringify(overview);
+  let body = render();
+  if (body.length <= OVERVIEW_LIMIT) return body;
+
+  overview.truncated = true;
+  for (const layer of overview.layers) for (const tech of layer.techs) delete tech.performs_best;
+  body = render();
+  if (body.length <= OVERVIEW_LIMIT) return body;
+
+  for (const layer of overview.layers) {
+    for (const tech of layer.techs) {
+      tech.use_when = capList(tech.use_when);
+      tech.avoid_when = capList(tech.avoid_when);
+    }
+  }
+  for (const profile of overview.profiles) {
+    profile.use_when = capList(profile.use_when);
+    capStack(profile.stack);
+  }
+  for (const project of overview.projects) {
+    project.lessons = capList(project.lessons);
+    capStack(project.stack);
+  }
+  body = render();
+  if (body.length <= OVERVIEW_LIMIT) return body;
+
+  // Keep one reason per tech, then drop whole techs from the largest layers if still over.
+  for (const layer of overview.layers) {
+    for (const tech of layer.techs) {
+      if (tech.use_when) tech.use_when = tech.use_when.slice(0, 1);
+      if (tech.avoid_when) tech.avoid_when = tech.avoid_when.slice(0, 1);
+    }
+  }
+  body = render();
+  while (body.length > OVERVIEW_LIMIT) {
+    const total = overview.layers.reduce((count, layer) => count + layer.techs.length, 0);
+    if (!total) break;
+    // Estimate how many techs must go, then drop them from the largest layers before rendering again.
+    const perTech = Math.max(1, Math.floor(body.length / total));
+    let remaining = Math.max(1, Math.ceil((body.length - OVERVIEW_LIMIT) / perTech));
+    while (remaining > 0) {
+      const layer = overview.layers.reduce<OverviewLayer | undefined>(
+        (largest, current) => (current.techs.length > (largest?.techs.length ?? 0) ? current : largest),
+        undefined,
+      );
+      const dropped = layer?.techs.pop();
+      if (!layer || !dropped) break;
+      layer.omitted ??= [];
+      layer.omitted.push(dropped.id);
+      remaining -= 1;
+    }
+    body = render();
+  }
+  for (const layer of overview.layers) layer.omitted?.sort();
+  return render();
+}
+
 const TOOLS: ToolSpec[] = [
+  defineTool({
+    name: "get_vault_overview",
+    description:
+      "Read the whole vault catalog in one call: every layer with its techs (kind, use_when, avoid_when, performs_best), the stack profiles and the past projects. " +
+      "Use it to reason over the vault when a ranked shortlist is not enough; read deciding notes with get_note before choosing. Read-only.",
+    inputSchema: {
+      layers: z.array(z.string()).optional().describe("Restrict the catalog to these layer ids"),
+    },
+    run: async ({ layers }, ctx) =>
+      withVault(() => {
+        const overview = buildOverview(ctx.vault(), layers);
+        ctx.log("get_vault_overview", []);
+        return text(renderOverview(overview));
+      }),
+  }),
   defineTool({
     name: "list_layers",
     description: "List the stack layers (backend, frontend, testing, ...) and the technologies stored under each.",
@@ -292,6 +486,64 @@ const TOOLS: ToolSpec[] = [
   }),
 ];
 
+const PLAN_STACK_PROMPT = `Plan the stack for this project:
+
+<project>
+
+Work from the user's vault, not from general knowledge:
+
+1. Call \`get_vault_overview\` to see every layer with its techs (\`use_when\`, \`avoid_when\`, \`performs_best\`), the stack profiles and the past projects. Pass \`layers\` only when the user already named the layers.
+2. Call \`recommend_stack\` with the project description above as a cross-check. Treat the ranking as a shortlist, not the decision.
+3. Read the deciding notes with \`get_note\` before committing to a tech, especially when two candidates are close or a profile looks like a match.
+4. Answer with a short **stack decision**: one tech per needed layer, each with one line of reason citing the vault note (\`[[id]]\`) and the \`use_when\` it matched. Add anything in \`avoid_when\` that ruled out an alternative. Prefer a matching profile when one fits, and prefer what past projects used successfully while respecting their lessons.
+5. Ask ONE question before writing any file: "¿Usamos este stack? / Shall we use this stack?" in the user's language.
+6. After a yes, follow the skill's New project steps: \`get_stack_context\` for the chosen techs, \`get_check_templates\` for the files to create, then \`export_project\` (send existing agent file contents in \`existing\`) and write the returned files into the project root.`;
+
+interface PromptSpec {
+  name: string;
+  description: string;
+  argsSchema: z.ZodRawShape;
+  render: (args: Record<string, string>) => string;
+}
+
+const PROMPTS: PromptSpec[] = [
+  {
+    name: "plan-stack",
+    description:
+      "Plan a project's stack from the vault: read the whole catalog and the ranked shortlist, decide one tech per layer, explain the choice and ask for confirmation before writing files.",
+    argsSchema: {
+      project: z.string().describe("What the user is building: product, users and any constraint already known."),
+    },
+    render: (args) => PLAN_STACK_PROMPT.replace("<project>", () => args.project),
+  },
+];
+
+export interface McpPromptDefinition {
+  name: string;
+  description: string;
+  arguments: { name: string; description: string; required: boolean }[];
+}
+
+/** Prompt names, descriptions and arguments, shared with the reference generator. */
+export function promptDefinitions(): McpPromptDefinition[] {
+  return PROMPTS.map((prompt) => {
+    const schema = z.toJSONSchema(z.object(prompt.argsSchema)) as {
+      properties?: Record<string, { description?: string }>;
+      required?: string[];
+    };
+    const required = new Set(schema.required ?? []);
+    return {
+      name: prompt.name,
+      description: prompt.description,
+      arguments: Object.entries(schema.properties ?? {}).map(([name, prop]) => ({
+        name,
+        description: prop.description ?? "",
+        required: required.has(name),
+      })),
+    };
+  });
+}
+
 /** Tool names, descriptions and JSON input schemas, shared with the reference generator. */
 export function toolDefinitions(): McpToolDefinition[] {
   return TOOLS.map((tool) => ({
@@ -324,6 +576,17 @@ export function createMcpServer(resolveRoot: () => string, opts: McpServerOption
     server.registerTool(tool.name, { description: tool.description, inputSchema: tool.inputSchema }, (input) =>
       tool.run(input as Record<string, unknown>, context),
     );
+  }
+
+  for (const prompt of PROMPTS) {
+    server.registerPrompt(prompt.name, { description: prompt.description, argsSchema: prompt.argsSchema }, (args) => ({
+      messages: [
+        {
+          role: "user",
+          content: { type: "text", text: prompt.render(args as Record<string, string>) },
+        },
+      ],
+    }));
   }
 
   return server;
