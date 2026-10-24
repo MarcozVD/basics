@@ -49,3 +49,58 @@ test("recommend keeps its state across navigation and clears it", async ({ page 
   await expect(page.getByRole("heading", { name: "Backend", exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Clear", exact: true })).toHaveCount(0);
 });
+
+test("creates a project from the recommendation and merges its stack on repeat", async ({ page }) => {
+  const description = "API REST para servir modelos de machine learning";
+
+  const recommendAndPick = async (techs: string[]) => {
+    await page.goto("/recommend");
+    const clear = page.getByRole("button", { name: "Clear", exact: true });
+    if ((await clear.count()) > 0) await clear.click();
+    await expect(page.getByRole("button", { name: "Backend", exact: true })).toBeVisible();
+    await page.getByLabel("Describe the project", { exact: true }).fill(description);
+    await page.getByRole("button", { name: "Recommend", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Backend", exact: true })).toBeVisible();
+    for (const tech of techs) {
+      await page.getByRole("checkbox", { name: `Select ${tech}`, exact: true }).check();
+    }
+  };
+
+  await recommendAndPick(["fastapi"]);
+  await page.getByRole("button", { name: "Create project", exact: true }).click();
+
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByRole("heading", { name: "Create project", exact: true })).toBeVisible();
+  await expect(dialog.getByLabel("Description", { exact: true })).toHaveValue(description);
+  await expect(dialog.getByLabel("Stack Backend", { exact: true })).toBeVisible();
+  await expect(dialog.getByText("fastapi", { exact: true })).toBeVisible();
+  await expect(dialog.getByLabel("Reason", { exact: true })).toHaveValue(/keyword/i);
+
+  await dialog.getByLabel("Title", { exact: true }).fill("Delta API");
+  await expect(dialog.getByLabel("ID", { exact: true })).toHaveValue("delta-api");
+  await dialog.getByRole("button", { name: "Create", exact: true }).click();
+
+  await expect(page).toHaveURL(/\/projects\?p=delta-api$/);
+  await expect(page.getByRole("heading", { name: "Delta API", exact: true })).toBeVisible();
+
+  let response = await page.request.get("/api/notes/delta-api");
+  let projectData = (await response.json()) as { data: { stack: Record<string, string[]> } };
+  expect(projectData.data.stack).toEqual({ backend: ["fastapi"] });
+
+  // Same title again, now with an extra tech selected → the dialog offers "Update its stack".
+  await recommendAndPick(["fastapi", "pytest"]);
+  await page.getByRole("button", { name: "Create project", exact: true }).click();
+
+  const dialog2 = page.getByRole("dialog");
+  await dialog2.getByLabel("Title", { exact: true }).fill("Delta API");
+  await expect(dialog2.getByLabel("ID", { exact: true })).toHaveValue("delta-api");
+  await dialog2.getByRole("button", { name: "Create", exact: true }).click();
+
+  await expect(dialog2.getByText("A project with this id exists", { exact: true })).toBeVisible();
+  await dialog2.getByRole("button", { name: "Update its stack", exact: true }).click();
+
+  await expect(page).toHaveURL(/\/projects\?p=delta-api$/);
+  response = await page.request.get("/api/notes/delta-api");
+  projectData = (await response.json()) as { data: { stack: Record<string, string[]> } };
+  expect(projectData.data.stack).toEqual({ backend: ["fastapi"], testing: ["pytest"] });
+});

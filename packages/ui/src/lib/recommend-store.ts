@@ -13,6 +13,8 @@ export interface RecommendState {
   selected: string[];
   recommendation: Recommendation | null;
   exportTab: string;
+  /** Profile id the current selection came from (via "Use this profile"), for prefills. */
+  fromProfile: string | null;
 }
 
 function initialState(): RecommendState {
@@ -23,6 +25,7 @@ function initialState(): RecommendState {
     selected: [],
     recommendation: null,
     exportTab: "stack",
+    fromProfile: null,
   };
 }
 
@@ -44,6 +47,7 @@ function read(): RecommendState {
       selected: stringList(parsed.selected) ?? [],
       recommendation: parsed.recommendation && typeof parsed.recommendation === "object" ? parsed.recommendation : null,
       exportTab: typeof parsed.exportTab === "string" ? parsed.exportTab : "stack",
+      fromProfile: typeof parsed.fromProfile === "string" ? parsed.fromProfile : null,
     };
   } catch {
     return initialState();

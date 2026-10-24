@@ -133,6 +133,7 @@ describe("new-note templates", () => {
         path: "/home/me/code/gamma",
         status: "paused",
         profile: "ml-api",
+        reason: "Chosen for its typed API",
         stack: { frontend: ["react"] },
       }),
     ).toMatchObject({
@@ -141,6 +142,7 @@ describe("new-note templates", () => {
       path: "/home/me/code/gamma",
       status: "paused",
       profile: "ml-api",
+      reason: "Chosen for its typed API",
       stack: { frontend: ["react"] },
     });
   });
@@ -155,10 +157,11 @@ describe("new-note templates", () => {
         command: "",
         path: "",
         profile: "",
+        reason: "",
         since: "",
         until: "",
       }) as Record<string, unknown>;
-      for (const key of ["description", "version", "language", "command", "path", "profile", "since", "until"]) {
+      for (const key of ["description", "version", "language", "command", "path", "profile", "reason", "since", "until"]) {
         expect(data[key], `${String(data.type)}.${key}`).not.toBe("");
       }
     }

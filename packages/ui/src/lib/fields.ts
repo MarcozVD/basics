@@ -75,6 +75,7 @@ export type TemplateOptions = {
   status?: "active" | "paused" | "archived";
   profile?: string;
   stack?: Record<string, string[]>;
+  reason?: string;
 };
 
 /** Only write a string field when it carries real content; never persist "". */
@@ -147,5 +148,6 @@ export const TEMPLATES: Record<NoteType, (opts?: TemplateOptions) => NoteData> =
     ...text("description", opts.description),
     ...text("path", opts.path),
     ...text("profile", opts.profile),
+    ...text("reason", opts.reason),
   }),
 };

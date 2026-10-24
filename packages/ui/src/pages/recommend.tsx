@@ -1,6 +1,6 @@
 import type { Candidate, ExportFile, Recommendation } from "@marcozvd/basics-core";
 import { useMutation } from "@tanstack/react-query";
-import { AlertTriangle, Ban, Check, Copy, FileDown, type LucideIcon, Star, X } from "lucide-react";
+import { AlertTriangle, Ban, Check, Copy, FileDown, type LucideIcon, Plus, Star, X } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -20,6 +20,7 @@ import { Checkbox } from "@/components/motion/checkbox";
 import { Loader } from "@/components/motion/loader";
 import { Tooltip } from "@/components/motion/tooltip";
 import { Page } from "@/components/page";
+import { CreateProjectDialog } from "@/components/recommend/create-project-dialog";
 import { ErrorState } from "@/components/state";
 import { type TranslationKey, useT } from "@/i18n";
 import { exportStack, recommend } from "@/lib/api";
@@ -205,7 +206,7 @@ interface ResultsProps {
   selected: Set<string>;
   reduce: boolean;
   onToggle: (id: string) => void;
-  onUseProfile: (stack: Record<string, string[]>) => void;
+  onUseProfile: (profileId: string, stack: Record<string, string[]>) => void;
 }
 
 function RecommendationResults({ recommendation, layerTitle, selected, reduce, onToggle, onUseProfile }: ResultsProps) {
@@ -237,7 +238,7 @@ function RecommendationResults({ recommendation, layerTitle, selected, reduce, o
                         size="sm"
                         pressScale={0.97}
                         className="ml-auto h-7 shrink-0"
-                        onClick={() => onUseProfile(profile.stack)}
+                        onClick={() => onUseProfile(profile.id, profile.stack)}
                       >
                         {t("recommend.useProfile")}
                       </Button>
@@ -337,8 +338,11 @@ export function RecommendPage() {
   const [files, setFiles] = useState<ExportFile[]>([]);
   const [stackIds, setStackIds] = useState<string[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
   const generateRef = useRef<HTMLButtonElement>(null);
+  const createRef = useRef<HTMLButtonElement>(null);
   useReturnFocus(dialogOpen, generateRef);
+  useReturnFocus(createOpen, createRef);
 
   const { description, selectedLayers, perLayer, exportTab, recommendation } = store;
   const selected = useMemo(() => new Set(store.selected), [store.selected]);
@@ -382,8 +386,8 @@ export function RecommendPage() {
     updateRecommend({ selected: [...next] });
   };
 
-  const useProfile = (stack: Record<string, string[]>) => {
-    updateRecommend({ selected: [...new Set(Object.values(stack).flat())] });
+  const useProfile = (profileId: string, stack: Record<string, string[]>) => {
+    updateRecommend({ selected: [...new Set(Object.values(stack).flat())], fromProfile: profileId });
   };
 
   const clear = () => {
@@ -392,6 +396,7 @@ export function RecommendPage() {
     setFiles([]);
     setStackIds([]);
     setDialogOpen(false);
+    setCreateOpen(false);
     clearRecommend();
   };
 
@@ -415,6 +420,24 @@ export function RecommendPage() {
   };
 
   const layerTitle = (id: string) => layerTitles.get(id) ?? id;
+
+  /** Turn the currently selected techs into a per-layer stack for the project prefill. */
+  const stackFromSelected = (): Record<string, string[]> => {
+    const stack: Record<string, string[]> = {};
+    if (!recommendation) return stack;
+    for (const [layer, candidates] of Object.entries(recommendation.layers)) {
+      const ids = candidates.map((candidate) => candidate.id).filter((id) => selected.has(id));
+      if (ids.length > 0) stack[layer] = ids;
+    }
+    return stack;
+  };
+
+  const projectPrefill = {
+    description: store.description,
+    profile: store.fromProfile ?? undefined,
+    stack: stackFromSelected(),
+    reason: recommendation?.note,
+  };
 
   return (
     <div className="flex min-h-full flex-col">
@@ -592,6 +615,17 @@ export function RecommendPage() {
                     ·
                   </span>
                   <Button
+                    ref={createRef}
+                    variant="secondary"
+                    size="sm"
+                    pressScale={0.97}
+                    className="ml-0.5"
+                    onClick={() => setCreateOpen(true)}
+                  >
+                    <Plus className="size-3.5" aria-hidden="true" />
+                    {t("recommend.createProject")}
+                  </Button>
+                  <Button
                     ref={generateRef}
                     size="sm"
                     pressScale={0.97}
@@ -620,6 +654,8 @@ export function RecommendPage() {
         tab={exportTab}
         onTabChange={setExportTab}
       />
+
+      <CreateProjectDialog open={createOpen} onOpenChange={setCreateOpen} prefill={projectPrefill} />
     </div>
   );
 }
