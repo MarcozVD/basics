@@ -77,17 +77,18 @@ function ensureBuild() {
   if (res.status !== 0) throw new Error("root npm run build failed");
 }
 
-/** Copy packages/basics/dist contents (cli+server+mcp+ui+packs) + package.json flat into resources/basics/. */
+/**
+ * Mirror packages/basics into resources/basics: dist/ (cli+server+mcp+ui+packs) plus package.json, which the
+ * compiled code reads as "../package.json" (dist/program.js) and "../../package.json" (dist/server, dist/mcp).
+ * The app starts resources/basics/dist/cli.js.
+ */
 function copyDist() {
-  const srcDist = path.join(basicsPkg, "dist");
   fs.rmSync(basicsResources, { recursive: true, force: true });
   fs.mkdirSync(basicsResources, { recursive: true });
-  fs.cpSync(srcDist, basicsResources, { recursive: true });
-  // The compiled program.js reads its version via createRequire(import.meta.url)("../package.json");
-  // from src-tauri/resources/basics/, so the manifest lives one level up, at resources/package.json,
-  // exactly as the relative resolves expect when cli.js sits at resources/basics/cli.js.
-  fs.copyFileSync(path.join(basicsPkg, "package.json"), path.join(resourcesDir, "package.json"));
-  console.log("copied basics/dist contents → resources/basics");
+  fs.cpSync(path.join(basicsPkg, "dist"), path.join(basicsResources, "dist"), { recursive: true });
+  fs.copyFileSync(path.join(basicsPkg, "package.json"), path.join(basicsResources, "package.json"));
+  fs.rmSync(path.join(resourcesDir, "package.json"), { force: true });
+  console.log("copied basics dist + package.json → resources/basics");
 }
 
 /**
