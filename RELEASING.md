@@ -51,7 +51,7 @@ and creates the matching GitHub Release.
 
    ```bash
    git tag v1.0.0
-   git push --tags
+   git push origin v1.0.0   # push only the release tag; never `git push --tags`
    ```
 
 The tag must match the package versions produced by `version-packages`. The workflow then:
@@ -64,3 +64,29 @@ The tag must match the package versions produced by `version-packages`. The work
 If a run fails after one package was published, fix the cause and re-run the workflow from the Actions tab; the
 already-published version is skipped and the remaining steps continue. Do not move or reuse a tag that has already
 triggered a release.
+
+## Desktop app
+
+The desktop app (`apps/desktop`) is **not** released through the npm `v*` flow above. It is built and released
+separately by the [`.github/workflows/desktop.yml`](.github/workflows/desktop.yml) `Desktop` workflow.
+
+- **Getting artifacts without a release**: run the **Desktop** workflow from the Actions tab (`workflow_dispatch`).
+  It uploads the installers (`Windows` .msi/.exe, `macOS` universal .dmg, `Linux` .AppImage/.deb) as workflow
+  artifacts.
+- **Cutting a desktop release**: push a tag of the form `desktop-vX.Y.Z`:
+
+  ```bash
+  git tag desktop-v1.2.0
+  git push origin desktop-v1.2.0   # push only this tag; never `git push --tags`
+  ```
+
+  The workflow builds all three platforms and creates a **draft** GitHub Release (`Basics desktop <tag>`) with the
+  installers attached.
+
+- **Review and publish**: open the draft release, sanity-check the installers and the notes, then click **Publish
+  release**. The installers are unsigned — the release notes link to
+  [the desktop guide](https://marcozvd.github.io/basics/guide/desktop.html) for how to open them per OS (SmartScreen,
+  Gatekeeper, AppImage `chmod +x`).
+
+`apps/desktop` versioning (tauri.conf.json, Cargo.toml, bundle) is independent of the npm packages; bump it as part of
+the desktop work and keep it in sync with the `desktop-v*` tag.

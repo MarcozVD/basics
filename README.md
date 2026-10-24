@@ -42,6 +42,7 @@ Other clients (Cursor, VS Code, Codex, Windsurf) are covered in
 - **From stack to project** — export `STACK.md`, `AGENTS.md`, `CLAUDE.md` and Cursor rules, then run the stack checks in the project.
 - **Packs** — official starter packs in English and Spanish, plus community packs from any GitHub repo; new notes and updates arrive as inbox proposals, never as silent writes.
 - **Local web UI and MCP** — a React UI with editor, graph, inbox diff and recommendation playground, plus MCP over HTTP or stdio.
+- **Desktop app** — the same UI and MCP server running in a standalone, tray-resident window with its own bundled Node runtime; no npm needed. See [Desktop app](https://marcozvd.github.io/basics/guide/desktop.html).
 
 _Screenshots (web UI, Inbox diff, graph): coming soon._
 
