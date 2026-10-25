@@ -498,8 +498,12 @@ Work from the user's vault, not from general knowledge:
 2. Call \`recommend_stack\` with the project description above as a cross-check. Treat the ranking as a shortlist, not the decision.
 3. Read the deciding notes with \`get_note\` before committing to a tech, especially when two candidates are close or a profile looks like a match.
 4. Answer with a short **stack decision**: one tech per needed layer, each with one line of reason citing the vault note (\`[[id]]\`) and the \`use_when\` it matched. Add anything in \`avoid_when\` that ruled out an alternative. Prefer a matching profile when one fits, and prefer what past projects used successfully while respecting their lessons.
-5. Ask ONE question before writing any file: "¿Usamos este stack? / Shall we use this stack?" in the user's language.
-6. After a yes, follow the skill's New project steps: \`get_stack_context\` for the chosen techs, \`get_check_templates\` for the files to create, then \`export_project\` (send existing agent file contents in \`existing\`) and write the returned files into the project root.`;
+5. Fill the gaps the decision exposes: if a technology the decision needs has no note in the vault, or a chosen note links to a missing \`[[id]]\`, check with \`search_vault\` and \`get_note\`, then \`propose_note\` the missing note before or right after giving the decision. Never propose more than the notes the decision actually uses.
+   - Each proposed note must be useful on its own: correct \`type\`, and for a tech the right \`kind\` and \`layer\` (an existing layer id) plus \`language\` when it applies; at least 2 \`use_when\`, at least 1 \`avoid_when\`, \`tags\` and \`related\`. Link \`[[id]]\` in the body and \`related\` only to notes that exist or that you propose in the same answer.
+   - Body of 3–6 lines, specific: what it is, when it beats the alternatives already in the vault, and one concrete pitfall or setup note. \`reason\` says which project decision needed it.
+6. List the proposals in the answer ("Propuestas al Inbox: rustls, reqwest") and repeat that nothing is applied until the user approves it in the Inbox.
+7. Ask ONE question before writing any file: "¿Usamos este stack? / Shall we use this stack?" in the user's language.
+8. After a yes, follow the skill's New project steps: \`get_stack_context\` for the chosen techs, \`get_check_templates\` for the files to create, then \`export_project\` (send existing agent file contents in \`existing\`) and write the returned files into the project root.`;
 
 interface PromptSpec {
   name: string;
@@ -512,7 +516,7 @@ const PROMPTS: PromptSpec[] = [
   {
     name: "plan-stack",
     description:
-      "Plan a project's stack from the vault: read the whole catalog and the ranked shortlist, decide one tech per layer, explain the choice and ask for confirmation before writing files.",
+      "Plan a project's stack from the vault: read the whole catalog and the ranked shortlist, decide one tech per layer, explain the choice, propose any note the vault is missing for that decision and ask for confirmation before writing files.",
     argsSchema: {
       project: z.string().describe("What the user is building: product, users and any constraint already known."),
     },

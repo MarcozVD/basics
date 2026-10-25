@@ -154,6 +154,17 @@ test("plan-stack prompt is listed and renders the project text", async () => {
     assert.match(text, /recommend_stack/);
     assert.match(text, /get_note/);
     assert.match(text, /¿Usamos este stack\? \/ Shall we use this stack\?/);
+
+    // Gaps: the decision may need notes the vault is missing; propose them, do not invent them silently.
+    assert.match(text, /search_vault/);
+    assert.match(text, /propose_note/);
+    assert.match(text, /missing note/);
+    assert.match(text, /never propose more than the notes the decision actually uses/i);
+    assert.match(text, /at least 2 `use_when`, at least 1 `avoid_when`/);
+    assert.match(text, /3–6 lines/);
+    assert.match(text, /reason/);
+    assert.match(text, /Propuestas al Inbox/);
+    assert.match(text, /nothing is applied until the user approves it/i);
   });
 });
 

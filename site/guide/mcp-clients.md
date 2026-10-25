@@ -191,7 +191,7 @@ Prompts are MCP prompts the client can insert into the conversation:
 
 | Prompt | Effect |
 | --- | --- |
-| `plan-stack` | takes the project description, reads `get_vault_overview` and `recommend_stack`, reads the deciding notes, proposes one tech per layer with reasons from the vault, and asks for confirmation before writing files |
+| `plan-stack` | takes the project description, reads `get_vault_overview` and `recommend_stack`, reads the deciding notes, proposes one tech per layer with reasons from the vault, proposes any note the decision needs that the vault is missing, and asks for confirmation before writing files |
 
 Inputs, defaults and minimal calls for each tool are in the [MCP tools reference](../reference/mcp-tools.md). After
 changing a client config, restart the client; tools appear only when the connection succeeds.

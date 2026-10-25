@@ -9,7 +9,8 @@ With the skill installed, the agent:
 - reads the whole vault catalog with `get_vault_overview` and cross-checks it with `recommend_stack`, then decides one
   tech per layer, preferring a matching profile and the lessons of past projects;
 - explains each pick with the vault note that justifies it (`[[id]]` and its `use_when`), names the alternatives it
-  ruled out from their `avoid_when`, and asks one confirmation question before writing any file;
+  ruled out from their `avoid_when`, proposes any note the decision needs that the vault is missing, and asks one
+  confirmation question before writing any file;
 - loads `get_stack_context` (or `STACK.md`) before changing code and runs the listed checks before calling work done;
 - searches the vault before proposing notes, and records project outcomes for review in the inbox.
 

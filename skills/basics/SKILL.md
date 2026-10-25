@@ -31,13 +31,15 @@ whole flow below in one step. Otherwise follow these steps.
 1. `get_vault_overview` for the whole catalog (layers, techs, profiles and past projects) and `recommend_stack` with
    the project description as a ranked cross-check. Treat the ranking as a shortlist, not the decision.
 2. Decide yourself from the vault: one tech per needed layer. Prefer a matching profile when one fits. Prefer what
-   past projects used successfully, and respect their lessons.
+   past projects used successfully, and respect their lessons. If the decision needs something the vault does not
+   have yet, fill the gap (see [Filling gaps](#filling-gaps)).
 3. Tell the user the decision in this shape, one line per layer:
 
    `Vamos a usar: <layer>: <tech> — <reason from [[note]]>`
 
-   Then list the alternatives you ruled out and why (from their `avoid_when`). Ask ONE question — "¿Usamos este
-   stack? / Shall we use this stack?" — before writing any file.
+   Then list the alternatives you ruled out and why (from their `avoid_when`), and list any proposals you made
+   ("Propuestas al Inbox: rustls, reqwest") saying nothing is applied until the user approves it. Ask ONE question —
+   "¿Usamos este stack? / Shall we use this stack?" — before writing any file.
 4. After the user says yes, `get_stack_context` with the chosen tech ids. Keep that document as your working rules for
    the project.
 5. `get_check_templates` and write the files that do not exist yet.
@@ -45,6 +47,22 @@ whole flow below in one step. Otherwise follow these steps.
    so the user's own text survives, then write the returned files into the project root.
 7. If the project has no project note, `propose_note` with type `project`, the stack by layer and the description.
    Say "proposed for review"; it lands in the vault inbox.
+
+## Filling gaps
+
+Sometimes the right decision uses a technology the vault has no note for, or a chosen note links to a `[[id]]` that
+was never written. Close that gap with a proposal instead of quietly falling back on general knowledge.
+
+1. `search_vault` for the missing note, then `get_note` on the closest hits: if a note already covers it, propose an
+   update instead of a duplicate.
+2. `propose_note` only the notes the decision actually uses — never a wish list.
+3. Make each proposal useful on its own: correct `type`, and for a tech the right `kind` and `layer` (an existing
+   layer id) plus `language` when it applies; at least 2 `use_when`, at least 1 `avoid_when`, `tags` and `related`.
+   Link `[[id]]` in the body and `related` only to notes that exist or that you propose in the same answer. Write a
+   body of 3–6 lines, specific: what it is, when it beats the alternatives already in the vault, and one concrete
+   pitfall or setup note. The `reason` says which project decision needed it.
+4. List the proposals in your answer ("Propuestas al Inbox: rustls, reqwest") and say they are proposed for review:
+   nothing is applied until the user approves it in the Inbox.
 
 ## Existing project
 

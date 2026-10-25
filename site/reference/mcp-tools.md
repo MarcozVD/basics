@@ -257,7 +257,7 @@ Prompts render a ready-to-use instruction; the client inserts it into the conver
 
 ## `plan-stack`
 
-Plan a project's stack from the vault: read the whole catalog and the ranked shortlist, decide one tech per layer, explain the choice and ask for confirmation before writing files.
+Plan a project's stack from the vault: read the whole catalog and the ranked shortlist, decide one tech per layer, explain the choice, propose any note the vault is missing for that decision and ask for confirmation before writing files.
 
 | Argument | Required | Description |
 | --- | --- | --- |
