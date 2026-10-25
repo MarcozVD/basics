@@ -278,10 +278,12 @@ export function Select({
 
 export interface SelectTriggerProps {
   className?: string;
+  /** Accessible name when the trigger's own text is not the label (e.g. a value). */
+  "aria-label"?: string;
   children: ReactNode;
 }
 
-export function SelectTrigger({ className, children }: SelectTriggerProps) {
+export function SelectTrigger({ className, "aria-label": ariaLabel, children }: SelectTriggerProps) {
   const ctx = useSelectContext("SelectTrigger");
   const isTop = ctx.placement === "top";
   // The edge facing the panel flattens while the panel is attached to it and
@@ -301,6 +303,7 @@ export function SelectTrigger({ className, children }: SelectTriggerProps) {
       id={ctx.triggerId}
       ref={ctx.triggerRef}
       disabled={ctx.disabled}
+      aria-label={ariaLabel}
       aria-haspopup="listbox"
       aria-expanded={ctx.open}
       aria-controls={ctx.listId}

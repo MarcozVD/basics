@@ -290,6 +290,8 @@ class JsonLinesParser implements StreamParser {
   constructor(
     private readonly extract: (event: Record<string, unknown>) => string,
     private readonly finalOf?: (event: Record<string, unknown>) => string | undefined,
+    /** Inserted before every part after the first, so whole parts do not glue together. */
+    private readonly separator = "",
   ) {}
 
   push(chunk: string): string {
@@ -325,20 +327,26 @@ class JsonLinesParser implements StreamParser {
       event = parsed as Record<string, unknown>;
     } catch {
       // A CLI that logs a plain line still streams it; the UI decides what to show.
-      this.parts.push(trimmed);
-      return trimmed;
+      return this.emit(trimmed);
     }
     const final = this.finalOf?.(event);
     if (final !== undefined) this.final = final;
     const text = this.extract(event);
-    if (text) this.parts.push(text);
-    return text;
+    return text ? this.emit(text) : "";
+  }
+
+  /** Records one part, prefixed by the separator once something has already been emitted. */
+  private emit(text: string): string {
+    const piece = this.parts.length > 0 ? `${this.separator}${text}` : text;
+    this.parts.push(piece);
+    return piece;
   }
 }
 
 function parserFor(format: AgentOutputFormat): StreamParser {
   if (format === "stream-json") return new JsonLinesParser(claudeEventText, claudeFinalText);
-  if (format === "json") return new JsonLinesParser(opencodeEventText);
+  // OpenCode emits whole text parts, not deltas: a blank line keeps them from gluing together.
+  if (format === "json") return new JsonLinesParser(opencodeEventText, undefined, "\n\n");
   return new RawParser();
 }
 

@@ -47,6 +47,10 @@ const FAKE_AGENT = [
   '  process.stdout.write(JSON.stringify({ type: "result", subtype: "success", result: "FINAL DECISION" }) + "\\n");',
   "}",
   'else if (mode === "opencode") { process.stdout.write(JSON.stringify({ type: "text", part: { type: "text", text: "OPENCODE TEXT" } }) + "\\n"); }',
+  'else if (mode === "opencode-two") {',
+  '  process.stdout.write(JSON.stringify({ type: "text", part: { type: "text", text: "FIRST PART" } }) + "\\n");',
+  '  process.stdout.write(JSON.stringify({ type: "text", part: { type: "text", text: "SECOND PART" } }) + "\\n");',
+  "}",
   'else { process.stdout.write("PLAIN OUTPUT\\n"); }',
 ].join("\n");
 
@@ -266,6 +270,20 @@ test("opencode and codex output formats produce the final text", async () => {
       assert.match(result.text, /PLAIN OUTPUT/);
     },
     { FAKE_AGENT_MODE: "text" },
+  );
+});
+
+test("opencode's whole text parts are separated by a blank line in the stream and the final text", async () => {
+  const bin = fakeBins();
+  bin.exe("opencode");
+  await withFakePath(
+    bin.dir,
+    async () => {
+      const run = collect(new AgentRunner(), { agent: "opencode", prompt: "plan" });
+      assert.equal((await run.done).text, "FIRST PART\n\nSECOND PART");
+      assert.equal(run.chunks.join(""), "FIRST PART\n\nSECOND PART");
+    },
+    { FAKE_AGENT_MODE: "opencode-two" },
   );
 });
 

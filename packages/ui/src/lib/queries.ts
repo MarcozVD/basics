@@ -2,6 +2,7 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import {
   type ActivityFilter,
   getActivity,
+  getAgents,
   getConfig,
   getEmbeddings,
   getGraph,
@@ -31,6 +32,7 @@ export const queryKeys = {
   activity: (filter: ActivityFilter) => ["activity", filter] as const,
   stats: ["stats"] as const,
   graph: (broken: boolean) => ["graph", broken] as const,
+  agents: ["agents"] as const,
 };
 
 export function useHealth() {
@@ -84,4 +86,8 @@ export function useActivity(filter: ActivityFilter = {}) {
 /** Toggling broken links keeps the previous graph on screen while the other variant loads. */
 export function useGraph(broken = false) {
   return useQuery({ queryKey: queryKeys.graph(broken), queryFn: () => getGraph(broken), placeholderData: keepPreviousData });
+}
+
+export function useAgents() {
+  return useQuery({ queryKey: queryKeys.agents, queryFn: getAgents });
 }

@@ -28,6 +28,32 @@ screen renders no column for it. When every requested layer is empty, the screen
 
 The MCP tool `recommend_stack` returns the same ranking; the **Recommend** screen renders it.
 
+## Ask an agent
+
+The ranking above is local. If you would rather have a coding agent of your choice make the call — with its own model
+and its own reading of your vault — the **Recommend** screen has an **Ask an agent** action next to **Recommend**.
+
+It opens a compact panel:
+
+| Control | What it does |
+| --- | --- |
+| **Agent** | The agent CLIs found on this computer: Claude Code, OpenCode or Codex. When none is installed the panel says so and cannot run. |
+| **Model** | The models that agent offers, plus **Custom...** for a free model id. Your choice is remembered per agent. |
+
+**Run** starts the chosen CLI headless, in a fresh empty directory, with your account and with no project files to
+write. It reads the vault through the Basics MCP server that `basics connect` already registered for it (the panel
+hints to **Connect agents** when it cannot tell). The answer streams into the panel as Markdown, where `[[id]]` opens
+the note preview. **Cancel** stops a run; the panel shows the elapsed time and, on failure, the last lines of the CLI
+output.
+
+When the answer is done, **Select these (n)** adds the tech notes it cited with `[[id]]` to the current selection, so
+**Export stack** and **Create project** work as usual. If the agent decided on a technology the vault does not have
+yet, it proposes that note to the **Inbox**; the panel lists the proposed ids with a link, and nothing is applied until
+you approve it there.
+
+Basics only passes the agent the description, the chosen layers and the `plan-stack` prompt; the run uses the same
+5-minute limit as `basics` itself. Nothing is downloaded or installed to ask an agent.
+
 ## Keyword scoring
 
 - Positive terms in `use_when` and `performs_best` add points; tags also count.

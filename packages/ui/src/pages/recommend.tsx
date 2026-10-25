@@ -1,6 +1,6 @@
 import type { Candidate, ExportFile, Recommendation } from "@marcozvd/basics-core";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Ban, Check, Copy, FileDown, type LucideIcon, Plus, Sparkles, Star, X } from "lucide-react";
+import { AlertTriangle, Ban, Check, Copy, FileDown, type LucideIcon, MessageSquareText, Plus, Sparkles, Star, X } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -20,6 +20,7 @@ import { Checkbox } from "@/components/motion/checkbox";
 import { Loader } from "@/components/motion/loader";
 import { Tooltip } from "@/components/motion/tooltip";
 import { PAGE_SECTIONS, Page } from "@/components/page";
+import { AgentPanel } from "@/components/recommend/agent-panel";
 import { CreateProjectDialog } from "@/components/recommend/create-project-dialog";
 import { ErrorState } from "@/components/state";
 import { type TranslationKey, useT } from "@/i18n";
@@ -348,6 +349,7 @@ export function RecommendPage() {
   const [stackIds, setStackIds] = useState<string[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
+  const [agentOpen, setAgentOpen] = useState(false);
   const generateRef = useRef<HTMLButtonElement>(null);
   const createRef = useRef<HTMLButtonElement>(null);
   useReturnFocus(dialogOpen, generateRef);
@@ -416,6 +418,11 @@ export function RecommendPage() {
     updateRecommend({ selected: [...new Set(Object.values(stack).flat())], fromProfile: profileId });
   };
 
+  /** Add the techs an agent answer cited (`[[id]]`) to the current selection. */
+  const selectMentioned = (ids: string[]) => {
+    updateRecommend({ selected: [...new Set([...selected, ...ids])] });
+  };
+
   const clear = () => {
     run.reset();
     exportFiles.reset();
@@ -423,6 +430,7 @@ export function RecommendPage() {
     setStackIds([]);
     setDialogOpen(false);
     setCreateOpen(false);
+    setAgentOpen(false);
     clearRecommend();
   };
 
@@ -549,6 +557,19 @@ export function RecommendPage() {
           minRows={2}
           maxRows={8}
           className="bg-card"
+          trailingAction={
+            <Button
+              variant="secondary"
+              size="sm"
+              pressScale={0.97}
+              className="h-8"
+              aria-expanded={agentOpen}
+              onClick={() => setAgentOpen((open) => !open)}
+            >
+              <MessageSquareText className="size-3.5" aria-hidden="true" />
+              {t("recommend.agent.open")}
+            </Button>
+          }
           leadingAction={
             <kbd className="ml-2 rounded-full border border-border px-1.5 font-mono text-[10px] leading-4 text-muted-foreground">
               {t("recommend.shortcut")}
@@ -610,6 +631,25 @@ export function RecommendPage() {
             </div>
           </div>
         </div>
+
+        <AnimatePresence initial={false}>
+          {agentOpen ? (
+            <motion.div
+              key="ask-agent"
+              initial={{ opacity: 0, y: reduce ? 0 : 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: reduce ? 0 : 6, transition: { duration: 0.12, ease: EASE_OUT } }}
+              transition={{ duration: 0.18, ease: EASE_OUT }}
+            >
+              <AgentPanel
+                description={description}
+                layers={activeLayers}
+                onSelectTechs={selectMentioned}
+                onClose={() => setAgentOpen(false)}
+              />
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
 
         <div className="mt-2">
           {run.isPending ? (

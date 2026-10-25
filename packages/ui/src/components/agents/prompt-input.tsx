@@ -1,8 +1,9 @@
 "use client";
 // beui.dev/components/agents/prompt-input
 // Adapted for Basics: model select and "+" actions removed, `submitOn` adds a
-// ⌘/Ctrl+Enter mode (plain Enter keeps the newline), and the send button can
-// carry a visible label and a loading indicator instead of the stop state.
+// ⌘/Ctrl+Enter mode (plain Enter keeps the newline), the send button can
+// carry a visible label and a loading indicator instead of the stop state, and
+// `trailingAction` renders one more control beside the send button.
 
 import { ArrowUp, Square } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
@@ -43,6 +44,8 @@ export interface PromptInputProps
   /** Keep the text after sending (controlled callers usually want this). */
   keepValueOnSubmit?: boolean;
   leadingAction?: ReactNode;
+  /** Rendered at the trailing end of the action row, just before the send button. */
+  trailingAction?: ReactNode;
   className?: string;
   ref?: Ref<HTMLTextAreaElement>;
 }
@@ -62,6 +65,7 @@ export function PromptInput({
   loadingIndicator,
   keepValueOnSubmit = false,
   leadingAction,
+  trailingAction,
   className,
   disabled,
   placeholder = "Ask the agent to do something…",
@@ -161,37 +165,40 @@ export function PromptInput({
       <div className="mt-1 flex min-h-8 items-center gap-1">
         {leadingAction}
 
-        <Button
-          type={stoppable ? "button" : "submit"}
-          size={showSubmitLabel ? "sm" : "icon"}
-          pressScale={0.97}
-          disabled={stoppable ? false : !canSubmit}
-          aria-label={stoppable ? "Stop generating" : submitLabel}
-          aria-busy={loading || undefined}
-          onClick={stoppable ? onStop : undefined}
-          className={cn("ml-auto rounded-full", showSubmitLabel ? "pr-2.5 pl-3.5" : "size-8")}
-        >
-          {showSubmitLabel ? <span aria-hidden="true">{submitLabel}</span> : null}
-          <AnimatePresence initial={false} mode="popLayout">
-            <motion.span
-              key={iconKey}
-              aria-hidden="true"
-              initial={reduce ? { opacity: 1 } : { opacity: 0, y: 3, scale: 0.8 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={reduce ? { opacity: 0 } : { opacity: 0, y: -3, scale: 0.8 }}
-              transition={reduce ? { duration: 0 } : SPRING_SWAP}
-              className="grid size-4 place-items-center"
-            >
-              {stoppable ? (
-                <Square className="size-3 fill-current" />
-              ) : loading && loadingIndicator ? (
-                loadingIndicator
-              ) : (
-                <ArrowUp className="size-4" />
-              )}
-            </motion.span>
-          </AnimatePresence>
-        </Button>
+        <div className="ml-auto flex items-center gap-1">
+          {trailingAction}
+          <Button
+            type={stoppable ? "button" : "submit"}
+            size={showSubmitLabel ? "sm" : "icon"}
+            pressScale={0.97}
+            disabled={stoppable ? false : !canSubmit}
+            aria-label={stoppable ? "Stop generating" : submitLabel}
+            aria-busy={loading || undefined}
+            onClick={stoppable ? onStop : undefined}
+            className={cn("rounded-full", showSubmitLabel ? "pr-2.5 pl-3.5" : "size-8")}
+          >
+            {showSubmitLabel ? <span aria-hidden="true">{submitLabel}</span> : null}
+            <AnimatePresence initial={false} mode="popLayout">
+              <motion.span
+                key={iconKey}
+                aria-hidden="true"
+                initial={reduce ? { opacity: 1 } : { opacity: 0, y: 3, scale: 0.8 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={reduce ? { opacity: 0 } : { opacity: 0, y: -3, scale: 0.8 }}
+                transition={reduce ? { duration: 0 } : SPRING_SWAP}
+                className="grid size-4 place-items-center"
+              >
+                {stoppable ? (
+                  <Square className="size-3 fill-current" />
+                ) : loading && loadingIndicator ? (
+                  loadingIndicator
+                ) : (
+                  <ArrowUp className="size-4" />
+                )}
+              </motion.span>
+            </AnimatePresence>
+          </Button>
+        </div>
       </div>
     </form>
   );

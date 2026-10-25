@@ -1,5 +1,8 @@
 import type {
   ActivityEvent,
+  AgentRunRequest,
+  AgentRunStartResponse,
+  AgentsResponse,
   ApiError,
   ApproveAllRequest,
   ApproveAllResponse,
@@ -132,6 +135,20 @@ export function search(q: string, filter: NoteFilter = {}): Promise<SearchHit[]>
 
 export function recommend(body: RecommendRequest): Promise<Recommendation> {
   return request<Recommendation>("/api/recommend", { method: "POST", body: JSON.stringify(body) });
+}
+
+/** Detected coding-agent CLIs on this computer, their models and Basics registration state. */
+export function getAgents(): Promise<AgentsResponse> {
+  return request<AgentsResponse>("/api/agents");
+}
+
+/** Start one headless agent run; output arrives over `/api/events` as `agent-run` / `agent-run-done`. */
+export function startAgentRun(body: AgentRunRequest): Promise<AgentRunStartResponse> {
+  return request<AgentRunStartResponse>("/api/agents/run", { method: "POST", body: JSON.stringify(body) });
+}
+
+export function cancelAgentRun(runId: string): Promise<void> {
+  return request<void>(`/api/agents/run/${encodeURIComponent(runId)}/cancel`, { method: "POST" });
 }
 
 export function getEmbeddings(): Promise<EmbeddingsStatus> {
