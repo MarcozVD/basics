@@ -512,6 +512,16 @@ interface PromptSpec {
   render: (args: Record<string, string>) => string;
 }
 
+/**
+ * Render the `plan-stack` instruction for a project description. `layers` restricts the
+ * catalog to the layers the user already named; the `plan-stack` MCP prompt passes only the project.
+ */
+export function planStackPrompt(project: string, layers?: string[]): string {
+  const base = PLAN_STACK_PROMPT.replace("<project>", () => project);
+  const list = (layers ?? []).map((layer) => layer.trim()).filter(Boolean);
+  return list.length ? `${base}\n\nOnly consider these layers: ${list.join(", ")}.` : base;
+}
+
 const PROMPTS: PromptSpec[] = [
   {
     name: "plan-stack",
@@ -520,7 +530,7 @@ const PROMPTS: PromptSpec[] = [
     argsSchema: {
       project: z.string().describe("What the user is building: product, users and any constraint already known."),
     },
-    render: (args) => PLAN_STACK_PROMPT.replace("<project>", () => args.project),
+    render: (args) => planStackPrompt(args.project),
   },
 ];
 

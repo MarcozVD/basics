@@ -194,7 +194,56 @@ export interface ApiError {
   hint?: string;
 }
 
-export type VaultEvent = { type: "vault"; paths: string[] } | { type: "activity" } | { type: "embeddings"; done: number; total: number };
+/** Coding agents the UI can run headless to plan a stack. */
+export type AgentId = "claude" | "opencode" | "codex";
+
+export interface AgentInfo {
+  id: AgentId;
+  name: string;
+  /** The agent's CLI was found on PATH. */
+  detected: boolean;
+  /** Model ids the CLI offers; the UI also accepts free text. */
+  models: string[];
+  /** Whether `basics` is registered for that agent; `unknown` when its config cannot be read. */
+  connected: boolean | "unknown";
+}
+
+export interface AgentsResponse {
+  agents: AgentInfo[];
+}
+
+export interface AgentRunRequest {
+  agent: AgentId;
+  model?: string;
+  description: string;
+  layers?: string[];
+}
+
+export interface AgentRunStartResponse {
+  runId: string;
+}
+
+export type VaultEvent =
+  | { type: "vault"; paths: string[] }
+  | { type: "activity" }
+  | { type: "embeddings"; done: number; total: number }
+  | AgentRunEvent
+  | AgentRunDoneEvent;
+
+/** Streamed output of a headless agent run. */
+export interface AgentRunEvent {
+  type: "agent-run";
+  runId: string;
+  chunk: string;
+}
+
+export interface AgentRunDoneEvent {
+  type: "agent-run-done";
+  runId: string;
+  ok: boolean;
+  text: string;
+  error?: string;
+}
 
 export type GraphNodeType = NoteType | "missing";
 

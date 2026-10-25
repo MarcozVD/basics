@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { atomicWrite } from "@marcozvd/basics-core";
+import { onPath } from "./agents.js";
 
 export const CONNECT_CLIENTS = ["claude-code", "opencode", "codex", "cursor", "claude-desktop"] as const;
 export type ConnectClient = (typeof CONNECT_CLIENTS)[number];
@@ -127,19 +128,6 @@ function clientFile(client: ConnectClient, home: string): string {
     case "claude-desktop":
       return path.join(claudeDesktopDir(home), "claude_desktop_config.json");
   }
-}
-
-function onPath(bin: string): string | undefined {
-  const pathEnv = process.env.PATH ?? "";
-  const exts = process.platform === "win32" ? (process.env.PATHEXT ?? ".EXE;.CMD;.BAT;.COM").split(";").filter(Boolean) : [""];
-  for (const dir of pathEnv.split(path.delimiter)) {
-    if (!dir) continue;
-    for (const ext of exts) {
-      const candidate = path.join(dir, bin + ext);
-      if (fs.existsSync(candidate)) return candidate;
-    }
-  }
-  return undefined;
 }
 
 /** Which clients this machine has: their config directory (or binary) exists. */

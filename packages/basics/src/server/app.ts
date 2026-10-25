@@ -4,6 +4,8 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { serveStatic } from "@hono/node-server/serve-static";
 import {
+  type AgentRunStartResponse,
+  type AgentsResponse,
   type ApiError,
   type ApproveAllResponse,
   type ApproveRequest,
@@ -49,6 +51,7 @@ import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { ZodError, z } from "zod";
+import { AGENT_DECISION_SUFFIX, AgentBusyError, AgentRunner, AgentUnavailableError, listAgents } from "../agents.js";
 import { CONNECT_CLIENTS, connect } from "../connect.js";
 import {
   createEmbedder,
@@ -58,7 +61,7 @@ import {
   runtimeInstalled,
   type TransformersModule,
 } from "../embeddings-runtime.js";
-import { createMcpServer } from "../mcp/tools.js";
+import { createMcpServer, planStackPrompt } from "../mcp/tools.js";
 import { packsDir } from "../packs-dir.js";
 import { getRecommender } from "../recommender.js";
 import type { EventHub } from "./events.js";
@@ -111,6 +114,12 @@ const connectRequestSchema = z.object({
   skill: z.boolean().optional(),
   dryRun: z.boolean().optional(),
 });
+const agentRunRequestSchema = z.object({
+  agent: z.enum(["claude", "opencode", "codex"]),
+  model: z.string().min(1).optional(),
+  description: z.string().min(1),
+  layers: z.array(z.string().min(1)).optional(),
+});
 
 /** A sessionless POST only creates a session when it carries the initialize request. */
 async function isInitializeRequest(req: Request): Promise<boolean> {
@@ -160,10 +169,11 @@ async function loadEmbedderWithRetry(runtime: TransformersModule, model: string)
   }
 }
 
-export function createApp(opts: { root: string; uiDir?: string; events?: EventHub }): Hono {
+export function createApp(opts: { root: string; uiDir?: string; events?: EventHub; agents?: AgentRunner }): Hono {
   const app = new Hono();
   const vault = () => Vault.load(opts.root);
   const mcpSessions = new Map<string, McpSession>();
+  const agentRunner = opts.agents ?? new AgentRunner();
 
   const closeMcpSession = (id: string): void => {
     const session = mcpSessions.get(id);
@@ -350,6 +360,39 @@ export function createApp(opts: { root: string; uiDir?: string; events?: EventHu
   app.post("/api/connect", async (c) => {
     const body = connectRequestSchema.parse(await c.req.json().catch(() => ({})));
     return c.json(connect({ vault: opts.root, ...body }));
+  });
+
+  app.get("/api/agents", (c) => c.json({ agents: listAgents() } satisfies AgentsResponse));
+
+  /**
+   * Run a coding agent headless with the `plan-stack` prompt, in a fresh empty directory so it
+   * cannot write project files. Output is streamed on the shared SSE channel; the response only
+   * carries the run id. One run at a time, so a second request while one is active returns 409.
+   */
+  app.post("/api/agents/run", async (c) => {
+    const body = agentRunRequestSchema.parse(await c.req.json());
+    const prompt = `${planStackPrompt(body.description, body.layers)}${AGENT_DECISION_SUFFIX}`;
+    try {
+      const runId = agentRunner.start(
+        { agent: body.agent, model: body.model, prompt },
+        {
+          onChunk: (id, chunk) => opts.events?.publish({ type: "agent-run", runId: id, chunk }),
+          onDone: (id, result) => opts.events?.publish({ type: "agent-run-done", runId: id, ...result }),
+        },
+      );
+      return c.json({ runId } satisfies AgentRunStartResponse, 202);
+    } catch (err) {
+      if (err instanceof AgentBusyError) return c.json({ error: "conflict", message: err.message } satisfies ApiError, 409);
+      if (err instanceof AgentUnavailableError) return c.json({ error: "invalid", message: err.message } satisfies ApiError, 400);
+      throw err;
+    }
+  });
+
+  app.post("/api/agents/run/:id/cancel", (c) => {
+    if (!agentRunner.cancel(c.req.param("id"))) {
+      return c.json({ error: "not_found", message: "no such agent run" } satisfies ApiError, 404);
+    }
+    return c.body(null, 204);
   });
 
   app.get("/api/embeddings", (c) => {
