@@ -107,3 +107,36 @@ test("POST /api/embeddings/enable rejects a non-local origin", async () => {
     assert.equal(res.status, 403);
   });
 });
+
+test("POST /api/embeddings/enable retries a failed model load once, then succeeds", async () => {
+  vi.mocked(runtime.createEmbedder).mockRejectedValueOnce(new Error("Unable to get model file path or buffer."));
+  await withVault(async (vaultDir, configFile) => {
+    const app = createApp({ root: vaultDir });
+    const res = await app.request("/api/embeddings/enable", jsonInit({}));
+    assert.equal(res.status, 200);
+    const body = (await res.json()) as { enabled: boolean };
+    assert.equal(body.enabled, true);
+    assert.equal(vi.mocked(runtime.createEmbedder).mock.calls.length, 2);
+    const config = JSON.parse(fs.readFileSync(configFile, "utf8")) as { embeddings: boolean };
+    assert.equal(config.embeddings, true);
+  });
+});
+
+test("POST /api/embeddings/enable reports a readable message and never saves the config when the model cannot load", async () => {
+  vi.mocked(runtime.createEmbedder)
+    .mockRejectedValueOnce(new Error("Unable to get model file path or buffer."))
+    .mockRejectedValueOnce(new Error("Unable to get model file path or buffer."));
+  await withVault(async (vaultDir, configFile) => {
+    const app = createApp({ root: vaultDir });
+    const res = await app.request("/api/embeddings/enable", jsonInit({}));
+    assert.equal(res.status, 500);
+    const body = (await res.json()) as { error: string; message: string };
+    assert.equal(body.error, "internal");
+    assert.equal(
+      body.message,
+      "Could not download the model (Unable to get model file path or buffer.). Check your connection and try again.",
+    );
+    const config = JSON.parse(fs.readFileSync(configFile, "utf8")) as { embeddings?: boolean };
+    assert.notEqual(config.embeddings, true);
+  });
+});

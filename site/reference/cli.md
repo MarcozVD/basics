@@ -333,6 +333,20 @@ basics inbox reject [options] <id>
 
 No options.
 
+#### `basics inbox reject-all`
+
+reject pending proposals (all, or only a pack/version/agent)
+
+```
+basics inbox reject-all [options]
+```
+
+| Flag | Description | Default |
+| --- | --- | --- |
+| `--pack <name>` | pack name, e.g. python-api | — |
+| `--version <version>` | only proposals from this pack version | — |
+| `--agent <name>` | only proposals from this agent | — |
+
 ### `basics ui`
 
 start the local web UI and HTTP API

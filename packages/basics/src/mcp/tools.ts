@@ -339,7 +339,9 @@ const TOOLS: ToolSpec[] = [
           Object.values(rec.layers).flatMap((candidates) => (candidates[0] ? [candidates[0].id] : [])),
           description,
         );
-        return json(rec);
+        // A layer with no matching candidate is omitted rather than returned as an empty list.
+        const ranked = Object.fromEntries(Object.entries(rec.layers).filter(([, candidates]) => candidates.length > 0));
+        return json({ ...rec, layers: ranked });
       }),
   }),
   defineTool({

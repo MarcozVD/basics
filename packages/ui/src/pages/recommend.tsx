@@ -222,8 +222,9 @@ interface ResultsProps {
 
 function RecommendationResults({ recommendation, layerTitle, selected, reduce, onToggle, onUseProfile }: ResultsProps) {
   const t = useT();
-  const layers = Object.entries(recommendation.layers);
-  const hasCandidates = layers.some(([, candidates]) => candidates.length > 0);
+  // A layer with no matching candidate is not shown; only when every layer is empty
+  // does the whole result fall back to one quiet message.
+  const layers = Object.entries(recommendation.layers).filter(([, candidates]) => candidates.length > 0);
   const maxScore = Math.max(1, ...layers.flatMap(([, candidates]) => candidates.map((candidate) => candidate.score)));
 
   return (
@@ -276,26 +277,22 @@ function RecommendationResults({ recommendation, layerTitle, selected, reduce, o
 
       <section className="flex flex-col gap-2.5">
         <h2 className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">{t("recommend.perLayer")}</h2>
-        {hasCandidates ? (
+        {layers.length > 0 ? (
           <div className={cn(COLUMNS, "items-start gap-4")}>
             {layers.map(([layer, candidates]) => (
               <div key={layer} className="flex min-w-0 flex-col gap-2">
                 <h3 className="px-1 text-sm font-semibold tracking-tight">{layerTitle(layer)}</h3>
-                {candidates.length === 0 ? (
-                  <p className="px-1 text-xs text-muted-foreground">{t("recommend.noCandidates")}</p>
-                ) : (
-                  candidates.map((candidate, index) => (
-                    <motion.div key={candidate.id} {...enter(index, reduce)}>
-                      <CandidateCard
-                        candidate={candidate}
-                        maxScore={maxScore}
-                        selected={selected.has(candidate.id)}
-                        reduce={reduce}
-                        onToggle={() => onToggle(candidate.id)}
-                      />
-                    </motion.div>
-                  ))
-                )}
+                {candidates.map((candidate, index) => (
+                  <motion.div key={candidate.id} {...enter(index, reduce)}>
+                    <CandidateCard
+                      candidate={candidate}
+                      maxScore={maxScore}
+                      selected={selected.has(candidate.id)}
+                      reduce={reduce}
+                      onToggle={() => onToggle(candidate.id)}
+                    />
+                  </motion.div>
+                ))}
               </div>
             ))}
           </div>

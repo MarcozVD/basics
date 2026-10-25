@@ -14,6 +14,7 @@ import {
   type CreateNoteRequest,
   configSchema,
   downloadSize,
+  type Embedder,
   type EmbeddingsEnableResponse,
   type ExportRequest,
   installPack,
@@ -27,6 +28,7 @@ import {
   PackDownloadError,
   proposalDetail,
   type RecommendRequest,
+  type RejectAllResponse,
   readActivity,
   renderContext,
   renderExport,
@@ -48,7 +50,14 @@ import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { ZodError, z } from "zod";
 import { CONNECT_CLIENTS, connect } from "../connect.js";
-import { createEmbedder, installRuntime, loadRuntime, runtimeDir, runtimeInstalled } from "../embeddings-runtime.js";
+import {
+  createEmbedder,
+  installRuntime,
+  loadRuntime,
+  runtimeDir,
+  runtimeInstalled,
+  type TransformersModule,
+} from "../embeddings-runtime.js";
 import { createMcpServer } from "../mcp/tools.js";
 import { packsDir } from "../packs-dir.js";
 import { getRecommender } from "../recommender.js";
@@ -85,6 +94,7 @@ const approveAllRequestSchema = z
     version: z.string().min(1).optional(),
     agent: z.string().min(1).optional(),
     action: z.enum(["create", "update"]).optional(),
+    ids: z.array(z.string().min(1)).min(1).optional(),
   })
   .refine((value) => !(value.pack && value.agent), {
     message: "pack and agent filters are mutually exclusive",
@@ -125,6 +135,28 @@ function originHostname(value: string): string | undefined {
     return new URL(value).hostname;
   } catch {
     return undefined;
+  }
+}
+
+/** How long to wait before retrying a failed first model load (a cold hub fetch can flake). */
+const EMBEDDINGS_RETRY_DELAY_MS = 500;
+
+/**
+ * Load the model, retrying once after a short delay. The first download from the desktop app
+ * can fail with "Unable to get model file path or buffer." and then succeed on a second try,
+ * so a transient failure is not surfaced as a permanent one.
+ */
+async function loadEmbedderWithRetry(runtime: TransformersModule, model: string): Promise<Embedder> {
+  try {
+    return await createEmbedder(runtime, model);
+  } catch (first) {
+    await new Promise((resolve) => setTimeout(resolve, EMBEDDINGS_RETRY_DELAY_MS));
+    try {
+      return await createEmbedder(runtime, model);
+    } catch {
+      const reason = first instanceof Error ? first.message : String(first);
+      throw new Error(`Could not download the model (${reason}). Check your connection and try again.`);
+    }
   }
 }
 
@@ -348,9 +380,11 @@ export function createApp(opts: { root: string; uiDir?: string; events?: EventHu
       if (!runtimeInstalled()) await installRuntime();
       const runtime = await loadRuntime();
       if (!runtime) throw new Error(`embeddings runtime missing at ${runtimeDir()}`);
-      const embedder = await createEmbedder(runtime, model);
-      saveConfig(configSchema.parse({ ...cfg, embeddings: true, embeddingsModel: model }));
+      const embedder = await loadEmbedderWithRetry(runtime, model);
+      // Save the config only once the model loaded and the index synced, so a failed
+      // enable never leaves `embeddings: true` behind pointing at a missing model.
       const stats = await syncIndex(vault(), embedder, onProgress);
+      saveConfig(configSchema.parse({ ...cfg, embeddings: true, embeddingsModel: model }));
       return c.json({ enabled: true, model, indexed: stats.notes } satisfies EmbeddingsEnableResponse);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -407,6 +441,12 @@ export function createApp(opts: { root: string; uiDir?: string; events?: EventHu
     const raw = await c.req.text();
     const body = approveAllRequestSchema.parse(raw.trim() ? JSON.parse(raw) : {});
     return c.json(vault().approveMany(body) satisfies ApproveAllResponse);
+  });
+
+  app.post("/api/inbox/reject-all", async (c) => {
+    const raw = await c.req.text();
+    const body = approveAllRequestSchema.parse(raw.trim() ? JSON.parse(raw) : {});
+    return c.json(vault().rejectMany(body) satisfies RejectAllResponse);
   });
 
   if (opts.events) {

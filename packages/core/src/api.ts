@@ -127,6 +127,7 @@ export interface ApproveAllRequest {
   version?: string;
   agent?: string;
   action?: "create" | "update";
+  ids?: string[];
 }
 
 export interface ApproveAllFailure {
@@ -136,6 +137,13 @@ export interface ApproveAllFailure {
 
 export interface ApproveAllResponse {
   approved: string[];
+  failed: ApproveAllFailure[];
+}
+
+export type RejectAllRequest = ApproveAllRequest;
+
+export interface RejectAllResponse {
+  rejected: string[];
   failed: ApproveAllFailure[];
 }
 

@@ -882,11 +882,9 @@ function printRecommendation(rec: Recommendation): void {
   console.log(rec.mode === "hybrid" ? "Hybrid recommendation" : "Keyword recommendation");
   console.log(rec.description);
   for (const [layer, candidates] of Object.entries(rec.layers)) {
+    // A layer with no matching candidate is simply not shown.
+    if (!candidates.length) continue;
     console.log(`\n${layer}`);
-    if (!candidates.length) {
-      console.log("  (none)");
-      continue;
-    }
     for (const candidate of candidates) {
       const score = rec.mode === "hybrid" ? (candidate.hybrid ?? 0).toFixed(3) : String(candidate.score);
       const breakdown = candidate.score_breakdown;
@@ -1254,6 +1252,19 @@ export function buildProgram(): Command {
     load().reject(id);
     console.log(`rejected ${id}`);
   });
+  inbox
+    .command("reject-all")
+    .description("reject pending proposals (all, or only a pack/version/agent)")
+    .option("--pack <name>", "pack name, e.g. python-api")
+    .option("--version <version>", "only proposals from this pack version")
+    .option("--agent <name>", "only proposals from this agent")
+    .action(({ pack, version, agent }: { pack?: string; version?: string; agent?: string }) => {
+      const { rejected, failed } = load().rejectMany({ pack, version, agent });
+      console.log(rejected.length ? `rejected ${rejected.length}: ${rejected.join(", ")}` : "no matching proposals");
+      if (failed.length) {
+        console.log(`failed ${failed.length}: ${failed.map((item) => `${item.id} (${item.error})`).join(", ")}`);
+      }
+    });
 
   program
     .command("ui")

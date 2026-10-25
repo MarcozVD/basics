@@ -6,6 +6,7 @@ import { motion, useReducedMotion } from "motion/react";
 import type { ReactNode } from "react";
 import { AnimatedBadge } from "@/components/motion/animated-badge";
 import { Button } from "@/components/motion/button/base";
+import { Checkbox } from "@/components/motion/checkbox";
 import { SPRING_LAYOUT } from "@/lib/ease";
 import { cn } from "@/lib/utils";
 
@@ -33,6 +34,15 @@ export interface ApprovalCardProps {
   rejectLabel: ReactNode;
   rejectConfirmLabel: ReactNode;
   rejectArmed?: boolean;
+  /** Renders a selection checkbox on the card; shown on hover/focus or while a selection exists. */
+  selectable?: boolean;
+  checked?: boolean;
+  onCheckedChange?: (checked: boolean) => void;
+  selectLabel?: string;
+  /** True while at least one card is selected, so every checkbox stays visible. */
+  selectionMode?: boolean;
+  /** Records the modifier state of the click on the checkbox (Shift extends the selection). */
+  onSelectPointerDown?: (shiftKey: boolean) => void;
   onOpen?: () => void;
   onApprove?: () => void;
   onReject?: () => void;
@@ -77,6 +87,12 @@ export function ApprovalCard({
   rejectLabel,
   rejectConfirmLabel,
   rejectArmed = false,
+  selectable = false,
+  checked = false,
+  onCheckedChange,
+  selectLabel,
+  selectionMode = false,
+  onSelectPointerDown,
   onOpen,
   onApprove,
   onReject,
@@ -101,11 +117,23 @@ export function ApprovalCard({
         />
       ) : null}
 
+      {selectable ? (
+        <span
+          className={cn(
+            "absolute top-3 left-3 z-10 transition-opacity",
+            selectionMode ? "opacity-100" : "opacity-0 group-hover/card:opacity-100 group-focus-within/card:opacity-100",
+          )}
+          onPointerDown={(event) => onSelectPointerDown?.(event.shiftKey)}
+        >
+          <Checkbox checked={checked} onCheckedChange={(next) => onCheckedChange?.(next)} aria-label={selectLabel} className="gap-0" />
+        </span>
+      ) : null}
+
       <button
         type="button"
         data-proposal-open
         onClick={onOpen}
-        className="flex w-full min-w-0 flex-col gap-2 rounded-2xl p-3.5 text-left outline-none"
+        className={cn("flex w-full min-w-0 flex-col gap-2 rounded-2xl p-3.5 text-left outline-none", selectable && "pl-11")}
       >
         <div className="flex min-w-0 items-center gap-2">
           <span className={cn("grid size-5 shrink-0 place-items-center", STATUS_CLASS[status])}>

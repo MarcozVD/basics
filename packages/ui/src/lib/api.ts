@@ -22,6 +22,7 @@ import type {
   ProposalSummary,
   Recommendation,
   RecommendRequest,
+  RejectAllResponse,
   SaveNoteRequest,
   SearchHit,
   VaultStats,
@@ -183,6 +184,10 @@ export function rejectProposal(id: string): Promise<void> {
 
 export function approveAllProposals(body: ApproveAllRequest): Promise<ApproveAllResponse> {
   return request<ApproveAllResponse>("/api/inbox/approve-all", { method: "POST", body: JSON.stringify(body) });
+}
+
+export function rejectAllProposals(body: ApproveAllRequest): Promise<RejectAllResponse> {
+  return request<RejectAllResponse>("/api/inbox/reject-all", { method: "POST", body: JSON.stringify(body) });
 }
 
 export function getConfig(): Promise<AppConfig> {

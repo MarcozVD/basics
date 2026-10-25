@@ -14,7 +14,7 @@ import { issuesToErrors, ProposalDetail, ProposalEditModal } from "@/components/
 import { ErrorState, Loading } from "@/components/state";
 import { type TranslationKey, useI18n } from "@/i18n";
 import { agentColor, agentInitial } from "@/lib/agent-color";
-import { ApiRequestError, approveAllProposals, approveProposal, rejectProposal } from "@/lib/api";
+import { ApiRequestError, approveAllProposals, approveProposal, rejectAllProposals, rejectProposal } from "@/lib/api";
 import { EASE_OUT, SPRING_LAYOUT } from "@/lib/ease";
 import { groupPackProposals, packProposer } from "@/lib/packs";
 import { useInbox, useProposal } from "@/lib/queries";
@@ -23,8 +23,10 @@ import { useReturnFocus } from "@/lib/return-focus";
 import { toast } from "@/lib/toast";
 
 type Filter = "all" | "create" | "update";
-type ApproveAllMode = "pack" | "header";
+type ApproveAllMode = "pack" | "header" | "selection";
 type ApproveAllVariables = { request: ApproveAllRequest; mode: ApproveAllMode };
+type RejectMode = "all" | "selection";
+type RejectVariables = { request: ApproveAllRequest; mode: RejectMode };
 
 const README_PROPOSE = "https://marcozvd.github.io/basics/guide/mcp-clients.html";
 const WIDE_QUERY = "(min-width: 1280px)";
@@ -72,9 +74,15 @@ export function InboxPage() {
   const packTimer = useRef<number | undefined>(undefined);
   const [editOpen, setEditOpen] = useState(false);
   const [approveAllOpen, setApproveAllOpen] = useState(false);
+  const [rejectOpen, setRejectOpen] = useState<RejectMode | null>(null);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
   const [errors, setErrors] = useState<Record<string, string>>({});
   const editButtonRef = useRef<HTMLButtonElement>(null);
   const approveAllButtonRef = useRef<HTMLButtonElement>(null);
+  const rejectAllButtonRef = useRef<HTMLButtonElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const anchorIndex = useRef<number | null>(null);
+  const shiftPick = useRef(false);
   const lastParam = useRef<string | null>(null);
   const pendingParam = useRef<string | null>(null);
   const pParam = searchParams.get("p");
@@ -82,6 +90,7 @@ export function InboxPage() {
 
   useReturnFocus(editOpen, editButtonRef);
   useReturnFocus(approveAllOpen, approveAllButtonRef);
+  useReturnFocus(rejectOpen !== null, rejectAllButtonRef);
 
   const proposals = useMemo(
     () => [...(inbox.data ?? [])].sort((a, b) => createdTime(b.meta.created) - createdTime(a.meta.created)),
@@ -104,8 +113,22 @@ export function InboxPage() {
     () => (filter === "all" ? packFiltered : packFiltered.filter((proposal) => proposal.meta.action === filter)),
     [filter, packFiltered],
   );
+  const visibleIds = useMemo(() => new Set(visible.map((proposal) => proposal.id)), [visible]);
+  // The selection only ever counts proposals that are still visible: it is not stored
+  // in the URL, and a filter change drops the ids it hides.
+  const pickedVisible = useMemo(() => visible.filter((proposal) => picked.has(proposal.id)), [visible, picked]);
+  const pickedIds = pickedVisible.map((proposal) => proposal.id);
+  const selectionActive = pickedVisible.length > 0;
   const approveAllCount = visible.length;
   const showApproveAll = approveAllCount >= 2;
+  const showRejectAll = approveAllCount >= 2;
+
+  useEffect(() => {
+    setPicked((previous) => {
+      const next = new Set([...previous].filter((id) => visibleIds.has(id)));
+      return next.size === previous.size ? previous : next;
+    });
+  }, [visibleIds]);
   const approveAllRequest = (): ApproveAllRequest => {
     const request: ApproveAllRequest = {};
     if (packFilter) request.pack = packFilter;
@@ -256,6 +279,14 @@ export function InboxPage() {
     mutationFn: ({ request }: ApproveAllVariables) => approveAllProposals(request),
     onSuccess: (data, variables) => {
       invalidate();
+      if (variables.mode === "selection") {
+        // Only the ones that failed stay listed and stay selected.
+        setPicked(new Set(data.failed.map((failure) => failure.id)));
+        const message = t("inbox.approveAllResult", { approved: data.approved.length, kept: data.failed.length });
+        if (data.approved.length) toast.success(message);
+        else toast.error(message);
+        return;
+      }
       if (variables.mode === "pack" && data.failed.length === 0) {
         toast.success(t("inbox.approveAllDone", { count: data.approved.length }));
         return;
@@ -265,6 +296,18 @@ export function InboxPage() {
       else toast.error(message);
     },
     onError: () => toast.error(t("inbox.approveAllFailed")),
+  });
+
+  const rejectAll = useMutation({
+    mutationFn: ({ request }: RejectVariables) => rejectAllProposals(request),
+    onSuccess: (data, variables) => {
+      invalidate();
+      if (variables.mode === "selection") setPicked(new Set(data.failed.map((failure) => failure.id)));
+      const message = t("inbox.rejectAllResult", { rejected: data.rejected.length, kept: data.failed.length });
+      if (data.rejected.length) toast.success(message);
+      else toast.error(message);
+    },
+    onError: () => toast.error(t("inbox.rejectAllFailed")),
   });
 
   const arm = (id: string) => {
@@ -310,6 +353,38 @@ export function InboxPage() {
 
   const openFull = (id: string) => navigate({ pathname: `/inbox/${encodeURIComponent(id)}`, search: "" });
 
+  /** Toggle a card's checkbox; Shift extends the selection from the last clicked card. */
+  const togglePick = (id: string, shiftKey = false) => {
+    const index = visible.findIndex((proposal) => proposal.id === id);
+    if (index < 0) return;
+    setPicked((previous) => {
+      const next = new Set(previous);
+      if (shiftKey && anchorIndex.current !== null) {
+        const [from, to] = anchorIndex.current < index ? [anchorIndex.current, index] : [index, anchorIndex.current];
+        for (let i = from; i <= to; i++) next.add(visible[i].id);
+        return next;
+      }
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+    anchorIndex.current = index;
+  };
+
+  const clearSelection = () => {
+    anchorIndex.current = null;
+    setPicked(new Set());
+  };
+
+  const confirmReject = () => {
+    const mode = rejectOpen;
+    setRejectOpen(null);
+    if (mode === "selection") rejectAll.mutate({ request: { ids: pickedIds }, mode: "selection" });
+    else if (mode === "all") rejectAll.mutate({ request: approveAllRequest(), mode: "all" });
+  };
+
+  const rejectCount = rejectOpen === "selection" ? pickedVisible.length : approveAllCount;
+
   const openEdit = () => {
     if (!current || !detail) return;
     setErrors({});
@@ -319,11 +394,31 @@ export function InboxPage() {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.repeat) return;
-      if (event.metaKey || event.ctrlKey || event.altKey) return;
       if (isTypingTarget(event.target)) return;
       if (editOpen) return;
-      const active = visible[selected];
-      if (!active) return;
+      const list = listRef.current;
+      const active = document.activeElement;
+      const listFocused = list !== null && active instanceof HTMLElement && list.contains(active);
+
+      // Ctrl/Cmd+A selects every visible proposal, but only while the list has focus.
+      if ((event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === "a") {
+        if (!listFocused || visible.length === 0) return;
+        event.preventDefault();
+        setPicked(new Set(visible.map((proposal) => proposal.id)));
+        return;
+      }
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+
+      if (event.key === "Escape") {
+        if (selectionActive) {
+          event.preventDefault();
+          clearSelection();
+        }
+        return;
+      }
+
+      const focused = visible[selected];
+      if (!focused) return;
       const target = event.target instanceof HTMLElement ? event.target : null;
       const actionTarget = target?.closest("button, a");
       if (event.key === "Enter" && actionTarget && !target?.closest("[data-proposal-open]")) return;
@@ -336,19 +431,22 @@ export function InboxPage() {
         setSelected((index) => Math.max(index - 1, 0));
       } else if (event.key === "Enter") {
         event.preventDefault();
-        openFull(active.id);
+        openFull(focused.id);
+      } else if (event.key.toLowerCase() === "x") {
+        event.preventDefault();
+        togglePick(focused.id);
       } else if (event.key.toLowerCase() === "a") {
         if (approve.isPending || reject.isPending) return;
         event.preventDefault();
-        approve.mutate(active.id);
+        approve.mutate(focused.id);
       } else if (event.key.toLowerCase() === "r") {
         if (approve.isPending || reject.isPending) return;
         event.preventDefault();
-        requestReject(active.id);
+        requestReject(focused.id);
       } else if (event.key.toLowerCase() === "e") {
         if (!wide) {
           event.preventDefault();
-          openFull(active.id);
+          openFull(focused.id);
           return;
         }
         if (detail) {
@@ -471,37 +569,81 @@ export function InboxPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {showApproveAll ? (
-            <Button
-              ref={approveAllButtonRef}
-              variant="primary"
-              size="sm"
-              pressScale={0.97}
-              disabled={approveAll.isPending}
-              aria-haspopup="dialog"
-              aria-expanded={approveAllOpen}
-              onClick={() => setApproveAllOpen(true)}
-              className="h-8 shrink-0"
-            >
-              {t("inbox.approveAllCount", { count: approveAllCount })}
-            </Button>
-          ) : null}
-          <Tabs value={filter} onValueChange={(value) => setFilter(value as Filter)} variant="segment">
-            <TabsList>
-              {(
-                [
-                  ["all", t("type.all"), counts.all],
-                  ["create", t("proposal.action.create"), counts.create],
-                  ["update", t("proposal.action.update"), counts.update],
-                ] as const
-              ).map(([value, label, count]) => (
-                <TabsTrigger key={value} value={value} className="gap-1.5 px-3 py-1 text-xs">
-                  {label}
-                  <span className="font-mono text-[11px]">{count}</span>
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          </Tabs>
+          {selectionActive ? (
+            <section aria-label={t("inbox.selectionBar")} className="flex flex-wrap items-center gap-2" data-testid="inbox-selection-bar">
+              <span className="text-sm font-medium tabular-nums">{t("inbox.selectedCount", { count: pickedVisible.length })}</span>
+              <Button
+                variant="primary"
+                size="sm"
+                pressScale={0.97}
+                disabled={approveAll.isPending || rejectAll.isPending}
+                className="h-8 shrink-0"
+                onClick={() => approveAll.mutate({ request: { ids: pickedIds }, mode: "selection" })}
+              >
+                {t("inbox.approveSelected")}
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                pressScale={0.97}
+                disabled={approveAll.isPending || rejectAll.isPending}
+                className="h-8 shrink-0 border-destructive/40 text-destructive"
+                onClick={() => setRejectOpen("selection")}
+              >
+                {t("inbox.rejectSelected")}
+              </Button>
+              <Button variant="ghost" size="sm" pressScale={0.97} className="h-8 shrink-0" onClick={clearSelection}>
+                {t("inbox.clearSelection")}
+              </Button>
+            </section>
+          ) : (
+            <>
+              {showRejectAll ? (
+                <Button
+                  ref={rejectAllButtonRef}
+                  variant="secondary"
+                  size="sm"
+                  pressScale={0.97}
+                  disabled={rejectAll.isPending}
+                  className="h-8 shrink-0 border-destructive/40 text-destructive"
+                  onClick={() => setRejectOpen("all")}
+                >
+                  {t("inbox.rejectAllCount", { count: approveAllCount })}
+                </Button>
+              ) : null}
+              {showApproveAll ? (
+                <Button
+                  ref={approveAllButtonRef}
+                  variant="primary"
+                  size="sm"
+                  pressScale={0.97}
+                  disabled={approveAll.isPending}
+                  aria-haspopup="dialog"
+                  aria-expanded={approveAllOpen}
+                  onClick={() => setApproveAllOpen(true)}
+                  className="h-8 shrink-0"
+                >
+                  {t("inbox.approveAllCount", { count: approveAllCount })}
+                </Button>
+              ) : null}
+              <Tabs value={filter} onValueChange={(value) => setFilter(value as Filter)} variant="segment">
+                <TabsList>
+                  {(
+                    [
+                      ["all", t("type.all"), counts.all],
+                      ["create", t("proposal.action.create"), counts.create],
+                      ["update", t("proposal.action.update"), counts.update],
+                    ] as const
+                  ).map(([value, label, count]) => (
+                    <TabsTrigger key={value} value={value} className="gap-1.5 px-3 py-1 text-xs">
+                      {label}
+                      <span className="font-mono text-[11px]">{count}</span>
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </Tabs>
+            </>
+          )}
         </div>
       </header>
 
@@ -515,6 +657,7 @@ export function InboxPage() {
             {/* Inset the scroll box so card rings and focus outlines are not cut at the edges;
                 the negative margin keeps the cards aligned with the page grid. */}
             <div
+              ref={listRef}
               data-testid="inbox-list"
               className="min-h-0 flex-1 min-[1280px]:-m-1.5 min-[1280px]:overflow-y-auto min-[1280px]:overscroll-contain min-[1280px]:p-1.5"
             >
@@ -587,6 +730,14 @@ export function InboxPage() {
                             rejectLabel={t("proposal.reject")}
                             rejectConfirmLabel={t("proposal.rejectConfirm")}
                             rejectArmed={armed === proposal.id}
+                            selectable
+                            checked={picked.has(proposal.id)}
+                            selectionMode={selectionActive}
+                            selectLabel={t("inbox.selectProposal", { title: proposal.title || proposal.id })}
+                            onSelectPointerDown={(shiftKey) => {
+                              shiftPick.current = shiftKey;
+                            }}
+                            onCheckedChange={() => togglePick(proposal.id, shiftPick.current)}
                             onOpen={() => open(proposal.id)}
                             onApprove={() => approve.mutate(proposal.id)}
                             onReject={() => requestReject(proposal.id)}
@@ -672,6 +823,36 @@ export function InboxPage() {
               }}
             >
               {t("inbox.approveAll")}
+            </Button>
+          </div>
+        </CenterMorphModalContent>
+      </CenterMorphModal>
+
+      <CenterMorphModal open={rejectOpen !== null} onOpenChange={(open) => setRejectOpen(open ? rejectOpen : null)}>
+        <CenterMorphModalContent
+          ariaLabel={t("inbox.rejectAllTitle")}
+          ariaDescribedBy="inbox-reject-prompt"
+          closeButtonLabel={t("proposal.cancel")}
+          showCloseButton={false}
+          className="max-w-md p-6"
+        >
+          <h2 className="text-base font-semibold tracking-tight">{t("inbox.rejectAllTitle")}</h2>
+          <p id="inbox-reject-prompt" className="mt-2 text-sm leading-6 text-muted-foreground">
+            {t("inbox.rejectAllPrompt", { count: rejectCount })}
+          </p>
+          <div className="mt-5 flex items-center justify-end gap-2">
+            <Button variant="ghost" size="sm" pressScale={0.97} onClick={() => setRejectOpen(null)}>
+              {t("proposal.cancel")}
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              pressScale={0.97}
+              disabled={rejectAll.isPending}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={confirmReject}
+            >
+              {rejectOpen === "selection" ? t("inbox.rejectSelected") : t("inbox.rejectAll")}
             </Button>
           </div>
         </CenterMorphModalContent>

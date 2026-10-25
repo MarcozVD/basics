@@ -195,3 +195,77 @@ test("the inbox list does not clip its cards", async ({ page }) => {
     for (const id of ids) fs.rmSync(path.join(vaultPath(), "inbox", `${id}.md`), { force: true });
   }
 });
+
+test("rejects every pending proposal from the inbox header", async ({ page }) => {
+  const ids = ["reject-all-one", "reject-all-two", "reject-all-three"];
+  for (const [index, id] of ids.entries()) writeProposal(id, `Reject all ${index + 1}`, "Bulk rejection from the inbox header.");
+
+  try {
+    await page.goto("/inbox");
+
+    const trigger = page.getByRole("button", { name: "Reject all (3)", exact: true });
+    await expect(trigger).toBeVisible();
+    await trigger.click();
+
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toContainText("Reject 3 proposals? They are deleted from the inbox and cannot be recovered.");
+    await dialog.getByRole("button", { name: "Reject all", exact: true }).click();
+
+    await expect(page.getByText("Rejected 3 · 0 kept", { exact: true })).toBeVisible();
+    await expect(page.getByText(/Inbox zero/)).toBeVisible();
+  } finally {
+    for (const id of ids) fs.rmSync(path.join(vaultPath(), "inbox", `${id}.md`), { force: true });
+  }
+});
+
+test("rejects a selection of proposals with the card checkboxes", async ({ page }) => {
+  const ids = ["reject-sel-one", "reject-sel-two", "reject-sel-three"];
+  for (const [index, id] of ids.entries()) writeProposal(id, `Reject sel ${index + 1}`, "Selection rejection check.");
+
+  try {
+    await page.setViewportSize({ width: 1440, height: 800 });
+    await page.goto("/inbox");
+
+    await page.getByRole("checkbox", { name: "Select Reject sel 1", exact: true }).check();
+    await page.getByRole("checkbox", { name: "Select Reject sel 2", exact: true }).check();
+
+    // The selection bar replaces the header actions with a live count.
+    await expect(page.getByText("2 selected", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Reject selected", exact: true }).click();
+
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toContainText("Reject 2 proposals? They are deleted from the inbox and cannot be recovered.");
+    await dialog.getByRole("button", { name: "Reject selected", exact: true }).click();
+
+    await expect(page.getByText("Rejected 2 · 0 kept", { exact: true })).toBeVisible();
+    await expect(page.locator('[data-proposal-id="reject-sel-three"]')).toBeVisible();
+    await expect(page.locator("[data-proposal-id]")).toHaveCount(1);
+  } finally {
+    for (const id of ids) fs.rmSync(path.join(vaultPath(), "inbox", `${id}.md`), { force: true });
+  }
+});
+
+test("selects with x and approves the selection", async ({ page }) => {
+  const ids = ["pick-x-one", "pick-x-two"];
+  for (const [index, id] of ids.entries()) writeProposal(id, `Pick x ${index + 1}`, "Keyboard selection check.");
+
+  try {
+    await page.setViewportSize({ width: 1440, height: 800 });
+    await page.goto("/inbox");
+
+    await expect(page.getByRole("button", { name: /Pick x 1/i })).toBeVisible();
+    // The card body focuses the list, then `x` toggles its checkbox.
+    await page.getByRole("button", { name: /Pick x 1/i }).click();
+    await page.keyboard.press("x");
+    await expect(page.getByText("1 selected", { exact: true })).toBeVisible();
+
+    await page.getByRole("button", { name: "Approve selected", exact: true }).click();
+    await expect(page.getByText("Approved 1 · 0 kept for review", { exact: true })).toBeVisible();
+    await expect(page.locator("[data-proposal-id]")).toHaveCount(1);
+  } finally {
+    for (const id of ids) {
+      fs.rmSync(path.join(vaultPath(), "inbox", `${id}.md`), { force: true });
+      fs.rmSync(path.join(vaultPath(), "tech", `${id}.md`), { force: true });
+    }
+  }
+});

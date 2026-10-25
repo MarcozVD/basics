@@ -50,7 +50,7 @@ test("recommend keeps its state across navigation and clears it", async ({ page 
   await expect(page.getByRole("button", { name: "Clear", exact: true })).toHaveCount(0);
 });
 
-test("an empty layer shows the quiet no-match line", async ({ page }) => {
+test("a layer with no matching candidate is not rendered", async ({ page }) => {
   await page.goto("/recommend");
   await expect(page.getByRole("button", { name: "Backend", exact: true })).toBeVisible();
 
@@ -63,10 +63,26 @@ test("an empty layer shows the quiet no-match line", async ({ page }) => {
   await page.getByRole("button", { name: "Recommend", exact: true }).click();
 
   await expect(page.getByRole("heading", { name: "Data", exact: true })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Testing", exact: true })).toBeVisible();
-  // Layers the user did not ask for are not rendered at all.
-  await expect(page.getByRole("heading", { name: "Backend", exact: true })).toHaveCount(0);
-  await expect(page.getByText("No match in your vault for this layer", { exact: true })).toBeVisible();
+  // An empty layer renders no column and no per-layer message at all.
+  await expect(page.getByRole("heading", { name: "Testing", exact: true })).toHaveCount(0);
+  await expect(page.getByText("No match in your vault for this layer", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("No candidates matched. Try a longer description.", { exact: true })).toHaveCount(0);
+});
+
+test("shows one quiet message when every requested layer is empty", async ({ page }) => {
+  await page.goto("/recommend");
+  await expect(page.getByRole("button", { name: "Backend", exact: true })).toBeVisible();
+
+  // Leave only Testing selected, which the description has nothing to match.
+  for (const layer of ["Backend", "Data", "Frontend", "Infra"]) {
+    await page.getByRole("button", { name: layer, exact: true }).click();
+  }
+
+  await page.getByLabel("Describe the project", { exact: true }).fill("Postgres para cobros y devoluciones que se confirman o se deshacen");
+  await page.getByRole("button", { name: "Recommend", exact: true }).click();
+
+  await expect(page.getByRole("heading", { name: "Testing", exact: true })).toHaveCount(0);
+  await expect(page.getByText("No candidates matched. Try a longer description.", { exact: true })).toBeVisible();
 });
 
 test("the semantic-matching action shows a clear error when the runtime is absent", async ({ page }) => {

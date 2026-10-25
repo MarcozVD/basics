@@ -21,8 +21,12 @@ backend
 | `neg` | adjustment for negations |
 | `lang` | language boost or penalty |
 
-Profiles whose description matches are returned too, which is why the same description can suggest a whole stack. The
-MCP tool `recommend_stack` returns the same ranking; the **Recommend** screen renders it.
+Profiles whose description matches are returned too, which is why the same description can suggest a whole stack. A
+layer with no candidate above zero is omitted from the output — the CLI prints no section for it, `recommend_stack`
+leaves it out of `layers` (the core response still returns it as an empty list, for a stable API), and the **Recommend**
+screen renders no column for it. When every requested layer is empty, the screen shows one quiet message instead.
+
+The MCP tool `recommend_stack` returns the same ranking; the **Recommend** screen renders it.
 
 ## Keyword scoring
 

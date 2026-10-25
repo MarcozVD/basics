@@ -123,16 +123,23 @@ export class VaultNotFoundError extends Error {
   }
 }
 
-/** Optional narrowing for a bulk approval. With no fields, every proposal is approved. */
+/** Optional narrowing for a bulk approval or rejection. With no fields, every proposal is included. */
 export interface ApproveAllFilter {
   pack?: string;
   version?: string;
   agent?: string;
   action?: "create" | "update";
+  /** Only these proposal ids; ids that are not pending are reported in `failed`. */
+  ids?: string[];
 }
 
 export interface ApproveAllResult {
   approved: string[];
+  failed: { id: string; error: string }[];
+}
+
+export interface RejectAllResult {
+  rejected: string[];
   failed: { id: string; error: string }[];
 }
 
@@ -356,8 +363,9 @@ export class Vault {
       approved: [],
       // Unfiltered approval owns the whole inbox, including files that cannot
       // be parsed. A filtered approval only reports the proposals it selected.
-      failed: filter.pack || filter.agent || filter.action ? [] : invalid,
+      failed: filter.pack || filter.agent || filter.action || filter.ids ? [] : invalid,
     };
+    if (filter.ids) selected = this.selectByIds(proposals, selected, filter.ids, result.failed);
     for (const p of selected) {
       try {
         this.acceptProposal(p, {}, false);
@@ -367,6 +375,48 @@ export class Vault {
       }
     }
     if (selected.length) this.reload();
+    return result;
+  }
+
+  /** Keep only the proposals whose id is in `ids`; report ids that are not pending. */
+  private selectByIds(all: Proposal[], selected: Proposal[], ids: string[], failed: { id: string; error: string }[]): Proposal[] {
+    const present = new Set(all.map((p) => p.id));
+    const wanted = new Set(ids.map((id) => slugify(id)));
+    for (const id of wanted) {
+      if (!present.has(id)) failed.push({ id, error: `no proposal "${id}" in inbox` });
+    }
+    return selected.filter((p) => wanted.has(p.id));
+  }
+
+  /** Reject every proposal that matches the filter; rejected files are deleted from the inbox. */
+  rejectMany(filter: ApproveAllFilter = {}): RejectAllResult {
+    if (filter.version && !filter.pack) throw new Error("a version filter requires a pack");
+    if (filter.pack && filter.agent) throw new Error("pack and agent filters are mutually exclusive");
+    const { proposals, invalid } = this.inboxEntries();
+    let selected = proposals;
+    if (filter.pack) {
+      const prefix = `pack:${filter.pack}@`;
+      const exact = filter.version === undefined ? undefined : `${prefix}${filter.version}`;
+      selected = selected.filter((p) => (exact === undefined ? p.meta.proposed_by.startsWith(prefix) : p.meta.proposed_by === exact));
+    }
+    if (filter.agent) selected = selected.filter((p) => p.meta.proposed_by === filter.agent);
+    if (filter.action) selected = selected.filter((p) => p.meta.action === filter.action);
+
+    const result: RejectAllResult = {
+      rejected: [],
+      // Like approveMany: an unfiltered rejection owns the whole inbox, including
+      // files that cannot be parsed; a filtered one reports only what it selected.
+      failed: filter.pack || filter.agent || filter.action || filter.ids ? [] : invalid,
+    };
+    if (filter.ids) selected = this.selectByIds(proposals, selected, filter.ids, result.failed);
+    for (const p of selected) {
+      try {
+        fs.rmSync(p.path);
+        result.rejected.push(p.id);
+      } catch (error) {
+        result.failed.push({ id: p.id, error: describeError(error) });
+      }
+    }
     return result;
   }
 
