@@ -26,6 +26,28 @@ function seedActivity(count: number): () => void {
   };
 }
 
+/** Temporarily empty the inbox so Home renders its compact one-line strip; returns a restore function. */
+function clearInbox(): () => void {
+  const dir = path.join(vaultPath(), "inbox");
+  const previous: { name: string; body: string }[] = [];
+  if (fs.existsSync(dir)) {
+    for (const name of fs.readdirSync(dir)) {
+      if (name.endsWith(".md")) previous.push({ name, body: fs.readFileSync(path.join(dir, name), "utf8") });
+    }
+  }
+  fs.mkdirSync(dir, { recursive: true });
+  for (const name of fs.readdirSync(dir)) {
+    if (name.endsWith(".md")) fs.rmSync(path.join(dir, name), { force: true });
+  }
+  return () => {
+    fs.mkdirSync(dir, { recursive: true });
+    for (const name of fs.readdirSync(dir)) {
+      if (name.endsWith(".md")) fs.rmSync(path.join(dir, name), { force: true });
+    }
+    for (const file of previous) fs.writeFileSync(path.join(dir, file.name), file.body);
+  };
+}
+
 /** Wait for the route to render, then for the late Geist swap so measurements are stable. */
 async function settle(page: import("@playwright/test").Page) {
   await page.waitForFunction(() => document.querySelector("main h1") !== null);
@@ -41,7 +63,9 @@ interface LayoutMetrics {
   headerPadLeft: number;
   h1Left: number | null;
   dockTop: number;
-  lastTileBottom: number | null;
+  gridBottom: number | null;
+  mainClientHeight: number;
+  mainScrollHeight: number;
   panelClientHeight: number | null;
   panelScrollHeight: number | null;
   rowHeight: number | null;
@@ -53,17 +77,16 @@ async function measureHome(page: import("@playwright/test").Page): Promise<Layou
     const header = document.querySelector<HTMLElement>("header");
     const dock = document.querySelector<HTMLElement>("nav")?.getBoundingClientRect();
     const h1 = document.querySelector<HTMLElement>("h1")?.getBoundingClientRect();
-    const tiles = document.querySelectorAll<HTMLElement>("[data-stat]");
-    // Scroll the page's own container to its end before measuring the last tile.
-    if (main) main.scrollTop = main.scrollHeight;
-    const last = tiles[tiles.length - 1]?.getBoundingClientRect();
+    const grid = document.querySelector<HTMLElement>('[data-testid="home-grid"]')?.getBoundingClientRect();
     const panel = document.querySelector<HTMLElement>('[data-testid="activity-panel"]');
     const row = panel?.querySelector("li")?.getBoundingClientRect();
     return {
       headerPadLeft: header ? Number.parseFloat(getComputedStyle(header).paddingLeft) : 0,
       h1Left: h1 ? h1.left : null,
       dockTop: dock ? dock.top : 0,
-      lastTileBottom: last ? last.bottom : null,
+      gridBottom: grid ? grid.bottom : null,
+      mainClientHeight: main?.clientHeight ?? 0,
+      mainScrollHeight: main?.scrollHeight ?? 0,
       panelClientHeight: panel ? panel.clientHeight : null,
       panelScrollHeight: panel ? panel.scrollHeight : null,
       rowHeight: row ? row.height : null,
@@ -72,7 +95,8 @@ async function measureHome(page: import("@playwright/test").Page): Promise<Layou
 }
 
 test("Home clears the Dock and caps the activity panel on desktop sizes", async ({ page }) => {
-  const restore = seedActivity(60);
+  const restoreActivity = seedActivity(60);
+  const restoreInbox = clearInbox();
   try {
     for (const { width, height, gutter } of [
       { width: 1280, height: 820, gutter: 40 },
@@ -89,12 +113,16 @@ test("Home clears the Dock and caps the activity panel on desktop sizes", async 
       expect(m.headerPadLeft).toBe(gutter);
       expect(m.h1Left).toBe(gutter);
 
-      // Scrolled to the end, the last health tile's bottom sits above the Dock's top.
-      expect(m.lastTileBottom).not.toBeNull();
-      expect(m.lastTileBottom as number).toBeLessThan(m.dockTop);
-
-      // Below 1024 the stacked layout caps the panel at ~8 rows and lets it scroll.
-      if (width < 1024) {
+      if (width >= 1024) {
+        // The wide layout fills the space above the Dock: the page never scrolls,
+        // the grid's bottom sits above the Dock's top, and the activity panel scrolls.
+        expect(m.mainScrollHeight).toBeLessThanOrEqual(m.mainClientHeight + 1);
+        expect(m.gridBottom).not.toBeNull();
+        expect(m.gridBottom as number).toBeLessThanOrEqual(m.dockTop);
+        expect(m.panelClientHeight).not.toBeNull();
+        expect(m.panelScrollHeight as number).toBeGreaterThan(m.panelClientHeight as number);
+      } else {
+        // Below 1024 the stacked layout caps the panel at ~8 rows and lets it scroll.
         expect(m.rowHeight).not.toBeNull();
         const cap = (m.rowHeight as number) * 8;
         expect(m.panelClientHeight as number).toBeLessThanOrEqual(cap + 2);
@@ -102,7 +130,8 @@ test("Home clears the Dock and caps the activity panel on desktop sizes", async 
       }
     }
   } finally {
-    restore();
+    restoreInbox();
+    restoreActivity();
   }
 });
 

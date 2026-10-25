@@ -49,7 +49,7 @@ test("home shows the agent loop and approves from the queue", async ({ page }) =
   await expect(page.getByRole("button", { name: /homeflow/i })).toBeVisible();
   await page.getByRole("button", { name: "Approve", exact: true }).click();
 
-  await expect(page.getByText("Nothing to review", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("inbox-strip")).toContainText("Inbox is clear");
 });
 
 test("vault health shows every layer and opens its techs", async ({ page, request }) => {
@@ -186,5 +186,106 @@ test("activity panel scrolls on its own instead of growing the page", async ({ p
     await expect.poll(() => panel.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
   } finally {
     restore();
+  }
+});
+
+/** Wait for the route to render, then for the late Geist swap so measurements are stable. */
+async function settle(page: import("@playwright/test").Page) {
+  await page.waitForFunction(() => document.querySelector("main h1") !== null);
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        void document.fonts.ready.then(() => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+      }),
+  );
+}
+
+/** Temporarily empty the inbox so Home renders its one-line strip; returns a restore function. */
+function clearInbox(): () => void {
+  const dir = path.join(vaultPath(), "inbox");
+  const previous: { name: string; body: string }[] = [];
+  if (fs.existsSync(dir)) {
+    for (const name of fs.readdirSync(dir)) {
+      if (name.endsWith(".md")) previous.push({ name, body: fs.readFileSync(path.join(dir, name), "utf8") });
+    }
+  }
+  fs.mkdirSync(dir, { recursive: true });
+  for (const name of fs.readdirSync(dir)) {
+    if (name.endsWith(".md")) fs.rmSync(path.join(dir, name), { force: true });
+  }
+  return () => {
+    fs.mkdirSync(dir, { recursive: true });
+    for (const name of fs.readdirSync(dir)) {
+      if (name.endsWith(".md")) fs.rmSync(path.join(dir, name), { force: true });
+    }
+    for (const file of previous) fs.writeFileSync(path.join(dir, file.name), file.body);
+  };
+}
+
+test("Home fits the desktop window with an empty inbox", async ({ page }) => {
+  const restoreActivity = seedActivity(60);
+  const restoreInbox = clearInbox();
+  try {
+    for (const { width, height } of [
+      { width: 1280, height: 820 },
+      { width: 1100, height: 760 },
+    ]) {
+      await page.setViewportSize({ width, height });
+      await page.goto("/");
+      await expect(page.getByTestId("activity-panel")).toBeVisible();
+      await settle(page);
+
+      const m = await page.evaluate(() => {
+        const strip = document.querySelector<HTMLElement>('[data-testid="inbox-strip"]');
+        const panel = document.querySelector<HTMLElement>('[data-testid="activity-panel"]');
+        const main = document.querySelector<HTMLElement>("main");
+        const grid = document.querySelector<HTMLElement>('[data-testid="home-grid"]')?.getBoundingClientRect();
+        const dock = document.querySelector<HTMLElement>("nav")?.getBoundingClientRect();
+        return {
+          viewport: window.innerHeight,
+          documentHeight: document.scrollingElement?.scrollHeight ?? 0,
+          mainScrollHeight: main?.scrollHeight ?? 0,
+          mainClientHeight: main?.clientHeight ?? 0,
+          stripHeight: strip?.getBoundingClientRect().height ?? 0,
+          stripText: strip?.textContent ?? "",
+          panelScrollHeight: panel?.scrollHeight ?? 0,
+          panelClientHeight: panel?.clientHeight ?? 0,
+          gridBottom: grid?.bottom ?? 0,
+          dockTop: dock?.top ?? 0,
+        };
+      });
+
+      // The page never scrolls and nothing runs under the Dock.
+      expect(m.documentHeight).toBeLessThanOrEqual(m.viewport + 1);
+      expect(m.mainScrollHeight).toBeLessThanOrEqual(m.mainClientHeight + 1);
+      expect(m.gridBottom).toBeLessThanOrEqual(m.dockTop);
+      // The empty inbox collapses to a single line.
+      expect(m.stripHeight).toBeLessThanOrEqual(56);
+      expect(m.stripText).toContain("Inbox is clear");
+      // The activity list is the only thing that scrolls.
+      expect(m.panelScrollHeight).toBeGreaterThan(m.panelClientHeight);
+    }
+  } finally {
+    restoreInbox();
+    restoreActivity();
+  }
+});
+
+test("Home previews three proposals and links to the rest", async ({ page }) => {
+  const ids = ["pending-1", "pending-2", "pending-3", "pending-4", "pending-5"];
+  for (const id of ids) writeProposal(id, `Proposal ${id}`, "Pending body.");
+  try {
+    await page.setViewportSize({ width: 1280, height: 820 });
+    await page.goto("/");
+
+    const strip = page.getByTestId("inbox-strip");
+    await expect(strip).toBeVisible();
+    await expect(strip.locator("[data-proposal-open]")).toHaveCount(3);
+    await expect(strip.getByRole("link", { name: /See all \(5\)/ })).toBeVisible();
+  } finally {
+    for (const id of ids) {
+      fs.rmSync(path.join(vaultPath(), "inbox", `${id}.md`), { force: true });
+      fs.rmSync(path.join(vaultPath(), "tech", `${id}.md`), { force: true });
+    }
   }
 });

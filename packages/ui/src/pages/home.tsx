@@ -1,6 +1,6 @@
 import type { ActivityEvent, NoteType, PackInfo, ProposalSummary } from "@marcozvd/basics-core";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, Check, Copy, GitFork, Package } from "lucide-react";
+import { ArrowRight, Check, Copy, GitFork, Inbox, Package } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { type ReactNode, type RefObject, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
@@ -109,59 +109,72 @@ function activityMask({ top, bottom }: EdgeFade): string | undefined {
   return undefined;
 }
 
-interface ActivityPanelSize {
-  /** Exact fill height on wide screens; undefined in the stacked layout. */
-  height?: number;
-  /** Row cap on narrow screens; undefined on wide screens. */
-  maxHeight?: number;
+interface HomeLayoutSize {
+  /** Exact height for the Home grid on wide screens; undefined in the stacked layout. */
+  gridHeight?: number;
+  /** Row cap for the activity panel on narrow screens; undefined on wide screens. */
+  activityMaxHeight?: number;
 }
 
 /**
- * Size the activity panel so it never runs under the Dock.
+ * Size Home so nothing runs under the Dock.
  *
- * At 1024 and up the panel fills the space `<main>` has under the page header,
- * down to the Dock clearance and the page's bottom rhythm — measuring the panel
- * keeps the title block, grid gap and language-dependent wrapping out of the
- * calculation. Below 1024 the stacked layout caps it at about 8 measured rows so
- * it scrolls on its own instead of growing the page.
+ * At 1024 and up the grid (inbox strip excluded) fills the space `<main>` has
+ * between the page header and the Dock clearance, and the activity panel fills
+ * its own column — measuring the grid keeps the title block, the inbox strip and
+ * language-dependent wrapping out of the calculation. Below 1024 everything
+ * stacks: the grid keeps its natural height and the activity panel is capped at
+ * about 8 measured rows so it scrolls on its own instead of growing the page.
  */
-function useActivityPanelSize(ref: RefObject<HTMLElement | null>, attachKey: number): ActivityPanelSize {
-  const [size, setSize] = useState<ActivityPanelSize>({});
+function useHomeLayoutSize(
+  gridRef: RefObject<HTMLElement | null>,
+  activityRef: RefObject<HTMLElement | null>,
+  attachKey: number,
+): HomeLayoutSize {
+  const [size, setSize] = useState<HomeLayoutSize>({});
 
-  // Layout effect so the panel never paints at the wrong height first.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: re-measure when the list mounts or its content changes.
+  // Layout effect so the columns never paint at the wrong height first.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: re-measure when the grid mounts or its content changes.
   useLayoutEffect(() => {
-    const el = ref.current;
-    const main = el?.closest("main");
-    if (!el || !main) return;
+    const grid = gridRef.current;
+    const main = (grid ?? activityRef.current)?.closest("main");
+    if (!main) return;
     let cancelled = false;
-    const apply = (next: ActivityPanelSize) => {
+    const apply = (next: HomeLayoutSize) => {
       if (cancelled) return;
-      setSize((prev) => (prev.height === next.height && prev.maxHeight === next.maxHeight ? prev : next));
+      setSize((prev) => (prev.gridHeight === next.gridHeight && prev.activityMaxHeight === next.activityMaxHeight ? prev : next));
     };
     const measure = () => {
       if (cancelled) return;
-      if (window.innerWidth < 1024) {
-        // `maxHeight`, not `height`, keeps short lists compact while long ones scroll.
-        const row = el.querySelector("li");
-        const rowHeight = row?.getBoundingClientRect().height ?? 0;
-        apply(rowHeight > 0 ? { maxHeight: Math.round(rowHeight * ACTIVITY_ROWS) } : {});
+      const panel = activityRef.current;
+      const activeGrid = gridRef.current;
+      // Row height (and therefore the 8-row cap) can change with the content or wrapping.
+      const row = panel?.querySelector("li");
+      const rowHeight = row?.getBoundingClientRect().height ?? 0;
+      const cap = rowHeight > 0 ? Math.round(rowHeight * ACTIVITY_ROWS) : undefined;
+      if (window.innerWidth < 1024 || !activeGrid) {
+        // `activityMaxHeight`, not a fixed height, keeps short lists compact while long ones scroll.
+        apply({ activityMaxHeight: cap });
         return;
       }
-      const offset = el.getBoundingClientRect().top - main.getBoundingClientRect().top + main.scrollTop;
+      const offset = activeGrid.getBoundingClientRect().top - main.getBoundingClientRect().top + main.scrollTop;
       // `main.clientHeight` includes its bottom padding, which already reserves DOCK_SPACE.
-      const available = main.clientHeight - DOCK_SPACE - offset - PAGE_BOTTOM_PX;
-      const next = Math.round(available);
-      apply(next > 0 ? { height: next } : {});
+      const available = Math.round(main.clientHeight - DOCK_SPACE - offset - PAGE_BOTTOM_PX);
+      // Wide layout: the grid fills the remaining space, and the activity panel fills its column.
+      apply(available > 0 ? { gridHeight: available } : { activityMaxHeight: cap });
     };
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(main);
-    // Row height (and therefore the 8-row cap) can change with the content or wrapping.
-    observer.observe(el);
-    // The page header above the panel is the only other thing whose height can move its top edge.
+    if (grid) observer.observe(grid);
+    if (activityRef.current) observer.observe(activityRef.current);
+    // The title block and the inbox strip above the grid are what move its top edge.
     const pageHeader = main.querySelector("h1")?.closest("header");
     if (pageHeader) observer.observe(pageHeader);
+    const strip = main.querySelector<HTMLElement>('[data-testid="inbox-strip"]');
+    if (strip) observer.observe(strip);
+    const gridParent = grid?.parentElement;
+    if (gridParent) observer.observe(gridParent);
     window.addEventListener("resize", measure);
     void document.fonts?.ready.then(measure);
     return () => {
@@ -169,7 +182,7 @@ function useActivityPanelSize(ref: RefObject<HTMLElement | null>, attachKey: num
       observer.disconnect();
       window.removeEventListener("resize", measure);
     };
-  }, [ref, attachKey]);
+  }, [gridRef, activityRef, attachKey]);
 
   return size;
 }
@@ -554,6 +567,147 @@ function StarterPacks({
   );
 }
 
+interface InboxStripProps {
+  /** At most three most recent proposals to preview. */
+  proposals: ProposalSummary[];
+  /** Total pending proposals in the inbox. */
+  total: number;
+  isPending: boolean;
+  error: Error | null;
+  armed: string | null;
+  busyId: string | undefined;
+  onApprove: (id: string) => void;
+  onReject: (id: string) => void;
+}
+
+/**
+ * The first thing under the page title: when the inbox is empty it collapses to a
+ * single line, otherwise it previews at most three proposal cards and links to the
+ * rest. Always the same height contract so the grid below can size itself.
+ */
+function InboxStrip({ proposals, total, isPending, error, armed, busyId, onApprove, onReject }: InboxStripProps) {
+  const { t, language } = useI18n();
+  const navigate = useNavigate();
+  const reduce = useReducedMotion() ?? false;
+
+  if (isPending) {
+    return (
+      <section data-testid="inbox-strip" aria-label={t("home.waiting")} className="min-w-0">
+        <Loading />
+      </section>
+    );
+  }
+
+  if (error) {
+    return (
+      <section data-testid="inbox-strip" aria-label={t("home.waiting")} className="min-w-0">
+        <ErrorState error={error} />
+      </section>
+    );
+  }
+
+  if (proposals.length === 0) {
+    return (
+      <section
+        data-testid="inbox-strip"
+        aria-label={t("home.waiting")}
+        className="flex min-h-11 min-w-0 items-center gap-2.5 rounded-xl border border-border/60 bg-card/40 px-3 py-1.5"
+      >
+        <span aria-hidden="true" className="grid size-6 shrink-0 place-items-center rounded-full bg-muted/60 text-muted-foreground">
+          <Inbox className="size-3.5" />
+        </span>
+        <span className="min-w-0 flex-1 truncate text-sm font-medium">{t("home.inboxClear")}</span>
+        <Link
+          to="/inbox"
+          className="inline-flex shrink-0 items-center gap-1 rounded-sm text-[11px] text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        >
+          {t("home.allProposals")}
+          <ArrowRight className="size-3" aria-hidden="true" />
+        </Link>
+      </section>
+    );
+  }
+
+  return (
+    <section data-testid="inbox-strip" aria-label={t("home.waiting")} className="min-w-0">
+      <div className="flex items-baseline justify-between gap-3">
+        <SectionLabel>{t("home.waiting")}</SectionLabel>
+        <Link
+          to="/inbox"
+          className="inline-flex items-center gap-1 rounded-sm text-[11px] text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        >
+          {t("home.allProposals")}
+          <ArrowRight className="size-3" aria-hidden="true" />
+        </Link>
+      </div>
+
+      <div className="mt-2 flex flex-col gap-2">
+        <AnimatePresence initial={false} mode="popLayout">
+          {proposals.map((proposal) => {
+            const pack = packProposer(proposal.meta.proposed_by);
+            const busy = busyId === proposal.id;
+            return (
+              <motion.div
+                key={proposal.id}
+                layout={!reduce}
+                initial={reduce ? { opacity: 0 } : { opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.98 }}
+                transition={reduce ? { duration: 0 } : SPRING_LAYOUT}
+              >
+                <ApprovalCard
+                  title={proposal.title || proposal.id}
+                  subtitle={proposal.id}
+                  actionLabel={t(proposal.meta.action === "create" ? "proposal.action.create" : "proposal.action.update")}
+                  action={proposal.meta.action}
+                  typeLabel={t(`type.${proposal.type}` as TranslationKey)}
+                  typeColor={`var(--type-${proposal.type})`}
+                  agentName={
+                    pack
+                      ? t("inbox.byPack", { name: pack.name, version: pack.version })
+                      : t("inbox.by", { name: proposal.meta.proposed_by })
+                  }
+                  agentInitial={agentInitial(proposal.meta.proposed_by)}
+                  agentColor={agentColor(proposal.meta.proposed_by)}
+                  agentForeground="#111113"
+                  agentKind={pack ? "pack" : "agent"}
+                  reason={proposal.meta.reason}
+                  time={
+                    <time dateTime={proposal.meta.created} title={proposal.meta.created}>
+                      {formatRelativeTime(proposal.meta.created, language)}
+                    </time>
+                  }
+                  status={busy ? "submitting" : "pending"}
+                  busy={busy}
+                  approveLabel={t("proposal.approve")}
+                  rejectLabel={t("proposal.reject")}
+                  rejectConfirmLabel={t("proposal.rejectConfirm")}
+                  rejectArmed={armed === proposal.id}
+                  onOpen={() => navigate(`/inbox/${encodeURIComponent(proposal.id)}`)}
+                  onApprove={() => onApprove(proposal.id)}
+                  onReject={() => onReject(proposal.id)}
+                />
+              </motion.div>
+            );
+          })}
+        </AnimatePresence>
+      </div>
+
+      {total > proposals.length ? (
+        <div className="mt-2">
+          <Link
+            to="/inbox"
+            className="inline-flex items-center gap-1 rounded-sm text-[11px] font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          >
+            {t("home.seeAll", { count: total })}
+            <ArrowRight className="size-3" aria-hidden="true" />
+          </Link>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 export function HomePage() {
   const { t, language } = useI18n();
   const navigate = useNavigate();
@@ -605,15 +759,17 @@ export function HomePage() {
   }, [layers.data, techById]);
 
   const proposals = useMemo<ProposalSummary[]>(
-    () => [...(inbox.data ?? [])].sort((a, b) => Date.parse(b.meta.created) - Date.parse(a.meta.created)).slice(0, 4),
+    () => [...(inbox.data ?? [])].sort((a, b) => Date.parse(b.meta.created) - Date.parse(a.meta.created)).slice(0, 3),
     [inbox.data],
   );
+  const pendingTotal = inbox.data?.length ?? 0;
 
   const groups = useMemo(() => groupActivity(timeline.data ?? []), [timeline.data]);
 
+  const gridRef = useRef<HTMLDivElement>(null);
   const activityRef = useRef<HTMLElement>(null);
   const [activityFade, setActivityFade] = useState<EdgeFade>({ top: false, bottom: false });
-  const activitySize = useActivityPanelSize(activityRef, groups.length);
+  const layoutSize = useHomeLayoutSize(gridRef, activityRef, groups.length + (showPacks ? 1000 : 0));
   // biome-ignore lint/correctness/useExhaustiveDependencies: re-attach whenever the list renders — ResizeObserver then covers size changes.
   useEffect(() => {
     const el = activityRef.current;
@@ -752,6 +908,12 @@ export function HomePage() {
   const counts = stats.data?.counts;
   const total = stats.data?.total ?? 0;
   const pending = stats.data?.inbox ?? 0;
+  const busyId =
+    approve.isPending && typeof approve.variables === "string"
+      ? approve.variables
+      : reject.isPending && typeof reject.variables === "string"
+        ? reject.variables
+        : undefined;
 
   return (
     <Page className={`${PAGE_SECTIONS} min-[1024px]:pb-0`}>
@@ -788,351 +950,298 @@ export function HomePage() {
           onInstall={() => install.mutate([...selectedPacks])}
         />
       ) : (
-        <div className="grid gap-6 min-[1024px]:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] min-[1440px]:grid-cols-[minmax(0,40fr)_minmax(0,35fr)_minmax(0,25fr)] min-[1440px]:gap-5">
-          <section aria-label={t("home.waiting")} className="min-w-0">
-            <div className="flex items-baseline justify-between gap-3">
-              <SectionLabel>{t("home.waiting")}</SectionLabel>
-              <Link
-                to="/inbox"
-                className="inline-flex items-center gap-1 rounded-sm text-[11px] text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-              >
-                {t("home.allProposals")}
-                <ArrowRight className="size-3" aria-hidden="true" />
-              </Link>
-            </div>
+        <>
+          <InboxStrip
+            proposals={proposals}
+            total={pendingTotal}
+            isPending={inbox.isPending}
+            error={inbox.error}
+            armed={armed}
+            busyId={busyId}
+            onApprove={(id) => approve.mutate(id)}
+            onReject={requestReject}
+          />
 
-            <div className="mt-2 flex flex-col gap-2">
-              {inbox.isPending ? (
-                <Loading />
-              ) : inbox.error ? (
-                <ErrorState error={inbox.error} />
-              ) : proposals.length === 0 ? (
-                <p className="text-sm text-muted-foreground">{t("home.nothingToReview")}</p>
-              ) : (
-                <AnimatePresence initial={false} mode="popLayout">
-                  {proposals.map((proposal) => {
-                    const pack = packProposer(proposal.meta.proposed_by);
-                    const busy =
-                      (approve.isPending && approve.variables === proposal.id) || (reject.isPending && reject.variables === proposal.id);
-                    return (
-                      <motion.div
-                        key={proposal.id}
-                        layout={!reduce}
-                        initial={reduce ? { opacity: 0 } : { opacity: 0, y: 6 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.98 }}
-                        transition={reduce ? { duration: 0 } : SPRING_LAYOUT}
-                      >
-                        <ApprovalCard
-                          title={proposal.title || proposal.id}
-                          subtitle={proposal.id}
-                          actionLabel={t(proposal.meta.action === "create" ? "proposal.action.create" : "proposal.action.update")}
-                          action={proposal.meta.action}
-                          typeLabel={t(`type.${proposal.type}` as TranslationKey)}
-                          typeColor={`var(--type-${proposal.type})`}
-                          agentName={
-                            pack
-                              ? t("inbox.byPack", { name: pack.name, version: pack.version })
-                              : t("inbox.by", { name: proposal.meta.proposed_by })
-                          }
-                          agentInitial={agentInitial(proposal.meta.proposed_by)}
-                          agentColor={agentColor(proposal.meta.proposed_by)}
-                          agentForeground="#111113"
-                          agentKind={pack ? "pack" : "agent"}
-                          reason={proposal.meta.reason}
-                          time={
-                            <time dateTime={proposal.meta.created} title={proposal.meta.created}>
-                              {formatRelativeTime(proposal.meta.created, language)}
-                            </time>
-                          }
-                          status={busy ? "submitting" : "pending"}
-                          busy={busy}
-                          approveLabel={t("proposal.approve")}
-                          rejectLabel={t("proposal.reject")}
-                          rejectConfirmLabel={t("proposal.rejectConfirm")}
-                          rejectArmed={armed === proposal.id}
-                          onOpen={() => navigate(`/inbox/${encodeURIComponent(proposal.id)}`)}
-                          onApprove={() => approve.mutate(proposal.id)}
-                          onReject={() => requestReject(proposal.id)}
-                        />
-                      </motion.div>
-                    );
-                  })}
-                </AnimatePresence>
-              )}
-            </div>
-          </section>
+          <div
+            ref={gridRef}
+            data-testid="home-grid"
+            style={layoutSize.gridHeight ? { height: layoutSize.gridHeight } : undefined}
+            className="grid min-w-0 gap-6 min-[1024px]:min-h-0 min-[1024px]:grid-cols-[minmax(0,11fr)_minmax(0,9fr)] min-[1440px]:grid-cols-[minmax(0,40fr)_minmax(0,35fr)_minmax(0,25fr)] min-[1440px]:gap-5"
+          >
+            <section className="flex min-w-0 flex-col min-[1024px]:min-h-0">
+              <SectionLabel id="home-activity-label">{t("home.activity")}</SectionLabel>
 
-          <section className="min-w-0">
-            <SectionLabel id="home-activity-label">{t("home.activity")}</SectionLabel>
-
-            {timeline.isPending ? (
-              <div className="mt-2">
-                <Loading />
-              </div>
-            ) : timeline.error ? (
-              <div className="mt-2">
-                <ErrorState error={timeline.error} />
-              </div>
-            ) : groups.length === 0 ? (
-              <div className="mt-2">
-                <p className="text-sm text-muted-foreground">{t("home.noAgents")}</p>
-                <div className="mt-2 flex items-start gap-1.5">
-                  <code className="min-w-0 rounded-md bg-muted/70 px-2 py-1 font-mono text-[10.5px] leading-4 break-all text-muted-foreground">
-                    claude mcp add --transport http basics {window.location.origin}/mcp
-                  </code>
-                  <button
-                    type="button"
-                    aria-label={t("home.copy")}
-                    title={t("home.copy")}
-                    onClick={() => void copyMcp()}
-                    className="grid size-7 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-                  >
-                    <Copy className="size-3.5" aria-hidden="true" />
-                  </button>
+              {timeline.isPending ? (
+                <div className="mt-2">
+                  <Loading />
                 </div>
-              </div>
-            ) : (
-              <section
-                ref={activityRef}
-                // A scrollable region must be reachable from the keyboard so arrow keys can scroll it.
-                // biome-ignore lint/a11y/noNoninteractiveTabindex: focusable scroll container, labelled by the section heading.
-                tabIndex={0}
-                aria-labelledby="home-activity-label"
-                data-testid="activity-panel"
-                className="mt-2 overflow-y-auto overscroll-contain focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-                style={{
-                  height: activitySize.height,
-                  maxHeight: activitySize.maxHeight,
-                  WebkitMaskImage: activityMaskImage,
-                  maskImage: activityMaskImage,
-                }}
-              >
-                <ul className="mt-1 flex flex-col">
-                  <AnimatePresence initial={false}>
-                    {groups.map((group) => (
-                      <motion.li
-                        key={group.key}
-                        layout={!reduce}
-                        initial={reduce ? { opacity: 0 } : { opacity: 0, y: -6 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={reduce ? { opacity: 0 } : { opacity: 0 }}
-                        transition={reduce ? { duration: 0 } : { type: "spring", stiffness: 420, damping: 34 }}
-                        className="flex items-start gap-2 border-b border-border/50 py-1.5 last:border-0"
-                      >
-                        <time
-                          className="w-10 shrink-0 pt-0.5 text-right font-mono text-[10px] whitespace-nowrap text-muted-foreground"
-                          dateTime={group.event.ts}
-                          title={formatFullDateTime(group.event.ts, language)}
+              ) : timeline.error ? (
+                <div className="mt-2">
+                  <ErrorState error={timeline.error} />
+                </div>
+              ) : groups.length === 0 ? (
+                <div className="mt-2">
+                  <p className="text-sm text-muted-foreground">{t("home.noAgents")}</p>
+                  <div className="mt-2 flex items-start gap-1.5">
+                    <code className="min-w-0 rounded-md bg-muted/70 px-2 py-1 font-mono text-[10.5px] leading-4 break-all text-muted-foreground">
+                      claude mcp add --transport http basics {window.location.origin}/mcp
+                    </code>
+                    <button
+                      type="button"
+                      aria-label={t("home.copy")}
+                      title={t("home.copy")}
+                      onClick={() => void copyMcp()}
+                      className="grid size-7 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                    >
+                      <Copy className="size-3.5" aria-hidden="true" />
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <section
+                  ref={activityRef}
+                  // A scrollable region must be reachable from the keyboard so arrow keys can scroll it.
+                  // biome-ignore lint/a11y/noNoninteractiveTabindex: focusable scroll container, labelled by the section heading.
+                  tabIndex={0}
+                  aria-labelledby="home-activity-label"
+                  data-testid="activity-panel"
+                  className="mt-2 min-h-0 flex-1 overflow-y-auto overscroll-contain focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                  style={{
+                    maxHeight: layoutSize.activityMaxHeight,
+                    WebkitMaskImage: activityMaskImage,
+                    maskImage: activityMaskImage,
+                  }}
+                >
+                  <ul className="mt-1 flex flex-col">
+                    <AnimatePresence initial={false}>
+                      {groups.map((group) => (
+                        <motion.li
+                          key={group.key}
+                          layout={!reduce}
+                          initial={reduce ? { opacity: 0 } : { opacity: 0, y: -6 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={reduce ? { opacity: 0 } : { opacity: 0 }}
+                          transition={reduce ? { duration: 0 } : { type: "spring", stiffness: 420, damping: 34 }}
+                          className="flex items-start gap-2 border-b border-border/50 py-1.5 last:border-0"
                         >
-                          {formatCompactRelativeTime(group.event.ts)}
-                        </time>
-                        <span
-                          aria-hidden="true"
-                          className="mt-0.5 grid size-[18px] shrink-0 place-items-center rounded-md font-mono text-[10px] font-semibold text-[#111113]"
-                          style={{ backgroundColor: agentColor(group.event.agent) }}
-                        >
-                          {agentInitial(group.event.agent)}
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 text-xs">
-                            <span className="font-medium">{group.event.agent}</span>
-                            <span className="text-muted-foreground">{verbFor(group)}</span>
-                            {group.count > 1 && group.event.tool !== "get_note" ? (
-                              <span className="font-mono text-[11px] text-muted-foreground">×{group.count}</span>
-                            ) : null}
-                            {group.event.tool === "search_vault" && group.detail ? (
-                              <span className="font-mono text-[11px] text-muted-foreground">“{group.detail}”</span>
-                            ) : null}
-                          </div>
-                          {group.noteIds.length > 0 ? (
-                            <div className="mt-1 flex flex-wrap gap-1">
-                              {group.noteIds.slice(0, 6).map((id) => (
-                                <TypeChip key={id} id={id} type={typeById.get(id)} />
-                              ))}
-                              {group.noteIds.length > 6 ? (
-                                <span className="self-center font-mono text-[10px] text-muted-foreground">+{group.noteIds.length - 6}</span>
+                          <time
+                            className="w-10 shrink-0 pt-0.5 text-right font-mono text-[10px] whitespace-nowrap text-muted-foreground"
+                            dateTime={group.event.ts}
+                            title={formatFullDateTime(group.event.ts, language)}
+                          >
+                            {formatCompactRelativeTime(group.event.ts)}
+                          </time>
+                          <span
+                            aria-hidden="true"
+                            className="mt-0.5 grid size-[18px] shrink-0 place-items-center rounded-md font-mono text-[10px] font-semibold text-[#111113]"
+                            style={{ backgroundColor: agentColor(group.event.agent) }}
+                          >
+                            {agentInitial(group.event.agent)}
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 text-xs">
+                              <span className="font-medium">{group.event.agent}</span>
+                              <span className="text-muted-foreground">{verbFor(group)}</span>
+                              {group.count > 1 && group.event.tool !== "get_note" ? (
+                                <span className="font-mono text-[11px] text-muted-foreground">×{group.count}</span>
+                              ) : null}
+                              {group.event.tool === "search_vault" && group.detail ? (
+                                <span className="font-mono text-[11px] text-muted-foreground">“{group.detail}”</span>
                               ) : null}
                             </div>
-                          ) : null}
-                        </div>
-                      </motion.li>
-                    ))}
-                  </AnimatePresence>
-                </ul>
-              </section>
-            )}
-          </section>
-
-          <section aria-label={t("home.health")} className="min-w-0 min-[1024px]:col-span-2 min-[1440px]:col-span-1">
-            <SectionLabel>{t("home.health")}</SectionLabel>
-            {stats.error ? (
-              <div className="mt-2">
-                <ErrorState error={stats.error} />
-              </div>
-            ) : null}
-            <div className="mt-2 grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-2 min-[1440px]:grid-cols-2">
-              {TYPE_ORDER.map((type) => (
-                <StatTile
-                  key={type}
-                  stat={type}
-                  label={t(`type.${type}` as TranslationKey)}
-                  dot={`var(--type-${type})`}
-                  value={counts?.[type] ?? 0}
-                  onClick={() => navigate(type === "project" ? "/projects" : `/explore?type=${type}`)}
-                />
-              ))}
-
-              <StatTile
-                stat="broken"
-                label={t("home.brokenLinks")}
-                value={stats.data?.brokenLinks.length ?? 0}
-                alert={(stats.data?.brokenLinks.length ?? 0) > 0}
-              >
-                {(close) => (
-                  <ul className="flex flex-col gap-0.5 p-1">
-                    {(stats.data?.brokenLinks ?? []).map((link) => (
-                      <li key={`${link.from}-${link.to}`} data-broken-link={link.to} className="flex min-w-0 items-center gap-1">
-                        <span className="min-w-0 flex-1 truncate px-1.5 font-mono text-[11px] text-muted-foreground">
-                          {link.from} <span className="text-foreground/50">→</span> {link.to}
-                        </span>
-                        <button
-                          type="button"
-                          aria-label={t("home.brokenLinkOpen", { id: link.from })}
-                          onClick={() => navigate(`/notes/${encodeURIComponent(link.from)}`)}
-                          className={TILE_ACTION}
-                        >
-                          {t("home.brokenLinkOpenShort")}
-                        </button>
-                        <button
-                          type="button"
-                          aria-label={t("home.brokenLinkCreate", { id: link.to })}
-                          onClick={() => {
-                            close();
-                            window.dispatchEvent(new CustomEvent("basics:new-note", { detail: { id: link.to } }));
-                          }}
-                          className={`${TILE_ACTION} text-primary-text`}
-                        >
-                          {t("home.brokenLinkCreateShort")}
-                        </button>
-                      </li>
-                    ))}
+                            {group.noteIds.length > 0 ? (
+                              <div className="mt-1 flex flex-wrap gap-1">
+                                {group.noteIds.slice(0, 6).map((id) => (
+                                  <TypeChip key={id} id={id} type={typeById.get(id)} />
+                                ))}
+                                {group.noteIds.length > 6 ? (
+                                  <span className="self-center font-mono text-[10px] text-muted-foreground">
+                                    +{group.noteIds.length - 6}
+                                  </span>
+                                ) : null}
+                              </div>
+                            ) : null}
+                          </div>
+                        </motion.li>
+                      ))}
+                    </AnimatePresence>
                   </ul>
-                )}
-              </StatTile>
+                </section>
+              )}
+            </section>
 
-              <StatTile stat="orphans" label={t("home.orphans")} value={stats.data?.orphans.length ?? 0}>
-                <ul className="flex flex-col gap-0.5 p-1">
-                  {(stats.data?.orphans ?? []).map((id) => (
-                    <li key={id}>
+            <div className="flex min-w-0 flex-col gap-6 min-[1024px]:min-h-0 min-[1024px]:overflow-y-auto min-[1440px]:contents">
+              <section aria-label={t("home.health")} className="min-w-0 min-[1440px]:min-h-0 min-[1440px]:overflow-y-auto">
+                <SectionLabel>{t("home.health")}</SectionLabel>
+                {stats.error ? (
+                  <div className="mt-2">
+                    <ErrorState error={stats.error} />
+                  </div>
+                ) : null}
+                <div className="mt-2 grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-2 min-[1440px]:grid-cols-2">
+                  {TYPE_ORDER.map((type) => (
+                    <StatTile
+                      key={type}
+                      stat={type}
+                      label={t(`type.${type}` as TranslationKey)}
+                      dot={`var(--type-${type})`}
+                      value={counts?.[type] ?? 0}
+                      onClick={() => navigate(type === "project" ? "/projects" : `/explore?type=${type}`)}
+                    />
+                  ))}
+
+                  <StatTile
+                    stat="broken"
+                    label={t("home.brokenLinks")}
+                    value={stats.data?.brokenLinks.length ?? 0}
+                    alert={(stats.data?.brokenLinks.length ?? 0) > 0}
+                  >
+                    {(close) => (
+                      <ul className="flex flex-col gap-0.5 p-1">
+                        {(stats.data?.brokenLinks ?? []).map((link) => (
+                          <li key={`${link.from}-${link.to}`} data-broken-link={link.to} className="flex min-w-0 items-center gap-1">
+                            <span className="min-w-0 flex-1 truncate px-1.5 font-mono text-[11px] text-muted-foreground">
+                              {link.from} <span className="text-foreground/50">→</span> {link.to}
+                            </span>
+                            <button
+                              type="button"
+                              aria-label={t("home.brokenLinkOpen", { id: link.from })}
+                              onClick={() => navigate(`/notes/${encodeURIComponent(link.from)}`)}
+                              className={TILE_ACTION}
+                            >
+                              {t("home.brokenLinkOpenShort")}
+                            </button>
+                            <button
+                              type="button"
+                              aria-label={t("home.brokenLinkCreate", { id: link.to })}
+                              onClick={() => {
+                                close();
+                                window.dispatchEvent(new CustomEvent("basics:new-note", { detail: { id: link.to } }));
+                              }}
+                              className={`${TILE_ACTION} text-primary-text`}
+                            >
+                              {t("home.brokenLinkCreateShort")}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </StatTile>
+
+                  <StatTile stat="orphans" label={t("home.orphans")} value={stats.data?.orphans.length ?? 0}>
+                    <ul className="flex flex-col gap-0.5 p-1">
+                      {(stats.data?.orphans ?? []).map((id) => (
+                        <li key={id}>
+                          <button
+                            type="button"
+                            onClick={() => navigate(`/notes/${encodeURIComponent(id)}`)}
+                            className="w-full truncate rounded-md px-1.5 py-1 text-left font-mono text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
+                          >
+                            {id}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </StatTile>
+
+                  <div className="min-[1440px]:hidden">
+                    <StatTile stat="recent" label={t("home.recent")} value={stats.data?.recent.length ?? 0}>
+                      <ul className="flex flex-col gap-0.5 p-1">
+                        {(stats.data?.recent ?? []).map((note) => (
+                          <li key={note.id}>
+                            <button
+                              type="button"
+                              onClick={() => navigate(`/notes/${encodeURIComponent(note.id)}`)}
+                              className="flex w-full items-baseline gap-2 rounded-md px-1.5 py-1 text-left transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
+                            >
+                              <span className="min-w-0 flex-1 truncate text-xs">{note.title || note.id}</span>
+                              <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{note.updated}</span>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </StatTile>
+                  </div>
+                </div>
+
+                {layers.data && layers.data.length > 0 ? (
+                  <div className="mt-4">
+                    <SectionLabel>{t("home.layers")}</SectionLabel>
+                    <div className="mt-2 grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-2 min-[1440px]:grid-cols-3">
+                      {layers.data.map((layer) => (
+                        <StatTile
+                          key={layer.id}
+                          stat={`layer-${layer.id}`}
+                          label={layer.title || layer.id}
+                          value={layer.techs.length}
+                          dot="var(--muted-foreground)"
+                        >
+                          {(close) => (
+                            <div className="flex flex-col">
+                              <ul className="flex max-h-[18rem] flex-col gap-0.5 overflow-y-auto overscroll-contain p-1">
+                                {(layerTechs.get(layer.id) ?? []).map((tech) => (
+                                  <li key={tech.id}>
+                                    <button
+                                      type="button"
+                                      data-layer-tech={tech.id}
+                                      onClick={() => {
+                                        close();
+                                        navigate(`/notes/${encodeURIComponent(tech.id)}`);
+                                      }}
+                                      className="flex w-full items-baseline gap-2 rounded-md px-1.5 py-1 text-left transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
+                                    >
+                                      <span className="min-w-0 flex-1 truncate text-xs">{tech.title}</span>
+                                      {tech.kind ? (
+                                        <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{tech.kind}</span>
+                                      ) : null}
+                                    </button>
+                                  </li>
+                                ))}
+                              </ul>
+                              <div className="mt-1 border-t border-border/60 pt-1">
+                                <Link
+                                  to={`/explore?type=tech&layer=${encodeURIComponent(layer.id)}`}
+                                  onClick={close}
+                                  className="flex w-full items-center justify-between gap-2 rounded-md px-1.5 py-1 text-[11px] font-medium text-primary-text transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
+                                >
+                                  {t("home.viewInExplore")}
+                                  <ArrowRight aria-hidden="true" className="size-3.5" />
+                                </Link>
+                              </div>
+                            </div>
+                          )}
+                        </StatTile>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+              </section>
+
+              <section className="hidden min-w-0 min-[1440px]:block min-[1440px]:min-h-0 min-[1440px]:overflow-y-auto">
+                <SectionLabel>{t("home.recent")}</SectionLabel>
+                <ul className="mt-1 flex flex-col">
+                  {(stats.data?.recent ?? []).map((note) => (
+                    <li key={note.id} className="border-b border-border/50 last:border-0">
                       <button
                         type="button"
-                        onClick={() => navigate(`/notes/${encodeURIComponent(id)}`)}
-                        className="w-full truncate rounded-md px-1.5 py-1 text-left font-mono text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
+                        onClick={() => navigate(`/notes/${encodeURIComponent(note.id)}`)}
+                        className="flex w-full min-w-0 items-baseline gap-2 py-1.5 text-left transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
                       >
-                        {id}
+                        <span
+                          aria-hidden="true"
+                          className="size-1.5 shrink-0 self-center rounded-full"
+                          style={{ backgroundColor: typeColor(note.type) }}
+                        />
+                        <span className="min-w-0 flex-1 truncate text-xs">{note.title || note.id}</span>
+                        <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{note.updated}</span>
                       </button>
                     </li>
                   ))}
                 </ul>
-              </StatTile>
-
-              <div className="min-[1440px]:hidden">
-                <StatTile stat="recent" label={t("home.recent")} value={stats.data?.recent.length ?? 0}>
-                  <ul className="flex flex-col gap-0.5 p-1">
-                    {(stats.data?.recent ?? []).map((note) => (
-                      <li key={note.id}>
-                        <button
-                          type="button"
-                          onClick={() => navigate(`/notes/${encodeURIComponent(note.id)}`)}
-                          className="flex w-full items-baseline gap-2 rounded-md px-1.5 py-1 text-left transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
-                        >
-                          <span className="min-w-0 flex-1 truncate text-xs">{note.title || note.id}</span>
-                          <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{note.updated}</span>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </StatTile>
-              </div>
+              </section>
             </div>
-
-            {layers.data && layers.data.length > 0 ? (
-              <div className="mt-4">
-                <SectionLabel>{t("home.layers")}</SectionLabel>
-                <div className="mt-2 grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-2 min-[1440px]:grid-cols-3">
-                  {layers.data.map((layer) => (
-                    <StatTile
-                      key={layer.id}
-                      stat={`layer-${layer.id}`}
-                      label={layer.title || layer.id}
-                      value={layer.techs.length}
-                      dot="var(--muted-foreground)"
-                    >
-                      {(close) => (
-                        <div className="flex flex-col">
-                          <ul className="flex max-h-[18rem] flex-col gap-0.5 overflow-y-auto overscroll-contain p-1">
-                            {(layerTechs.get(layer.id) ?? []).map((tech) => (
-                              <li key={tech.id}>
-                                <button
-                                  type="button"
-                                  data-layer-tech={tech.id}
-                                  onClick={() => {
-                                    close();
-                                    navigate(`/notes/${encodeURIComponent(tech.id)}`);
-                                  }}
-                                  className="flex w-full items-baseline gap-2 rounded-md px-1.5 py-1 text-left transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
-                                >
-                                  <span className="min-w-0 flex-1 truncate text-xs">{tech.title}</span>
-                                  {tech.kind ? (
-                                    <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{tech.kind}</span>
-                                  ) : null}
-                                </button>
-                              </li>
-                            ))}
-                          </ul>
-                          <div className="mt-1 border-t border-border/60 pt-1">
-                            <Link
-                              to={`/explore?type=tech&layer=${encodeURIComponent(layer.id)}`}
-                              onClick={close}
-                              className="flex w-full items-center justify-between gap-2 rounded-md px-1.5 py-1 text-[11px] font-medium text-primary-text transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
-                            >
-                              {t("home.viewInExplore")}
-                              <ArrowRight aria-hidden="true" className="size-3.5" />
-                            </Link>
-                          </div>
-                        </div>
-                      )}
-                    </StatTile>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-
-            <div className="mt-5 hidden min-w-0 min-[1440px]:block">
-              <SectionLabel>{t("home.recent")}</SectionLabel>
-              <ul className="mt-1 flex flex-col">
-                {(stats.data?.recent ?? []).map((note) => (
-                  <li key={note.id} className="border-b border-border/50 last:border-0">
-                    <button
-                      type="button"
-                      onClick={() => navigate(`/notes/${encodeURIComponent(note.id)}`)}
-                      className="flex w-full min-w-0 items-baseline gap-2 py-1.5 text-left transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
-                    >
-                      <span
-                        aria-hidden="true"
-                        className="size-1.5 shrink-0 self-center rounded-full"
-                        style={{ backgroundColor: typeColor(note.type) }}
-                      />
-                      <span className="min-w-0 flex-1 truncate text-xs">{note.title || note.id}</span>
-                      <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{note.updated}</span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </section>
-        </div>
+          </div>
+        </>
       )}
     </Page>
   );
