@@ -1,5 +1,11 @@
 # @marcozvd/basics-core
 
+## 1.4.1
+
+### Patch Changes
+
+- Home fits the desktop window: the inbox collapses to a one-line strip when clear, agent activity sits beside a compact vault health row and a two-column layers list, and recently edited is capped at 5. No page scroll at 1100×760 and 1280×820; three columns from 1440.
+
 ## 1.4.0
 
 ### Minor Changes
