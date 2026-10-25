@@ -1,5 +1,17 @@
 # @marcozvd/basics-core
 
+## 1.4.0
+
+### Minor Changes
+
+- Ask a local coding agent for the stack, and select proposals in the Inbox.
+  
+  - Recommend has an **Ask an agent** action: pick Claude Code, OpenCode or Codex and one of its models, and Basics runs it headless in an empty temp directory with the `plan-stack` prompt. The answer streams in, can be cancelled, and the techs it cites can be selected for export. New `GET /api/agents`, `POST /api/agents/run` and `POST /api/agents/run/:id/cancel`.
+  - Agents propose the notes a stack decision needs: the `plan-stack` prompt and the Basics skill ask for missing notes with `use_when`, `avoid_when`, links to existing notes and a specific body, listed as "Propuestas al Inbox".
+  - Inbox: Reject all, and select proposals to approve or reject only those (`Vault.rejectMany`, an `ids` filter for `approveMany` and `rejectMany`, `POST /api/inbox/reject-all`).
+  - Recommend hides layers with no match; turning on semantic matching retries the model download once and never saves `embeddings: true` when it fails.
+  - Desktop: page gutters and Dock clearance, a capped Home activity panel, no graph edge from a note to its own layer box, and the installer bundles every runtime dependency.
+
 ## 1.3.0
 
 ### Minor Changes
