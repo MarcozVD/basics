@@ -66,7 +66,8 @@ function fakeBins(): FakeBin {
     fs.writeFileSync(script, FAKE_AGENT);
     if (process.platform !== "win32") {
       const file = path.join(dir, name);
-      fs.writeFileSync(file, `#!/bin/sh\nexec node "$(dirname "$0")/${name}-fake.cjs" "$@"\n`);
+      // Absolute node: PATH holds only the fake bin dir, so a bare `node` would not resolve.
+      fs.writeFileSync(file, `#!/bin/sh\nexec "${process.execPath}" "$(dirname "$0")/${name}-fake.cjs" "$@"\n`);
       fs.chmodSync(file, 0o755);
       return file;
     }
