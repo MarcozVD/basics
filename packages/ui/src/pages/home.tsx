@@ -1,4 +1,4 @@
-import type { ActivityEvent, NoteType, PackInfo, ProposalSummary } from "@marcozvd/basics-core";
+import type { ActivityEvent, LayerSummary, NoteType, PackInfo, ProposalSummary } from "@marcozvd/basics-core";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, Check, Copy, GitFork, Inbox, Package } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
@@ -24,6 +24,7 @@ import { useActivity, useInbox, useLayers, useNotes, usePacks, useStats } from "
 import { formatCompactRelativeTime, formatFullDateTime, formatRelativeTime } from "@/lib/relative-time";
 import { toast } from "@/lib/toast";
 import { tintStyle, typeColor } from "@/lib/type-color";
+import { cn } from "@/lib/utils";
 
 const TYPE_ORDER: NoteType[] = ["tech", "practice", "check", "profile", "project", "layer"];
 const REVEAL_KEY = "basics-home-revealed";
@@ -228,68 +229,174 @@ function TypeChip({ id, type }: { id: string; type: NoteType | undefined }) {
   );
 }
 
-const TILE_ACTION =
+const POPOVER_ACTION =
   "shrink-0 rounded-md px-1.5 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring";
 
-interface TileProps {
+/** Gap between the blocks stacked in Home's side column (matches the column's `gap-4`). */
+const COLUMN_GAP = 16;
+
+interface StatItemProps {
   label: string;
   value: number;
   stat: string;
   /** Note-type color for the leading dot. */
   dot?: string;
+  /** Destructive emphasis; only ever set when the value is above zero. */
   alert?: boolean;
   onClick?: () => void;
   /** Popover details; a function receives `close` for actions that leave the popover. */
   children?: ReactNode | ((close: () => void) => ReactNode);
 }
 
-/** Compact stat tile; turns into a popover trigger when it has details to show. */
-function StatTile({ label, value, stat, dot, alert, onClick, children }: TileProps) {
+/**
+ * Compact `label number` stat for Home's health strip: no card chrome, one line,
+ * wrapping gracefully; a popover trigger when it has details and a value.
+ */
+function StatItem({ label, value, stat, dot, alert, onClick, children }: StatItemProps) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const body = (
-    <>
-      <span className="flex min-w-0 max-w-full items-center gap-1.5 text-[11px] text-muted-foreground">
-        {dot ? <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full" style={{ backgroundColor: dot }} /> : null}
-        <span className="truncate">{label}</span>
-      </span>
+    <span className="inline-flex min-w-0 max-w-full items-baseline gap-1.5">
+      {dot ? <span aria-hidden="true" className="size-1.5 shrink-0 self-center rounded-full" style={{ backgroundColor: dot }} /> : null}
+      <span className={`min-w-0 truncate text-[11px] ${alert ? "text-destructive-text" : "text-muted-foreground"}`}>{label}</span>
       <AnimatedNumber
         value={value}
         startOnView={false}
         duration={0.5}
-        className={`text-sm font-semibold ${alert ? "text-destructive-text" : "text-foreground"}`}
+        className={`font-mono text-xs font-semibold ${alert ? "text-destructive-text" : "text-foreground"}`}
       />
-    </>
+    </span>
   );
 
-  const className = `flex w-full min-w-0 flex-col items-start gap-0.5 rounded-xl border border-border bg-card/60 px-3 py-2 text-left transition-colors hover:bg-muted/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring`;
+  const className =
+    "inline-flex max-w-full min-w-0 items-baseline rounded-md px-1 py-0.5 transition-colors hover:bg-muted/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring";
 
   if (children === undefined || value === 0) {
     return onClick ? (
-      <button type="button" data-stat={stat} onClick={onClick} className={className}>
+      <button type="button" data-stat={stat} data-alert={alert ? "true" : undefined} onClick={onClick} className={className}>
         {body}
       </button>
     ) : (
-      <div data-stat={stat} className={className}>
+      <div data-stat={stat} data-alert={alert ? "true" : undefined} className={className}>
         {body}
       </div>
     );
   }
 
-  // The popover wraps its trigger in its own element; stretch that wrapper to fill the grid cell.
   return (
-    <div className="min-w-0 *:w-full">
-      <MorphPopover open={open} onOpenChange={setOpen}>
-        <MorphPopoverTrigger>
-          <button type="button" data-stat={stat} aria-label={`${label}: ${value} — ${t("home.showDetails")}`} className={className}>
-            {body}
-          </button>
-        </MorphPopoverTrigger>
-        <MorphPopoverContent side="top" align="start" className="w-80 p-2">
-          {typeof children === "function" ? children(() => setOpen(false)) : children}
-        </MorphPopoverContent>
-      </MorphPopover>
-    </div>
+    <MorphPopover open={open} onOpenChange={setOpen}>
+      <MorphPopoverTrigger>
+        <button
+          type="button"
+          data-stat={stat}
+          data-alert={alert ? "true" : undefined}
+          aria-label={`${label}: ${value} — ${t("home.showDetails")}`}
+          className={className}
+        >
+          {body}
+        </button>
+      </MorphPopoverTrigger>
+      <MorphPopoverContent side="top" align="start" className="w-80 p-2">
+        {typeof children === "function" ? children(() => setOpen(false)) : children}
+      </MorphPopoverContent>
+    </MorphPopover>
+  );
+}
+
+interface LayerRowProps {
+  layer: LayerSummary;
+  /** Resolved tech list for the popover (id, title, kind). */
+  techs: { id: string; title: string; kind?: string }[];
+  /** Largest tech count across all layers, for the proportional bar. */
+  max: number;
+}
+
+/**
+ * One layer as a compact row: colour dot, name (truncated with a title tooltip),
+ * the tech count in tabular mono and a thin proportional bar. A layer with techs
+ * opens the same tech list (with its own scroll) the old tile did; an empty layer
+ * is a plain row, as before.
+ */
+function LayerRow({ layer, techs, max }: LayerRowProps) {
+  const { t } = useI18n();
+  const navigate = useNavigate();
+  const [open, setOpen] = useState(false);
+  const title = layer.title || layer.id;
+  const count = layer.techs.length;
+
+  const body = (
+    <>
+      <span className="flex min-w-0 items-baseline gap-2">
+        <span aria-hidden="true" className="size-1.5 shrink-0 self-center rounded-full" style={{ backgroundColor: typeColor("layer") }} />
+        <span className="min-w-0 flex-1 truncate text-xs" title={title}>
+          {title}
+        </span>
+        <AnimatedNumber value={count} startOnView={false} duration={0.5} className="shrink-0 font-mono text-[10px] text-muted-foreground" />
+      </span>
+      <span aria-hidden="true" className="mt-1 block h-px w-full overflow-hidden rounded-full bg-border/60">
+        <span className="block h-full rounded-full bg-muted-foreground/50" style={{ width: `${max > 0 ? (count / max) * 100 : 0}%` }} />
+      </span>
+    </>
+  );
+
+  const className =
+    "flex w-full min-w-0 flex-col rounded-lg px-1.5 py-1 text-left transition-colors hover:bg-muted/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring";
+
+  // An empty layer stays a plain row, exactly like the old empty tile: there is no
+  // tech list to open and nothing to filter for.
+  if (count === 0) {
+    return (
+      <div data-stat={`layer-${layer.id}`} className={className}>
+        {body}
+      </div>
+    );
+  }
+
+  return (
+    <MorphPopover className="w-full" open={open} onOpenChange={setOpen}>
+      <MorphPopoverTrigger>
+        <button
+          type="button"
+          data-stat={`layer-${layer.id}`}
+          aria-label={`${title}: ${count} — ${t("home.showDetails")}`}
+          className={className}
+        >
+          {body}
+        </button>
+      </MorphPopoverTrigger>
+      <MorphPopoverContent side="top" align="start" className="w-80 p-2">
+        <div className="flex flex-col">
+          <ul className="flex max-h-[18rem] flex-col gap-0.5 overflow-y-auto overscroll-contain p-1">
+            {techs.map((tech) => (
+              <li key={tech.id}>
+                <button
+                  type="button"
+                  data-layer-tech={tech.id}
+                  onClick={() => {
+                    setOpen(false);
+                    navigate(`/notes/${encodeURIComponent(tech.id)}`);
+                  }}
+                  className="flex w-full items-baseline gap-2 rounded-md px-1.5 py-1 text-left transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
+                >
+                  <span className="min-w-0 flex-1 truncate text-xs">{tech.title}</span>
+                  {tech.kind ? <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{tech.kind}</span> : null}
+                </button>
+              </li>
+            ))}
+          </ul>
+          <div className="mt-1 border-t border-border/60 pt-1">
+            <Link
+              to={`/explore?type=tech&layer=${encodeURIComponent(layer.id)}`}
+              onClick={() => setOpen(false)}
+              className="flex w-full items-center justify-between gap-2 rounded-md px-1.5 py-1 text-[11px] font-medium text-primary-text transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
+            >
+              {t("home.viewInExplore")}
+              <ArrowRight aria-hidden="true" className="size-3.5" />
+            </Link>
+          </div>
+        </div>
+      </MorphPopoverContent>
+    </MorphPopover>
   );
 }
 
@@ -768,6 +875,14 @@ export function HomePage() {
 
   const gridRef = useRef<HTMLDivElement>(null);
   const activityRef = useRef<HTMLElement>(null);
+  const rightRef = useRef<HTMLDivElement>(null);
+  const healthRef = useRef<HTMLElement>(null);
+  const layersRef = useRef<HTMLElement>(null);
+  const recentRef = useRef<HTMLElement>(null);
+  const recentHeightRef = useRef(0);
+  // At 1024-1439 Recently edited is the last block in the side column, so it shows
+  // only while it still fits above the Dock; below 1024 and from 1440 up it always shows.
+  const [showRecent, setShowRecent] = useState(true);
   const [activityFade, setActivityFade] = useState<EdgeFade>({ top: false, bottom: false });
   const layoutSize = useHomeLayoutSize(gridRef, activityRef, groups.length + (showPacks ? 1000 : 0));
   // biome-ignore lint/correctness/useExhaustiveDependencies: re-attach whenever the list renders — ResizeObserver then covers size changes.
@@ -793,6 +908,46 @@ export function HomePage() {
       el.removeEventListener("scroll", update);
     };
   }, [groups.length]);
+
+  // Recently edited only sits in the side column between 1024 and 1439; keep it
+  // visible while the health strip plus the layers list still leave it room.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: re-measure when the stats or layers data changes.
+  useEffect(() => {
+    const col = rightRef.current;
+    if (!col) return;
+    let cancelled = false;
+    const measure = () => {
+      if (cancelled) return;
+      if (window.innerWidth < 1024 || window.innerWidth >= 1440) {
+        setShowRecent((prev) => (prev ? prev : true));
+        return;
+      }
+      const recent = recentRef.current;
+      const measured = recent?.getBoundingClientRect().height ?? 0;
+      if (measured > 0) recentHeightRef.current = measured;
+      const healthHeight = healthRef.current?.offsetHeight ?? 0;
+      const layersHeight = layersRef.current?.offsetHeight ?? 0;
+      const used = healthHeight + (layersHeight > 0 ? COLUMN_GAP + layersHeight : 0);
+      const fits = used + COLUMN_GAP + recentHeightRef.current <= col.clientHeight + 1;
+      setShowRecent((prev) => (prev === fits ? prev : fits));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(col);
+    const main = col.closest("main");
+    if (main) observer.observe(main);
+    if (healthRef.current) observer.observe(healthRef.current);
+    if (layersRef.current) observer.observe(layersRef.current);
+    // A new recent list changes the section's own height; re-measure so it can hide
+    // again instead of being clipped mid-row.
+    if (recentRef.current) observer.observe(recentRef.current);
+    window.addEventListener("resize", measure);
+    return () => {
+      cancelled = true;
+      observer.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, [stats.data, layers.data]);
   const activityMaskImage = activityMask(activityFade);
 
   const pendingCommunityPacks = useMemo(
@@ -908,6 +1063,8 @@ export function HomePage() {
   const counts = stats.data?.counts;
   const total = stats.data?.total ?? 0;
   const pending = stats.data?.inbox ?? 0;
+  const layerList = layers.data ?? [];
+  const maxLayerCount = layerList.reduce((max, layer) => Math.max(max, layer.techs.length), 0);
   const busyId =
     approve.isPending && typeof approve.variables === "string"
       ? approve.variables
@@ -1070,156 +1227,111 @@ export function HomePage() {
               )}
             </section>
 
-            <div className="flex min-w-0 flex-col gap-6 min-[1024px]:min-h-0 min-[1024px]:overflow-y-auto min-[1440px]:contents">
-              <section aria-label={t("home.health")} className="min-w-0 min-[1440px]:min-h-0 min-[1440px]:overflow-y-auto">
-                <SectionLabel>{t("home.health")}</SectionLabel>
-                {stats.error ? (
-                  <div className="mt-2">
-                    <ErrorState error={stats.error} />
-                  </div>
-                ) : null}
-                <div className="mt-2 grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-2 min-[1440px]:grid-cols-2">
-                  {TYPE_ORDER.map((type) => (
-                    <StatTile
-                      key={type}
-                      stat={type}
-                      label={t(`type.${type}` as TranslationKey)}
-                      dot={`var(--type-${type})`}
-                      value={counts?.[type] ?? 0}
-                      onClick={() => navigate(type === "project" ? "/projects" : `/explore?type=${type}`)}
-                    />
-                  ))}
+            <div
+              ref={rightRef}
+              className="flex min-w-0 flex-col gap-4 min-[1024px]:min-h-0 min-[1024px]:overflow-hidden min-[1440px]:contents"
+            >
+              <div className="flex min-w-0 shrink-0 flex-col gap-4 min-[1440px]:min-h-0 min-[1440px]:overflow-y-auto">
+                <section ref={healthRef} aria-label={t("home.health")} className="min-w-0">
+                  <SectionLabel>{t("home.health")}</SectionLabel>
+                  {stats.error ? (
+                    <div className="mt-2">
+                      <ErrorState error={stats.error} />
+                    </div>
+                  ) : null}
+                  <div data-testid="stats-strip" className="mt-2 flex flex-wrap items-baseline gap-x-4 gap-y-0.5">
+                    {TYPE_ORDER.map((type) => (
+                      <StatItem
+                        key={type}
+                        stat={type}
+                        label={t(`type.${type}` as TranslationKey)}
+                        dot={`var(--type-${type})`}
+                        value={counts?.[type] ?? 0}
+                        onClick={() => navigate(type === "project" ? "/projects" : `/explore?type=${type}`)}
+                      />
+                    ))}
 
-                  <StatTile
-                    stat="broken"
-                    label={t("home.brokenLinks")}
-                    value={stats.data?.brokenLinks.length ?? 0}
-                    alert={(stats.data?.brokenLinks.length ?? 0) > 0}
-                  >
-                    {(close) => (
+                    <StatItem
+                      stat="broken"
+                      label={t("home.brokenLinks")}
+                      value={stats.data?.brokenLinks.length ?? 0}
+                      alert={(stats.data?.brokenLinks.length ?? 0) > 0}
+                    >
+                      {(close) => (
+                        <ul className="flex flex-col gap-0.5 p-1">
+                          {(stats.data?.brokenLinks ?? []).map((link) => (
+                            <li key={`${link.from}-${link.to}`} data-broken-link={link.to} className="flex min-w-0 items-center gap-1">
+                              <span className="min-w-0 flex-1 truncate px-1.5 font-mono text-[11px] text-muted-foreground">
+                                {link.from} <span className="text-foreground/50">→</span> {link.to}
+                              </span>
+                              <button
+                                type="button"
+                                aria-label={t("home.brokenLinkOpen", { id: link.from })}
+                                onClick={() => navigate(`/notes/${encodeURIComponent(link.from)}`)}
+                                className={POPOVER_ACTION}
+                              >
+                                {t("home.brokenLinkOpenShort")}
+                              </button>
+                              <button
+                                type="button"
+                                aria-label={t("home.brokenLinkCreate", { id: link.to })}
+                                onClick={() => {
+                                  close();
+                                  window.dispatchEvent(new CustomEvent("basics:new-note", { detail: { id: link.to } }));
+                                }}
+                                className={`${POPOVER_ACTION} text-primary-text`}
+                              >
+                                {t("home.brokenLinkCreateShort")}
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </StatItem>
+
+                    <StatItem
+                      stat="orphans"
+                      label={t("home.orphans")}
+                      value={stats.data?.orphans.length ?? 0}
+                      alert={(stats.data?.orphans.length ?? 0) > 0}
+                    >
                       <ul className="flex flex-col gap-0.5 p-1">
-                        {(stats.data?.brokenLinks ?? []).map((link) => (
-                          <li key={`${link.from}-${link.to}`} data-broken-link={link.to} className="flex min-w-0 items-center gap-1">
-                            <span className="min-w-0 flex-1 truncate px-1.5 font-mono text-[11px] text-muted-foreground">
-                              {link.from} <span className="text-foreground/50">→</span> {link.to}
-                            </span>
+                        {(stats.data?.orphans ?? []).map((id) => (
+                          <li key={id}>
                             <button
                               type="button"
-                              aria-label={t("home.brokenLinkOpen", { id: link.from })}
-                              onClick={() => navigate(`/notes/${encodeURIComponent(link.from)}`)}
-                              className={TILE_ACTION}
+                              onClick={() => navigate(`/notes/${encodeURIComponent(id)}`)}
+                              className="w-full truncate rounded-md px-1.5 py-1 text-left font-mono text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
                             >
-                              {t("home.brokenLinkOpenShort")}
-                            </button>
-                            <button
-                              type="button"
-                              aria-label={t("home.brokenLinkCreate", { id: link.to })}
-                              onClick={() => {
-                                close();
-                                window.dispatchEvent(new CustomEvent("basics:new-note", { detail: { id: link.to } }));
-                              }}
-                              className={`${TILE_ACTION} text-primary-text`}
-                            >
-                              {t("home.brokenLinkCreateShort")}
+                              {id}
                             </button>
                           </li>
                         ))}
                       </ul>
-                    )}
-                  </StatTile>
-
-                  <StatTile stat="orphans" label={t("home.orphans")} value={stats.data?.orphans.length ?? 0}>
-                    <ul className="flex flex-col gap-0.5 p-1">
-                      {(stats.data?.orphans ?? []).map((id) => (
-                        <li key={id}>
-                          <button
-                            type="button"
-                            onClick={() => navigate(`/notes/${encodeURIComponent(id)}`)}
-                            className="w-full truncate rounded-md px-1.5 py-1 text-left font-mono text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
-                          >
-                            {id}
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  </StatTile>
-
-                  <div className="min-[1440px]:hidden">
-                    <StatTile stat="recent" label={t("home.recent")} value={stats.data?.recent.length ?? 0}>
-                      <ul className="flex flex-col gap-0.5 p-1">
-                        {(stats.data?.recent ?? []).map((note) => (
-                          <li key={note.id}>
-                            <button
-                              type="button"
-                              onClick={() => navigate(`/notes/${encodeURIComponent(note.id)}`)}
-                              className="flex w-full items-baseline gap-2 rounded-md px-1.5 py-1 text-left transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
-                            >
-                              <span className="min-w-0 flex-1 truncate text-xs">{note.title || note.id}</span>
-                              <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{note.updated}</span>
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    </StatTile>
+                    </StatItem>
                   </div>
-                </div>
+                </section>
 
-                {layers.data && layers.data.length > 0 ? (
-                  <div className="mt-4">
+                {layerList.length > 0 ? (
+                  <section ref={layersRef} aria-label={t("home.layers")} className="min-w-0">
                     <SectionLabel>{t("home.layers")}</SectionLabel>
-                    <div className="mt-2 grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-2 min-[1440px]:grid-cols-3">
-                      {layers.data.map((layer) => (
-                        <StatTile
-                          key={layer.id}
-                          stat={`layer-${layer.id}`}
-                          label={layer.title || layer.id}
-                          value={layer.techs.length}
-                          dot="var(--muted-foreground)"
-                        >
-                          {(close) => (
-                            <div className="flex flex-col">
-                              <ul className="flex max-h-[18rem] flex-col gap-0.5 overflow-y-auto overscroll-contain p-1">
-                                {(layerTechs.get(layer.id) ?? []).map((tech) => (
-                                  <li key={tech.id}>
-                                    <button
-                                      type="button"
-                                      data-layer-tech={tech.id}
-                                      onClick={() => {
-                                        close();
-                                        navigate(`/notes/${encodeURIComponent(tech.id)}`);
-                                      }}
-                                      className="flex w-full items-baseline gap-2 rounded-md px-1.5 py-1 text-left transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
-                                    >
-                                      <span className="min-w-0 flex-1 truncate text-xs">{tech.title}</span>
-                                      {tech.kind ? (
-                                        <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{tech.kind}</span>
-                                      ) : null}
-                                    </button>
-                                  </li>
-                                ))}
-                              </ul>
-                              <div className="mt-1 border-t border-border/60 pt-1">
-                                <Link
-                                  to={`/explore?type=tech&layer=${encodeURIComponent(layer.id)}`}
-                                  onClick={close}
-                                  className="flex w-full items-center justify-between gap-2 rounded-md px-1.5 py-1 text-[11px] font-medium text-primary-text transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
-                                >
-                                  {t("home.viewInExplore")}
-                                  <ArrowRight aria-hidden="true" className="size-3.5" />
-                                </Link>
-                              </div>
-                            </div>
-                          )}
-                        </StatTile>
+                    <div className="mt-2 grid min-w-0 grid-cols-2 gap-x-4 gap-y-1">
+                      {layerList.map((layer) => (
+                        <LayerRow key={layer.id} layer={layer} techs={layerTechs.get(layer.id) ?? []} max={maxLayerCount} />
                       ))}
                     </div>
-                  </div>
+                  </section>
                 ) : null}
-              </section>
+              </div>
 
-              <section className="hidden min-w-0 min-[1440px]:block min-[1440px]:min-h-0 min-[1440px]:overflow-y-auto">
+              <section
+                ref={recentRef}
+                data-testid="recent-section"
+                aria-label={t("home.recent")}
+                className={cn("shrink-0 min-w-0 min-[1440px]:min-h-0 min-[1440px]:overflow-y-auto", !showRecent && "hidden")}
+              >
                 <SectionLabel>{t("home.recent")}</SectionLabel>
-                <ul className="mt-1 flex flex-col">
+                <ul className="mt-1 flex min-w-0 flex-col min-[1024px]:max-[1439px]:[&>li:nth-child(n+6)]:hidden">
                   {(stats.data?.recent ?? []).map((note) => (
                     <li key={note.id} className="border-b border-border/50 last:border-0">
                       <button

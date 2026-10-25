@@ -271,6 +271,168 @@ test("Home fits the desktop window with an empty inbox", async ({ page }) => {
   }
 });
 
+/** Add `count` layer notes so Home renders a full layer list; returns a cleanup. */
+function seedLayers(count: number): () => void {
+  const dir = path.join(vaultPath(), "layers");
+  fs.mkdirSync(dir, { recursive: true });
+  const created: string[] = [];
+  for (let index = 1; index <= count; index += 1) {
+    const id = `e2e-layer-${index}`;
+    const file = path.join(dir, `${id}.md`);
+    if (fs.existsSync(file)) continue;
+    fs.writeFileSync(file, `---\ntype: layer\ntitle: E2E Layer ${index}\n---\n# E2E Layer ${index}\n`);
+    created.push(file);
+  }
+  return () => {
+    for (const file of created) fs.rmSync(file, { force: true });
+  };
+}
+
+test("Home shows every layer above the Dock with twelve layers", async ({ page }) => {
+  // examples/vault ships five layers; add seven to reach the owner's twelve.
+  const restoreLayers = seedLayers(7);
+  const restoreInbox = clearInbox();
+  const restoreActivity = seedActivity(60);
+  try {
+    for (const { width, height } of [
+      { width: 1280, height: 820 },
+      { width: 1100, height: 760 },
+    ]) {
+      await page.setViewportSize({ width, height });
+      await page.goto("/");
+      await expect(page.getByTestId("activity-panel")).toBeVisible();
+      await expect(page.locator('[data-stat^="layer-"]')).toHaveCount(12);
+      await settle(page);
+
+      const m = await page.evaluate(() => {
+        const dockTop = document.querySelector<HTMLElement>("nav")?.getBoundingClientRect().top ?? 0;
+        const rows = [...document.querySelectorAll<HTMLElement>('[data-stat^="layer-"]')].map((row) => {
+          const rect = row.getBoundingClientRect();
+          return { top: rect.top, bottom: rect.bottom, text: row.textContent ?? "", visible: row.checkVisibility() };
+        });
+        return { dockTop, rows };
+      });
+
+      // All twelve layers render and the last row clears the Dock at both sizes.
+      expect(m.rows.length, `${width}x${height}`).toBe(12);
+      for (const row of m.rows) {
+        expect(row.text, `${width}x${height}`).not.toBe("");
+        expect(row.visible, `${row.text} visible at ${width}x${height}`).toBe(true);
+        expect(row.top, `${row.text} top at ${width}x${height}`).toBeGreaterThanOrEqual(0);
+        expect(row.bottom, `${row.text} bottom at ${width}x${height}`).toBeLessThanOrEqual(m.dockTop);
+      }
+    }
+  } finally {
+    restoreActivity();
+    restoreInbox();
+    restoreLayers();
+  }
+});
+
+test("Home keeps the stats, layers and recent notes in three columns from 1440", async ({ page }) => {
+  // Seeded activity makes the first column as tall as the grid, so the row alignment is real.
+  const restoreActivity = seedActivity(60);
+  try {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/");
+    await expect(page.getByTestId("activity-panel")).toBeVisible();
+    await expect(page.locator('[data-stat^="layer-"]').first()).toBeVisible();
+    await settle(page);
+
+    const m = await page.evaluate(() => {
+      const rect = (selector: string) => {
+        const box = document.querySelector<HTMLElement>(selector)?.getBoundingClientRect();
+        return box ? { top: box.top, bottom: box.bottom, left: box.left, right: box.right } : null;
+      };
+      const activity = document.querySelector<HTMLElement>('[data-testid="activity-panel"]')?.getBoundingClientRect();
+      return {
+        activity: activity ? { top: activity.top, bottom: activity.bottom, left: activity.left, right: activity.right } : null,
+        health: rect('[aria-label="Vault health & shape"]'),
+        layers: rect('[aria-label="Layers"]'),
+        recent: rect('[data-testid="recent-section"]'),
+        dockTop: document.querySelector<HTMLElement>("nav")?.getBoundingClientRect().top ?? 0,
+      };
+    });
+
+    expect(m.activity).not.toBeNull();
+    expect(m.health).not.toBeNull();
+    expect(m.layers).not.toBeNull();
+    expect(m.recent).not.toBeNull();
+    if (!m.activity || !m.health || !m.layers || !m.recent) return;
+
+    // Activity | stats above layers | recently edited, with all three starting on the same row.
+    expect(m.activity.right).toBeLessThan(m.health.left);
+    expect(m.health.left).toBeCloseTo(m.layers.left, 0);
+    expect(m.health.right).toBeCloseTo(m.layers.right, 0);
+    expect(m.layers.bottom).toBeLessThan(m.recent.bottom);
+    expect(m.layers.right).toBeLessThan(m.recent.left);
+    expect(m.recent.top).toBeCloseTo(m.health.top, 0);
+    expect(m.recent.bottom).toBeLessThanOrEqual(m.dockTop);
+  } finally {
+    restoreActivity();
+  }
+});
+
+test("Broken links is alarmed only while it has links and keeps its actions", async ({ page, request }) => {
+  const file = path.join(vaultPath(), "tech", "broken-alert-source.md");
+  fs.writeFileSync(
+    file,
+    [
+      "---",
+      "type: tech",
+      "kind: library",
+      "title: Broken alert source",
+      "layer: backend",
+      "---",
+      "# Broken alert source",
+      "",
+      "Depends on [[ghost-alert]].",
+      "",
+    ].join("\n"),
+  );
+  const stat = page.locator('[data-stat="broken"]');
+  const alertMarks = stat.locator(".text-destructive-text");
+  const brokenCount = async () => {
+    const stats = (await (await request.get("/api/stats")).json()) as { brokenLinks: { from: string; to: string }[] };
+    return stats.brokenLinks.length;
+  };
+
+  try {
+    await page.setViewportSize({ width: 1280, height: 820 });
+    await page.goto("/");
+    await settle(page);
+
+    await expect.poll(brokenCount).toBeGreaterThan(0);
+    // The alert is real styling, not only a test hook.
+    await expect(alertMarks.first()).toBeVisible();
+    await expect(stat).toHaveAttribute("data-alert", "true");
+
+    // The popover still offers Open and Create.
+    await page.getByRole("button", { name: /^Broken links: \d+ — Show details$/ }).click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.locator('[data-broken-link="ghost-alert"]')).toBeVisible();
+    await expect(dialog.getByRole("button", { name: /^Open broken-alert-source/ })).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Create note ghost-alert" })).toBeVisible();
+    await page.keyboard.press("Escape");
+
+    fs.rmSync(file, { force: true });
+    await page.reload();
+    await settle(page);
+
+    // Alert styling tracks the value: shown exactly while it is above zero.
+    await expect
+      .poll(async () => {
+        const count = await brokenCount();
+        const marks = await alertMarks.count();
+        return count > 0 ? marks > 0 : marks === 0;
+      })
+      .toBe(true);
+    if ((await brokenCount()) === 0) await expect(stat).not.toHaveAttribute("data-alert", "true");
+  } finally {
+    fs.rmSync(file, { force: true });
+  }
+});
+
 test("Home previews three proposals and links to the rest", async ({ page }) => {
   const ids = ["pending-1", "pending-2", "pending-3", "pending-4", "pending-5"];
   for (const id of ids) writeProposal(id, `Proposal ${id}`, "Pending body.");
