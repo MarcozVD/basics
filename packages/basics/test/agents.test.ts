@@ -242,7 +242,7 @@ test("a run streams output, uses a fresh empty cwd and passes the prompt as one 
       // No shell on Windows or POSIX: the metacharacters stay inside the single argument.
       assert.ok(!fs.existsSync(path.join(tempRoot, "hacked")));
       assert.notEqual(invocation.cwd, tempRoot);
-      assert.equal(path.dirname(invocation.cwd), tempRoot);
+      assert.equal(path.dirname(invocation.cwd), fs.realpathSync(tempRoot));
       assert.equal(fs.existsSync(invocation.cwd), false, "the run directory is removed when the run ends");
     },
     { FAKE_AGENT_MODE: "claude", FAKE_AGENT_LOG: log },
