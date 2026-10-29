@@ -1,0 +1,3 @@
+wrote STACK.md
+wrote AGENTS.md
+wrote CLAUDE.md
