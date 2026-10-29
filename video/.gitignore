@@ -1,0 +1,9 @@
+node_modules/
+out/
+public/footage/
+capture/probe/
+capture/frames/
+capture/recordly-cursor.json
+.tmp/
+capture/timeline.probe.json
+capture/claude-scene7.jsonl

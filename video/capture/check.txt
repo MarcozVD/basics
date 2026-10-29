@@ -1,0 +1,2 @@
+CHECK                 STATUS  DURATION
+typescript-typecheck  pass    2243 ms

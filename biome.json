@@ -19,6 +19,7 @@
       "!packages/ui/src/lib/touch.ts",
       "!**/node_modules",
       "!**/examples",
+      "!video",
       "!**/docs",
       "!**/package-lock.json",
       "!**/pnpm-lock.yaml",

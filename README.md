@@ -43,7 +43,9 @@ Other clients (Cursor, VS Code, Codex, OpenCode, Windsurf) are covered in
 - **Desktop app** — the same UI and MCP server running in a standalone, tray-resident window with its own bundled Node runtime; no npm needed. See [Desktop app](https://marcozvd.github.io/basics/guide/desktop.html).
 - **Agent skill** — a `SKILL.md` that teaches Claude Code, OpenCode or Codex when to call each Basics tool. See [Agent skill](https://marcozvd.github.io/basics/guide/agent-skill.html).
 
-_Screenshots (web UI, Inbox diff, graph): coming soon._
+![An agent proposal reviewed in the Inbox, then a stack recommended and exported](site/public/media/basics-inbox-recommend.gif)
+
+Watch the full two-minute tour (Spanish narration): [basics-demo.mp4](https://marcozvd.github.io/basics/media/basics-demo.mp4).
 
 ## Documentation
 
