@@ -79,6 +79,33 @@ jobs:
           releaseDraft: true
           prerelease: false
 
+      - name: Smoke test the Linux build
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get install -y xvfb dbus
+          # The app starts its bundled server without a vault picker only when a vault
+          # already exists, so create one and point the app (and its sidecar) at it.
+          vault="$RUNNER_TEMP/vault"
+          node packages/basics/dist/cli.js init "$vault" --packs none
+          export BASICS_DIR="$vault"
+          appimage=$(find "${{ matrix.bundle_dir }}/appimage" -name '*.AppImage' | head -n1)
+          test -n "$appimage"
+          # Extract (no FUSE) and run the AppImage headless, with a session bus so the tray loads.
+          APPIMAGE_EXTRACT_AND_RUN=1 xvfb-run -a dbus-run-session -- "$appimage" &
+          app=$!
+          healthy=
+          for _ in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:4747/api/health >/dev/null 2>&1; then healthy=1; break; fi
+            sleep 1
+          done
+          kill "$app" 2>/dev/null || true
+          pkill -f 'cli.js ui' 2>/dev/null || true
+          if [ -z "$healthy" ]; then
+            echo "::error::the desktop app never answered /api/health on http://127.0.0.1:4747" >&2
+            exit 1
+          fi
+          echo "desktop smoke test passed: /api/health answered"
+
       - uses: actions/upload-artifact@v4
         with:
           name: basics-desktop-${{ matrix.triple }}
