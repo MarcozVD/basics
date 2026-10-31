@@ -88,4 +88,5 @@ jobs:
             ${{ matrix.bundle_dir }}/dmg/*.dmg
             ${{ matrix.bundle_dir }}/appimage/*.AppImage
             ${{ matrix.bundle_dir }}/deb/*.deb
+            ${{ matrix.bundle_dir }}/rpm/*.rpm
           if-no-files-found: error
