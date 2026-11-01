@@ -20,6 +20,7 @@ use tauri_plugin_autostart::{MacosLauncher, ManagerExt as _};
 use tauri_plugin_clipboard_manager::ClipboardExt;
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 use tauri_plugin_opener::OpenerExt;
+#[cfg(not(target_os = "linux"))]
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
 
@@ -47,10 +48,44 @@ struct Status {
     needs_vault: bool,
 }
 
+/// The server this app started, so it can be stopped on quit. Linux spawns Node
+/// itself (to set `PR_SET_PDEATHSIG`) and only keeps its pid; elsewhere the
+/// process comes from tauri-plugin-shell.
+enum Sidecar {
+    #[cfg(not(target_os = "linux"))]
+    Shell(CommandChild),
+    #[cfg(target_os = "linux")]
+    Pid(u32),
+}
+
+impl Sidecar {
+    fn pid(&self) -> u32 {
+        match self {
+            #[cfg(not(target_os = "linux"))]
+            Sidecar::Shell(child) => child.pid(),
+            #[cfg(target_os = "linux")]
+            Sidecar::Pid(pid) => *pid,
+        }
+    }
+
+    fn stop(self) {
+        match self {
+            #[cfg(not(target_os = "linux"))]
+            Sidecar::Shell(child) => {
+                let _ = child.kill();
+            }
+            #[cfg(target_os = "linux")]
+            Sidecar::Pid(pid) => unsafe {
+                libc::kill(pid as libc::pid_t, libc::SIGKILL);
+            },
+        }
+    }
+}
+
 #[derive(Default)]
 struct Server {
     /// The sidecar this app started; `None` when attached to an existing server.
-    child: Option<CommandChild>,
+    child: Option<Sidecar>,
     status: Status,
     log: VecDeque<String>,
     /// Vault folder reported by the running server's `/api/health`.
@@ -158,7 +193,9 @@ fn tie_to_app_lifetime(pid: u32) {
     }
 }
 
-/// Elsewhere a killed app can leave the server running; the next launch attaches to it.
+/// Linux is handled by `PR_SET_PDEATHSIG` where the sidecar is spawned; macOS has no
+/// cheap equivalent, so a killed app can leave the server running and the next launch
+/// attaches to it.
 #[cfg(not(windows))]
 fn tie_to_app_lifetime(_pid: u32) {}
 
@@ -171,7 +208,7 @@ fn stop_sidecar(app: &AppHandle) {
     let state = app.state::<ServerState>();
     let child = state.0.lock().unwrap().child.take();
     if let Some(child) = child {
-        let _ = child.kill();
+        child.stop();
     }
 }
 
@@ -179,6 +216,112 @@ fn open_in_window(app: &AppHandle, url: &str) {
     if let (Some(window), Ok(parsed)) = (app.get_webview_window("main"), url.parse()) {
         let _ = window.navigate(parsed);
     }
+}
+
+/// Spawn the bundled `cli.js ui` server and stream its output to the log.
+#[cfg(not(target_os = "linux"))]
+fn start_server(app: &AppHandle, cli: &std::path::Path, port: u16) -> Result<Sidecar, String> {
+    let command = app.shell().sidecar("node").map_err(|err| format!("the bundled Node runtime is missing: {err}"))?.args([
+        cli.to_string_lossy().into_owned(),
+        "ui".into(),
+        "--no-open".into(),
+        "--port".into(),
+        port.to_string(),
+    ]);
+    let (mut events, child) = command.spawn().map_err(|err| format!("could not start the server: {err}"))?;
+
+    let log_app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        while let Some(event) = events.recv().await {
+            match event {
+                CommandEvent::Stdout(bytes) | CommandEvent::Stderr(bytes) => push_log(&log_app, String::from_utf8_lossy(&bytes).into_owned()),
+                CommandEvent::Error(err) => push_log(&log_app, err),
+                CommandEvent::Terminated(payload) => {
+                    push_log(&log_app, format!("server exited (code {:?})", payload.code));
+                    log_app.state::<ServerState>().0.lock().unwrap().child = None;
+                }
+                _ => {}
+            }
+        }
+    });
+
+    Ok(Sidecar::Shell(child))
+}
+
+/// On Linux the server is spawned directly so the child can be tied to this process's
+/// lifetime with `PR_SET_PDEATHSIG`: the kernel then sends it `SIGTERM` the moment the
+/// app dies, even on `SIGKILL`, so a killed or crashed app never leaves an orphan server
+/// holding the port. tauri-plugin-shell spawns without a `pre_exec` hook, so we take its
+/// resolved sidecar path (via `Into<StdCommand>`) and keep the same stdout/stderr capture.
+#[cfg(target_os = "linux")]
+fn start_server(app: &AppHandle, cli: &std::path::Path, port: u16) -> Result<Sidecar, String> {
+    use std::os::unix::process::CommandExt;
+    use std::process::Stdio;
+
+    let mut command: std::process::Command = app.shell().sidecar("node").map_err(|err| format!("the bundled Node runtime is missing: {err}"))?.into();
+    let port_arg = port.to_string();
+    command
+        .arg(cli)
+        .args(["ui", "--no-open", "--port"])
+        .arg(&port_arg)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    unsafe {
+        command.pre_exec(|| {
+            if libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGTERM) != 0 {
+                return Err(std::io::Error::last_os_error());
+            }
+            Ok(())
+        });
+    }
+
+    let log_app = app.clone();
+    let (tx, rx) = std::sync::mpsc::channel();
+    // The thread that forks Node must outlive it: PR_SET_PDEATHSIG fires when the forking
+    // *thread* ends, and we want that to mean "the app process ended". Blocking on `wait()`
+    // keeps this thread alive for exactly as long as the server runs.
+    std::thread::spawn(move || {
+        let mut child = match command.spawn() {
+            Ok(child) => child,
+            Err(err) => {
+                let _ = tx.send(Err(format!("could not start the server: {err}")));
+                return;
+            }
+        };
+        let _ = tx.send(Ok(child.id()));
+        let stdout = child.stdout.take().map(|out| log_pipe(out, log_app.clone()));
+        let stderr = child.stderr.take().map(|err| log_pipe(err, log_app.clone()));
+        match child.wait() {
+            Ok(status) => push_log(&log_app, format!("server exited (code {:?})", status.code())),
+            Err(err) => push_log(&log_app, err.to_string()),
+        }
+        if let Some(handle) = stdout {
+            let _ = handle.join();
+        }
+        if let Some(handle) = stderr {
+            let _ = handle.join();
+        }
+        log_app.state::<ServerState>().0.lock().unwrap().child = None;
+    });
+
+    let pid = rx.recv().map_err(|err| err.to_string())??;
+    Ok(Sidecar::Pid(pid))
+}
+
+/// Forward one of the server's output streams to the in-app log.
+#[cfg(target_os = "linux")]
+fn log_pipe<R: std::io::Read + Send + 'static>(stream: R, app: AppHandle) -> std::thread::JoinHandle<()> {
+    use std::io::BufRead;
+
+    std::thread::spawn(move || {
+        for line in std::io::BufReader::new(stream).lines() {
+            match line {
+                Ok(line) => push_log(&app, line),
+                Err(_) => break,
+            }
+        }
+    })
 }
 
 /// Attach to a running Basics server or spawn the sidecar, then wait for it.
@@ -216,37 +359,15 @@ fn start(app: AppHandle) {
         return;
     }
 
-    let command = match app.shell().sidecar("node") {
-        Ok(command) => command.args([cli.to_string_lossy().into_owned(), "ui".into(), "--no-open".into(), "--port".into(), port.to_string()]),
+    let sidecar = match start_server(&app, &cli, port) {
+        Ok(sidecar) => sidecar,
         Err(err) => {
-            set_status(&app, Phase::Error, format!("the bundled Node runtime is missing: {err}"), None);
+            set_status(&app, Phase::Error, err, None);
             return;
         }
     };
-    let (mut events, child) = match command.spawn() {
-        Ok(spawned) => spawned,
-        Err(err) => {
-            set_status(&app, Phase::Error, format!("could not start the server: {err}"), None);
-            return;
-        }
-    };
-    tie_to_app_lifetime(child.pid());
-    app.state::<ServerState>().0.lock().unwrap().child = Some(child);
-
-    let log_app = app.clone();
-    tauri::async_runtime::spawn(async move {
-        while let Some(event) = events.recv().await {
-            match event {
-                CommandEvent::Stdout(bytes) | CommandEvent::Stderr(bytes) => push_log(&log_app, String::from_utf8_lossy(&bytes).into_owned()),
-                CommandEvent::Error(err) => push_log(&log_app, err),
-                CommandEvent::Terminated(payload) => {
-                    push_log(&log_app, format!("server exited (code {:?})", payload.code));
-                    log_app.state::<ServerState>().0.lock().unwrap().child = None;
-                }
-                _ => {}
-            }
-        }
-    });
+    tie_to_app_lifetime(sidecar.pid());
+    app.state::<ServerState>().0.lock().unwrap().child = Some(sidecar);
 
     let deadline = Instant::now() + STARTUP_TIMEOUT;
     loop {
