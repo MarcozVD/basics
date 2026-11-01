@@ -137,6 +137,10 @@ export function MultiSelect({
   const triggerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  // RequestAnimationFrame id for the "keep focus in the field" nudge. It is
+  // cancelled on outside-close so a late refocus can never reopen the popover
+  // (the input's onFocus opens unconditionally).
+  const pendingFocusFrame = useRef<number | null>(null);
   const [internalValue, setInternalValue] = useState(defaultValue);
   const [internalOpen, setInternalOpen] = useState(defaultOpen);
   const [internalQuery, setInternalQuery] = useState(defaultQuery);
@@ -159,19 +163,25 @@ export function MultiSelect({
     [onQueryChange, queryControlled],
   );
 
+  const focusInput = useCallback(() => {
+    if (pendingFocusFrame.current != null) {
+      cancelAnimationFrame(pendingFocusFrame.current);
+    }
+    pendingFocusFrame.current = requestAnimationFrame(() => {
+      pendingFocusFrame.current = null;
+      inputRef.current?.focus({ preventScroll: true });
+    });
+  }, []);
+
   const updateOpen = useCallback(
     (next: boolean, restoreFocus = false) => {
       if (disabled && next) return;
       if (!openControlled) setInternalOpen(next);
       onOpenChange?.(next);
       if (!next) updateQuery("");
-      if (restoreFocus) {
-        requestAnimationFrame(() =>
-          inputRef.current?.focus({ preventScroll: true }),
-        );
-      }
+      if (restoreFocus) focusInput();
     },
-    [disabled, onOpenChange, openControlled, updateQuery],
+    [disabled, focusInput, onOpenChange, openControlled, updateQuery],
   );
 
   const registerItem = useCallback((item: RegisteredMultiSelectItem) => {
@@ -250,11 +260,9 @@ export function MultiSelect({
           : [...values, next],
       );
       updateQuery("");
-      requestAnimationFrame(() =>
-        inputRef.current?.focus({ preventScroll: true }),
-      );
+      focusInput();
     },
-    [commitValue, items, updateQuery, values],
+    [commitValue, focusInput, items, updateQuery, values],
   );
 
   const remove = useCallback(
@@ -271,11 +279,8 @@ export function MultiSelect({
 
   useEffect(() => {
     if (!open) return;
-    const frame = requestAnimationFrame(() =>
-      inputRef.current?.focus({ preventScroll: true }),
-    );
-    return () => cancelAnimationFrame(frame);
-  }, [open]);
+    focusInput();
+  }, [focusInput, open]);
 
   useEffect(() => {
     if (!activeValue || !open) return;
@@ -295,15 +300,27 @@ export function MultiSelect({
     const isInside = (target: Node) =>
       rootRef.current?.contains(target) || contentRef.current?.contains(target);
     const onPointerDown = (event: PointerEvent) => {
-      if (!isInside(event.target as Node)) updateOpen(false);
+      if (!isInside(event.target as Node)) {
+        cancelPendingFocus();
+        updateOpen(false);
+      }
     };
     const onFocusIn = (event: FocusEvent) => {
-      if (!isInside(event.target as Node)) updateOpen(false);
+      if (!isInside(event.target as Node)) {
+        cancelPendingFocus();
+        updateOpen(false);
+      }
     };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       event.preventDefault();
       updateOpen(false, true);
+    };
+    const cancelPendingFocus = () => {
+      if (pendingFocusFrame.current != null) {
+        cancelAnimationFrame(pendingFocusFrame.current);
+        pendingFocusFrame.current = null;
+      }
     };
     window.addEventListener("pointerdown", onPointerDown);
     window.addEventListener("focusin", onFocusIn);
