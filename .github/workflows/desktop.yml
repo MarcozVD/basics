@@ -90,21 +90,63 @@ jobs:
           export BASICS_DIR="$vault"
           appimage=$(find "${{ matrix.bundle_dir }}/appimage" -name '*.AppImage' | head -n1)
           test -n "$appimage"
-          # Extract (no FUSE) and run the AppImage headless, with a session bus so the tray loads.
-          APPIMAGE_EXTRACT_AND_RUN=1 xvfb-run -a dbus-run-session -- "$appimage" &
+
+          # Run headless (extract-and-run avoids FUSE, dbus keeps the tray alive). setsid puts
+          # xvfb-run, Xvfb, dbus and the app in one new process group; the same-pid shell writes
+          # that group's id first so one group kill can reap them all afterwards.
+          pgid_file=$(mktemp)
+          setsid sh -c 'echo $$ >"$1"; shift; exec env APPIMAGE_EXTRACT_AND_RUN=1 xvfb-run -a dbus-run-session -- "$@"' _ "$pgid_file" "$appimage" &
           app=$!
+          for _ in $(seq 1 50); do if [ -s "$pgid_file" ]; then break; fi; sleep 0.1; done
+          pgid=$(cat "$pgid_file" 2>/dev/null || true)
+          rm -f "$pgid_file"
+          [ -n "$pgid" ] || pgid=$app
+
+          cleanup() {
+            # SIGTERM then SIGKILL the whole group, plus a pattern sweep for anything re-parented.
+            if [ -n "$pgid" ]; then
+              kill -TERM -- "-$pgid" 2>/dev/null || true
+              sleep 2
+              kill -KILL -- "-$pgid" 2>/dev/null || true
+            fi
+            pkill -f 'cli.js ui' 2>/dev/null || true
+            pkill -f "$appimage" 2>/dev/null || true
+          }
+
           healthy=
           for _ in $(seq 1 60); do
             if curl -fsS http://127.0.0.1:4747/api/health >/dev/null 2>&1; then healthy=1; break; fi
             sleep 1
           done
-          kill "$app" 2>/dev/null || true
-          pkill -f 'cli.js ui' 2>/dev/null || true
           if [ -z "$healthy" ]; then
             echo "::error::the desktop app never answered /api/health on http://127.0.0.1:4747" >&2
+            cleanup
             exit 1
           fi
           echo "desktop smoke test passed: /api/health answered"
+
+          # Orphan check: SIGKILL the Tauri binary itself (not the AppImage runtime or xvfb-run)
+          # and require PR_SET_PDEATHSIG to take the sidecar down with it within 10s.
+          app_pid=$(pgrep -x basics-desktop | head -n1 || true)
+          [ -n "$app_pid" ] || app_pid=$(pgrep -f basics-desktop | head -n1 || true)
+          sidecar_pid=$(pgrep -f 'cli.js ui' | head -n1 || true)
+          echo "app pid: ${app_pid:-none}, sidecar pid: ${sidecar_pid:-none}"
+          if [ -n "$app_pid" ]; then kill -9 "$app_pid" 2>/dev/null || true; fi
+
+          freed=
+          for _ in $(seq 1 10); do
+            alive=$(pgrep -f 'cli.js ui' | head -n1 || true)
+            if [ -z "$alive" ] && ! curl -fsS http://127.0.0.1:4747/api/health >/dev/null 2>&1; then
+              freed=1; break
+            fi
+            sleep 1
+          done
+          cleanup
+          if [ -z "$app_pid" ] || [ -z "$freed" ]; then
+            echo "::error::the sidecar outlived the app: PR_SET_PDEATHSIG did not free port 4747" >&2
+            exit 1
+          fi
+          echo "orphan check passed: killing the app stopped the sidecar"
 
       - uses: actions/upload-artifact@v4
         with:
