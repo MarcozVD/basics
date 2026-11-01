@@ -82,3 +82,8 @@ HTTP MCP configs to the new port.
 
 **The UI is empty on a new vault**
 Home shows the starter-pack onboarding; install a pack there or run `basics pack install core-layers` and reload.
+
+## Linux and macOS notes
+
+- Config: `~/.config/basics/config.json` (or `$BASICS_CONFIG`). `basics config path` prints the exact path.
+- Set the vault directory from your shell: `export BASICS_DIR=~/vault` (add it to `~/.bashrc` or `~/.zshrc` to keep it).

@@ -71,8 +71,8 @@ The desktop app (`apps/desktop`) is **not** released through the npm `v*` flow a
 separately by the [`.github/workflows/desktop.yml`](.github/workflows/desktop.yml) `Desktop` workflow.
 
 - **Getting artifacts without a release**: run the **Desktop** workflow from the Actions tab (`workflow_dispatch`).
-  It uploads the installers (`Windows` .msi/.exe, `macOS` universal .dmg, `Linux` .AppImage/.deb) as workflow
-  artifacts.
+  It uploads the installers (`Windows` .msi/.exe, `macOS` universal .dmg, `Linux` .AppImage/.deb/.rpm) as workflow
+  artifacts, and smoke-tests the Linux build before uploading.
 - **Cutting a desktop release**: push a tag of the form `desktop-vX.Y.Z`:
 
   ```bash

@@ -17,7 +17,10 @@ draft-ready artifacts. Download the one for your OS:
 | --- | --- | --- |
 | Windows | `Basics_1.2.0_x64_en-US.msi` or `Basics_1.2.0_x64-setup.exe` | SmartScreen will warn that the publisher is unknown. Click **More info** → **Run anyway**. |
 | macOS (universal) | `Basics_1.2.0_universal.dmg` | Unsigned, so right-click the downloaded `.dmg` (or the `Basics.app` inside) and choose **Open**, or open **System Settings → Privacy & Security** and click **Open Anyway** next to the blocked app. |
-| Linux | `Basics_1.2.0_amd64.AppImage` or `Basics_1.2.0_amd64.deb` | For the AppImage: `chmod +x Basics_*.AppImage` and run it. The `.deb` installs normally (e.g. `sudo dpkg -i` or your package manager). |
+| Linux | `Basics_1.2.0_amd64.AppImage`, `Basics_1.2.0_amd64.deb` or `Basics-1.2.0-1.x86_64.rpm` | For the AppImage: `chmod +x Basics_*.AppImage` and run it (Ubuntu 22.04/24.04 also need `libfuse2`). The `.deb` installs with `sudo dpkg -i` or your package manager; the `.rpm` with `sudo dnf install ./Basics-*.rpm`. |
+
+On GNOME, the tray icon needs the AppIndicator/KStatusNotifierItem extension (for example `gnome-shell-extension-appindicator`). Without it
+the app still runs and serves MCP; only the tray menu is missing.
 
 ## First run
 
@@ -84,6 +87,6 @@ over the old one; your vault and config are untouched.
 
 - **Windows**: Settings → Apps → **Basics** → Uninstall (or the uninstaller in the start-menu entry).
 - **macOS**: drag the **Basics** app to the Trash. (If you set **Start at login**, disable it first.)
-- **Linux**: `sudo dpkg -r basics` for the `.deb` install, or just delete the AppImage you downloaded.
+- **Linux**: `sudo dnf remove basics` for the `.rpm`, `sudo dpkg -r basics` for the `.deb`, or just delete the AppImage you downloaded.
 
 Uninstalling the app does not delete your vault folder.
