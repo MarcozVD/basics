@@ -259,6 +259,7 @@ const TOOLS: ToolSpec[] = [
     name: "get_vault_overview",
     description:
       "Read the whole vault catalog in one call: every layer with its techs (kind, use_when, avoid_when, performs_best), the stack profiles and the past projects. " +
+      "Archived projects are omitted; finished (done) projects stay, so their stack and lessons still inform the next choice. " +
       "Use it to reason over the vault when a ranked shortlist is not enough; read deciding notes with get_note before choosing. Read-only.",
     inputSchema: {
       layers: z.array(z.string()).optional().describe("Restrict the catalog to these layer ids"),
@@ -416,6 +417,7 @@ const TOOLS: ToolSpec[] = [
     name: "record_project_outcome",
     description:
       "Propose an outcome for a project note: append lessons, optionally extend tech notes (use_when, avoid_when, performs_best, lessons) and add a dated outcome section. " +
+      "A finished (done) project still accepts outcomes: its lessons keep counting for later decisions. " +
       "Everything lands in the vault inbox for review; nothing is applied directly.",
     inputSchema: {
       project: z.string().describe("Project note id"),

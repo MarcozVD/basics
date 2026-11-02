@@ -18,6 +18,7 @@ are no sidebars; secondary panels are overlays closed with `Esc`.
 | --- | --- |
 | **Home** | Pending proposals you can approve inline, the agent activity timeline, and vault health (notes per type, broken links, orphans, recent notes). Each broken link can open the note that holds it or create the missing note. An empty vault shows the starter-pack onboarding. |
 | **Explore** | Filters by layer and type with counts, search, list or grid, keyboard navigation, and the new-note dialog. |
+| **Projects** | Project notes, filtered by status with counts. The status chip on each row is a menu: Active, Paused, Done or Archived. Done projects sort last and collapse into a `Done (N)` group in the All view. |
 | **Editor** | Frontmatter form generated from the note type, Markdown body in edit / preview / split, `[[` wikilink autocomplete, connections (links, backlinks, unresolved) and a local graph. A conflict banner appears if the file changed on disk. |
 | **Graph** | Every note and link, with type and layer filters in a floating toolbar, node search, broken links and neighborhood focus. |
 | **Inbox** | Proposals with a side-by-side or unified diff; Approve, Edit and approve, or Reject. Pack proposals are grouped with **Approve all**. |

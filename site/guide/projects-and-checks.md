@@ -116,5 +116,10 @@ chips in the UI.
 `path` absolute, `stack` grouped by layer, `status: active`. Its id is saved in `basics.json` as `project`. That note
 collects `lessons` and the `last_checks` results, and is the link between the folder and the vault.
 
+The project `status` is `active`, `paused`, `done` or `archived`. Change it from the row on the **Projects** page. A
+done project sorts last and collapses into a `Done (N)` group in the All view; the group's open state is remembered in
+the browser. Done projects still feed `get_vault_overview` and `record_project_outcome`; only archived projects are left
+out of the overview.
+
 The MCP tool `record_project_outcome` proposes new lessons and tech-note updates for a project; they arrive in the inbox
 like any other proposal.

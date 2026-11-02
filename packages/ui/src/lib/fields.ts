@@ -46,7 +46,7 @@ export const FIELDS: Record<NoteType, Field[]> = {
     ...common,
     { key: "description", kind: "textarea" },
     { key: "path", kind: "text" },
-    { key: "status", kind: "enum", options: ["active", "paused", "archived"] },
+    { key: "status", kind: "enum", options: ["active", "paused", "done", "archived"] },
     { key: "profile", kind: "link", linkType: "profile" },
     { key: "stack", kind: "stack" },
     { key: "reason", kind: "textarea" },
@@ -72,7 +72,7 @@ export type TemplateOptions = {
   until?: string;
   command?: string;
   path?: string;
-  status?: "active" | "paused" | "archived";
+  status?: Extract<NoteData, { type: "project" }>["status"];
   profile?: string;
   stack?: Record<string, string[]>;
   reason?: string;

@@ -1,6 +1,6 @@
 import type { CheckStatus, ExportFile, LastCheck, NoteData, NoteDetail, NoteSummary } from "@marcozvd/basics-core";
-import { useMutation, useQueries } from "@tanstack/react-query";
-import { ArrowDownUp, Check, Copy, ExternalLink, FileDown, FolderKanban, Search, SearchX, UserRound, X } from "lucide-react";
+import { useMutation, useQueries, useQueryClient } from "@tanstack/react-query";
+import { ArrowDownUp, Check, ChevronDown, Copy, ExternalLink, FileDown, FolderKanban, Search, SearchX, UserRound, X } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import {
   type KeyboardEvent as ReactKeyboardEvent,
@@ -21,7 +21,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/motion/tabs";
 import { PAGE_SECTIONS, Page } from "@/components/page";
 import { ErrorState, Loading } from "@/components/state";
 import { type TranslationKey, useI18n } from "@/i18n";
-import { exportStack, getNote } from "@/lib/api";
+import { exportStack, getNote, saveNote } from "@/lib/api";
 import { EASE_OUT, SPRING_LAYOUT } from "@/lib/ease";
 import { queryKeys, useNotes } from "@/lib/queries";
 import { formatCompactRelativeTime, formatFullDateTime, formatRelativeTime } from "@/lib/relative-time";
@@ -46,16 +46,21 @@ type ProjectRow = {
 type ProjectsPrefs = {
   status: StatusFilter;
   sort: Sort;
+  /** Whether the collapsed "Done" group is expanded. */
+  done: boolean;
 };
 
-const STATUS_FILTERS = ["all", "active", "paused", "archived"] as const;
+const STATUS_FILTERS = ["all", "active", "paused", "done", "archived"] as const;
 const SORTS = ["updated", "title"] as const;
-const DEFAULT_PREFS: ProjectsPrefs = { status: "all", sort: "updated" };
+const DEFAULT_PREFS: ProjectsPrefs = { status: "all", sort: "updated", done: false };
 const STATUS_DOT: Record<ProjectStatus, string> = {
   active: "var(--type-practice)",
   paused: "var(--type-check)",
+  done: "var(--type-check)",
   archived: "var(--type-layer)",
 };
+/** Finished projects read as a success state, like a passing check. */
+const DONE_TONE = "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
 const CHECK_TONE: Record<CheckStatus, string> = {
   pass: "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
   fail: "border-destructive/25 bg-destructive/10 text-destructive-text",
@@ -86,6 +91,7 @@ function readPrefs(): ProjectsPrefs {
           ? (parsed.status as StatusFilter)
           : DEFAULT_PREFS.status,
       sort: parsed && (SORTS as readonly string[]).includes(parsed.sort ?? "") ? (parsed.sort as Sort) : DEFAULT_PREFS.sort,
+      done: parsed?.done === true,
     };
   } catch {
     return { ...DEFAULT_PREFS };
@@ -148,13 +154,45 @@ function NewProjectButton() {
   );
 }
 
-function StatusChip({ status }: { status: ProjectStatus }) {
+function StatusChip({ status, className }: { status: ProjectStatus; className?: string }) {
   const t = useI18n().t;
   return (
-    <span className="inline-flex h-5 shrink-0 items-center gap-1.5 rounded-full border border-border bg-background/60 px-2 text-[10px] font-medium text-muted-foreground">
-      <span className="size-1.5 rounded-full" style={{ backgroundColor: STATUS_DOT[status] }} aria-hidden="true" />
+    <span
+      className={cn(
+        "inline-flex h-5 shrink-0 items-center gap-1.5 rounded-full border px-2 text-[10px] font-medium",
+        status === "done" ? DONE_TONE : "border-border bg-background/60 text-muted-foreground",
+        className,
+      )}
+    >
+      {status === "done" ? (
+        <Check className="size-3" aria-hidden="true" />
+      ) : (
+        <span className="size-1.5 rounded-full" style={{ backgroundColor: STATUS_DOT[status] }} aria-hidden="true" />
+      )}
       {t(`option.${status}` as TranslationKey)}
     </span>
+  );
+}
+
+/** Row control: the current status as a chip that opens the four-state menu. */
+function StatusMenu({ status, title, onChange }: { status: ProjectStatus; title: string; onChange: (status: ProjectStatus) => void }) {
+  const t = useI18n().t;
+  return (
+    <Select className="shrink-0" value={status} onValueChange={(value) => onChange(value as ProjectStatus)}>
+      <SelectTrigger
+        aria-label={t("projects.changeStatus", { title })}
+        className="h-5 w-auto gap-1 rounded-full border-0 bg-transparent px-0 py-0 text-[10px] shadow-none hover:bg-transparent"
+      >
+        <StatusChip status={status} />
+      </SelectTrigger>
+      <SelectContent className="w-40">
+        {STATUS_FILTERS.filter((value): value is ProjectStatus => value !== "all").map((value) => (
+          <SelectItem key={value} value={value}>
+            {t(`option.${value}` as TranslationKey)}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }
 
@@ -279,7 +317,7 @@ function ProjectListRow({
   reduce,
   layerTitles,
   onOpen,
-  onEnter,
+  onChangeStatus,
 }: {
   row: ProjectRow;
   index: number;
@@ -287,27 +325,35 @@ function ProjectListRow({
   reduce: boolean;
   layerTitles: Map<string, string>;
   onOpen: () => void;
-  onEnter: () => void;
+  onChangeStatus: (status: ProjectStatus) => void;
 }) {
   const { t, language } = useI18n();
   const path = row.project.path;
 
   return (
-    <button
-      type="button"
+    // A div, not a button: the row hosts the status menu and interactive
+    // content cannot nest inside a native button. Keyboard Enter opens the row
+    // from the page handler, which skips every real control inside it.
+    <div
       role="option"
       id={`project-row-${index}`}
       data-project-row
       aria-selected={selected}
       tabIndex={-1}
-      onClick={onOpen}
-      onKeyDown={(event) => {
-        if (event.key !== "Enter") return;
-        event.preventDefault();
-        event.stopPropagation();
-        onEnter();
+      onClick={(event) => {
+        const target = event.target instanceof HTMLElement ? event.target : null;
+        // The status menu portals its panel to the body, where React still
+        // bubbles the click through this row; only clicks on the row itself count.
+        if (!target || !event.currentTarget.contains(target)) return;
+        if (target.closest("[aria-haspopup]")) return;
+        onOpen();
       }}
-      className="relative flex w-full min-w-0 flex-col gap-1.5 border-b border-border/60 px-3 py-3 text-left outline-none transition-colors hover:bg-muted/35 focus-visible:bg-muted/40"
+      onKeyDown={(event) => {
+        if (event.key !== "Enter" || event.target !== event.currentTarget) return;
+        event.preventDefault();
+        onOpen();
+      }}
+      className="relative flex w-full min-w-0 cursor-default flex-col gap-1.5 border-b border-border/60 px-3 py-3 text-left outline-none transition-colors hover:bg-muted/35 focus-visible:bg-muted/40"
     >
       {selected ? (
         <motion.span
@@ -327,7 +373,7 @@ function ProjectListRow({
         >
           {row.updated ? formatCompactRelativeTime(row.updated) : "—"}
         </time>
-        <StatusChip status={row.project.status} />
+        <StatusMenu status={row.project.status} title={row.title} onChange={onChangeStatus} />
       </span>
 
       <span className="relative z-10 flex min-w-0 items-center gap-2">
@@ -343,7 +389,7 @@ function ProjectListRow({
           <ChecksSummary checks={row.project.last_checks} />
         </span>
       </span>
-    </button>
+    </div>
   );
 }
 
@@ -686,6 +732,7 @@ function ProjectDetail({
 export function ProjectsPage() {
   const { t } = useI18n();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const wide = useWide();
   const reduce = useReducedMotion() ?? false;
   const notes = useNotes();
@@ -721,11 +768,12 @@ export function ProjectsPage() {
     [notes.data],
   );
 
-  const counts = useMemo(
+  const counts = useMemo<Record<StatusFilter, number>>(
     () => ({
       all: rows.length,
       active: rows.filter((row) => row.project.status === "active").length,
       paused: rows.filter((row) => row.project.status === "paused").length,
+      done: rows.filter((row) => row.project.status === "done").length,
       archived: rows.filter((row) => row.project.status === "archived").length,
     }),
     [rows],
@@ -744,6 +792,9 @@ export function ProjectsPage() {
     });
 
     return filtered.sort((a, b) => {
+      // Finished projects sink below the ones still in play, in both orders.
+      const done = Number(a.project.status === "done") - Number(b.project.status === "done");
+      if (done !== 0) return done;
       if (prefs.sort === "title") return a.title.localeCompare(b.title);
       const aTime = a.updated ? Date.parse(a.updated) : 0;
       const bTime = b.updated ? Date.parse(b.updated) : 0;
@@ -751,6 +802,22 @@ export function ProjectsPage() {
       return a.title.localeCompare(b.title);
     });
   }, [rows, prefs.status, prefs.sort, searchText]);
+
+  // The default view keeps finished work in its own collapsible group; a
+  // status filter or a search shows matches inline so nothing hides from it.
+  const mainRows = useMemo(() => visible.flatMap((row, index) => (row.project.status === "done" ? [] : [{ row, index }])), [visible]);
+  const doneRows = useMemo(() => visible.flatMap((row, index) => (row.project.status === "done" ? [{ row, index }] : [])), [visible]);
+  const grouped = prefs.status === "all" && searchText.trim().length === 0 && doneRows.length > 0;
+  const showDone = !grouped || prefs.done;
+  /** Indices the keyboard can reach: hidden rows are skipped. */
+  const reachable = useMemo(
+    () => (showDone ? visible.map((_, index) => index) : mainRows.map((entry) => entry.index)),
+    [showDone, visible, mainRows],
+  );
+  const activeId = (index: number) => `project-row-${index}`;
+  const selectedRow = visible[selected];
+  const listActiveId = selectedRow && (!grouped || selectedRow.project.status !== "done") ? activeId(selected) : undefined;
+  const doneActiveId = grouped && prefs.done && selectedRow?.project.status === "done" ? activeId(selected) : undefined;
 
   const current = wide ? visible[selected] : undefined;
 
@@ -778,8 +845,47 @@ export function ProjectsPage() {
     onError: () => toast.error(t("recommend.exportFailed")),
   });
 
-  const clampSelection = (index: number) => Math.max(0, Math.min(index, Math.max(visible.length - 1, 0)));
-  const move = (delta: number) => setSelected((index) => clampSelection(index + delta));
+  /** Row whose id must stay selected while a status change reorders the list. */
+  const pinnedId = useRef<string | null>(null);
+  const setStatus = useMutation({
+    mutationFn: async ({ id, status }: { id: string; status: ProjectStatus }) => {
+      const note = await getNote(id);
+      if (note.data.type !== "project") throw new Error(`not a project: ${id}`);
+      return saveNote(id, { data: { ...note.data, status }, body: note.body, expectedHash: note.hash });
+    },
+    // Move the row immediately; the vault event that follows refreshes the list.
+    onMutate: ({ id, status }) => {
+      const snapshot = queryClient.getQueriesData<NoteSummary[]>({ queryKey: ["notes"] });
+      for (const [key, data] of snapshot) {
+        if (!data) continue;
+        queryClient.setQueryData<NoteSummary[]>(
+          key,
+          data.map((note) => (note.id === id && note.project ? { ...note, project: { ...note.project, status } } : note)),
+        );
+      }
+      return { snapshot };
+    },
+    onError: (_error, _variables, context) => {
+      for (const [key, data] of context?.snapshot ?? []) queryClient.setQueryData(key, data);
+      toast.error(t("projects.statusFailed"));
+    },
+    onSuccess: () => toast.success(t("projects.statusChanged")),
+    onSettled: () => void queryClient.invalidateQueries({ queryKey: ["notes"] }),
+  });
+
+  const changeStatus = (row: ProjectRow, status: ProjectStatus) => {
+    if (row.project.status === status) return;
+    pinnedId.current = row.id;
+    setStatus.mutate({ id: row.id, status });
+  };
+
+  const move = (delta: number) =>
+    setSelected((index) => {
+      if (reachable.length === 0) return index;
+      const at = reachable.indexOf(index);
+      if (at < 0) return reachable[0];
+      return reachable[Math.max(0, Math.min(at + delta, reachable.length - 1))];
+    });
 
   const openNote = (row: ProjectRow | undefined) => {
     if (!row) return;
@@ -794,6 +900,15 @@ export function ProjectsPage() {
   useEffect(() => {
     setSelected((index) => Math.min(index, Math.max(visible.length - 1, 0)));
   }, [visible.length]);
+
+  // A status change can reorder or hide the row the user just acted on.
+  useEffect(() => {
+    const id = pinnedId.current;
+    if (!id) return;
+    pinnedId.current = null;
+    const index = visible.findIndex((row) => row.id === id);
+    if (index >= 0) setSelected(index);
+  }, [visible]);
 
   useEffect(() => {
     document.getElementById(`project-row-${selected}`)?.scrollIntoView({ block: "nearest" });
@@ -813,12 +928,16 @@ export function ProjectsPage() {
     const index = visible.findIndex((row) => row.id === pendingParam.current);
     if (index >= 0) {
       pendingParam.current = null;
+      // A deep link to a finished project opens the group that holds it.
+      if (grouped && visible[index].project.status === "done") {
+        setPrefs((value) => (value.done ? value : { ...value, done: true }));
+      }
       setSelected(index);
     } else if (notes.isSuccess) {
       pendingParam.current = null;
       setSelected(0);
     }
-  }, [wide, pParam, visible, notes.isSuccess]);
+  }, [wide, pParam, visible, notes.isSuccess, grouped]);
 
   useEffect(() => {
     if (!wide || notes.isPending) return;
@@ -851,8 +970,8 @@ export function ProjectsPage() {
       }
       if (event.key === "Enter") {
         const target = event.target instanceof HTMLElement ? event.target : null;
-        const row = target?.closest("[data-project-row]");
-        if (target?.closest("button, a, input, textarea, select") && !row) return;
+        // Controls inside a row (the status menu) and the Done toggle own Enter.
+        if (target?.closest("button, a, input, textarea, select, summary")) return;
         event.preventDefault();
         openNote(visible[selected]);
       }
@@ -891,6 +1010,19 @@ export function ProjectsPage() {
     setSearchText("");
     setSelected(0);
   };
+
+  const renderRow = ({ row, index }: { row: ProjectRow; index: number }) => (
+    <ProjectListRow
+      key={row.id}
+      row={row}
+      index={index}
+      selected={index === selected}
+      reduce={reduce}
+      layerTitles={layerTitles}
+      onOpen={() => openRow(index)}
+      onChangeStatus={(status) => changeStatus(row, status)}
+    />
+  );
 
   const projectEmpty = !notes.isPending && !notes.error && rows.length === 0;
   const filteredEmpty = visible.length === 0;
@@ -987,10 +1119,7 @@ export function ProjectsPage() {
       <div className="grid min-h-0 gap-4 min-[1280px]:h-[calc(100dvh-16rem)] min-[1280px]:grid-cols-[420px_minmax(0,1fr)]">
         <div className="flex min-h-0 min-w-0 flex-col">
           <div
-            role="listbox"
-            aria-label={t("projects.list")}
-            aria-activedescendant={visible[selected] ? `project-row-${selected}` : undefined}
-            tabIndex={-1}
+            data-project-scroll
             // Inset the scroll box so the selected row's rounded highlight is not cut at the edges.
             className="min-h-0 flex-1 min-[1280px]:-m-1.5 min-[1280px]:overflow-y-auto min-[1280px]:overscroll-contain min-[1280px]:p-1.5"
           >
@@ -1015,18 +1144,44 @@ export function ProjectsPage() {
               </div>
             ) : (
               <div className="flex flex-col">
-                {visible.map((row, index) => (
-                  <ProjectListRow
-                    key={row.id}
-                    row={row}
-                    index={index}
-                    selected={index === selected}
-                    reduce={reduce}
-                    layerTitles={layerTitles}
-                    onOpen={() => openRow(index)}
-                    onEnter={() => openNote(row)}
-                  />
-                ))}
+                <div
+                  role="listbox"
+                  aria-label={t("projects.list")}
+                  aria-activedescendant={listActiveId}
+                  tabIndex={-1}
+                  className="flex flex-col"
+                >
+                  {mainRows.map(renderRow)}
+                  {grouped ? null : doneRows.map(renderRow)}
+                </div>
+
+                {grouped ? (
+                  <details
+                    open={prefs.done}
+                    onToggle={(event) => {
+                      const next = event.currentTarget.open;
+                      setPrefs((value) => (value.done === next ? value : { ...value, done: next }));
+                    }}
+                    className="group flex flex-col"
+                  >
+                    <summary className="flex cursor-pointer list-none items-center gap-1.5 border-b border-border/60 px-3 py-2 text-[11px] font-semibold tracking-[0.05em] text-muted-foreground uppercase transition-colors hover:bg-muted/35 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+                      <ChevronDown
+                        aria-hidden="true"
+                        className={cn("size-3.5 -rotate-90 group-open:rotate-0", !reduce && "transition-transform duration-200")}
+                      />
+                      {t("projects.doneGroup", { count: doneRows.length })}
+                    </summary>
+                    <div
+                      role="listbox"
+                      aria-label={t("projects.doneList")}
+                      aria-activedescendant={doneActiveId}
+                      tabIndex={-1}
+                      className="flex flex-col"
+                    >
+                      {doneRows.map(renderRow)}
+                    </div>
+                  </details>
+                ) : null}
               </div>
             )}
           </div>

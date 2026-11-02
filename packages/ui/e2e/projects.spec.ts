@@ -6,7 +6,7 @@ import { vaultPath } from "./helpers";
 interface ProjectSeed {
   id: string;
   title: string;
-  status: "active" | "paused" | "archived";
+  status: "active" | "paused" | "done" | "archived";
   path?: string;
   profile?: string;
   stack?: Record<string, string[]>;
@@ -149,6 +149,58 @@ test("creates a project from Projects and selects its row", async ({ page }) => 
   await expect(row).toHaveAttribute("aria-selected", "true");
 });
 
+test("marks a project done from its row menu and keeps the Done group remembered", async ({ page }) => {
+  writeProject({ id: "alpha-api", title: "Alpha API", status: "active", path: "/home/me/code/alpha" });
+  writeProject({ id: "shipped-web", title: "Shipped Web", status: "done", path: "/home/me/code/shipped" });
+
+  await page.goto("/projects");
+
+  // Finished work sits in a collapsed group: only the active row is listed.
+  const main = page.getByRole("listbox", { name: "Projects", exact: true });
+  await expect(main.getByRole("option")).toHaveCount(1);
+  await expect(page.getByRole("option", { name: /Shipped Web/ })).toHaveCount(0);
+  await expect(page.getByText("Done (1)", { exact: true })).toBeVisible();
+
+  // The row menu writes the status into the note.
+  await page.getByRole("button", { name: "Change status of Alpha API" }).click();
+  await page.getByRole("option", { name: "Done", exact: true }).click();
+  await expect.poll(() => fs.readFileSync(path.join(vaultPath(), "projects", "alpha-api.md"), "utf8")).toContain("status: done");
+
+  // Both finished projects move into the group; nothing opens from the menu.
+  await expect(main.getByRole("option")).toHaveCount(0);
+  await expect(page).toHaveURL(/\/projects(\?|$)/);
+  await expect(page.getByText("Done (2)", { exact: true })).toBeVisible();
+
+  // Expanding shows the finished rows with their check badge.
+  await page.getByText("Done (2)", { exact: true }).click();
+  const doneList = page.getByRole("listbox", { name: "Done projects" });
+  await expect(doneList.getByRole("option")).toHaveCount(2);
+  await expect(doneList.getByRole("option", { name: /Alpha API/ })).toContainText("Done");
+
+  // The open group survives a reload.
+  await page.reload();
+  await expect(page.getByRole("listbox", { name: "Done projects" }).getByRole("option")).toHaveCount(2);
+
+  // The status filter lists them inline, like any other status.
+  await page.getByRole("tab", { name: /^Done/ }).click();
+  await expect(main.getByRole("option")).toHaveCount(2);
+  await expect(page.getByText("Done (2)", { exact: true })).toHaveCount(0);
+});
+
+test("row status menu does not open the note on the compact layout", async ({ page }) => {
+  await page.setViewportSize({ width: 420, height: 900 });
+  writeProject({ id: "alpha-api", title: "Alpha API", status: "active" });
+
+  await page.goto("/projects");
+  await page.getByRole("button", { name: "Change status of Alpha API" }).click();
+  await page.getByRole("option", { name: "Paused", exact: true }).click();
+
+  // The menu panel is portalled; its clicks must not bubble into the row.
+  await expect(page).toHaveURL(/\/projects(\?p=alpha-api)?$/);
+  await expect.poll(() => fs.readFileSync(path.join(vaultPath(), "projects", "alpha-api.md"), "utf8")).toContain("status: paused");
+  await expect(page.getByRole("button", { name: "Change status of Alpha API" })).toContainText("Paused");
+});
+
 test("hover over the last row does not scroll the list", async ({ page }) => {
   // Seed enough projects so the list column scrolls.
   for (let i = 1; i <= 20; i++) {
@@ -158,7 +210,7 @@ test("hover over the last row does not scroll the list", async ({ page }) => {
   await page.goto("/projects");
   await expect(page.getByRole("option").first()).toBeVisible();
 
-  const list = page.getByRole("listbox", { name: "Projects" });
+  const list = page.locator("[data-project-scroll]");
   const last = page.getByRole("option").last();
   await last.scrollIntoViewIfNeeded();
   await expect(last).toBeVisible();

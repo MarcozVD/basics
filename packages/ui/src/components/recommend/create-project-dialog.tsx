@@ -16,7 +16,7 @@ import { slugify } from "@/lib/slug";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 
-const PROJECT_STATUSES = ["active", "paused", "archived"] as const;
+const PROJECT_STATUSES = ["active", "paused", "done", "archived"] as const;
 type ProjectStatus = (typeof PROJECT_STATUSES)[number];
 const PROFILE_FIELD: Field = { key: "profile", kind: "link", linkType: "profile" };
 
