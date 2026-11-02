@@ -18,7 +18,17 @@ if (empty) fs.mkdirSync(vault, { recursive: true });
 else fs.cpSync(path.join(repoRoot, "examples", "vault"), vault, { recursive: true });
 fs.writeFileSync(config, JSON.stringify({ language: "en" }));
 fs.writeFileSync(path.join(here, stateFile), vault);
+
+// A throwaway home directory: connecting an agent from Settings writes real config files, and a
+// test must never touch the person's own. Creating `.cursor/` makes Cursor show up as detected,
+// so the specs can connect and disconnect it without depending on anything installed.
+const home = path.join(runDir, "home");
+// Claude Desktop resolves its config from `%APPDATA%` on Windows, not from the home directory.
+const appData = path.join(home, "AppData", "Roaming");
+fs.mkdirSync(path.join(home, ".cursor"), { recursive: true });
+fs.mkdirSync(appData, { recursive: true });
 console.log(`[e2e] vault: ${vault}${empty ? " (empty)" : ""}`);
+console.log(`[e2e] home: ${home}`);
 
 // A fake Claude Code CLI, never a real one: a node script that emits Claude's `stream-json` shape.
 // It is placed first on the UI server's PATH so GET /api/agents detects it. A prompt containing
@@ -53,7 +63,15 @@ if (process.platform === "win32") {
 const cli = path.join(repoRoot, "packages", "basics", "dist", "cli.js");
 const child = spawn(process.execPath, [cli, "--vault", vault, "ui", "--no-open", "--port", port], {
   stdio: "inherit",
-  env: { ...process.env, BASICS_CONFIG: config, PATH: `${binDir}${path.delimiter}${process.env.PATH ?? ""}` },
+  env: {
+    ...process.env,
+    BASICS_CONFIG: config,
+    // `os.homedir()` reads USERPROFILE on Windows and HOME elsewhere; Claude Desktop reads APPDATA.
+    HOME: home,
+    USERPROFILE: home,
+    APPDATA: appData,
+    PATH: `${binDir}${path.delimiter}${process.env.PATH ?? ""}`,
+  },
 });
 
 let cleaned = false;

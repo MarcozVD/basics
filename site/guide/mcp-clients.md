@@ -28,6 +28,24 @@ changes, result), backs each edited file up as `<file>.basics-backup` once, and 
 Code, OpenCode and Codex. Cursor and Claude Desktop get the server only. The desktop app calls the same code through
 `POST /api/connect`.
 
+The web UI's **Settings → Agents** page does the same for each client, one row per client, and shows the written change
+under **Show what changed**.
+
+To take Basics back out, `basics disconnect` removes the `basics` entry from each client's config and the Basics skill,
+and leaves every other entry in those files alone:
+
+```bash
+basics disconnect                  # every client
+basics disconnect --client cursor  # only the clients you name
+basics disconnect --no-skill       # remove the server, keep the skill
+basics disconnect --dry-run        # print what would change and write nothing
+```
+
+A config file that held nothing but the Basics entry, such as one `basics connect` created, is deleted. Claude Code is
+removed with the `claude` CLI when it is on your PATH. A config that cannot be parsed is left untouched and reported,
+so you can edit it by hand. The local API has `GET /api/connect/status`, which reports for each client whether it is
+detected and connected, and `POST /api/disconnect`, which needs a non-empty list of clients.
+
 ## Claude Code
 
 ```bash

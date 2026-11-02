@@ -56,7 +56,7 @@ import {
   writeVaultMeta,
 } from "@marcozvd/basics-core";
 import { Command } from "commander";
-import { CONNECT_CLIENTS, type ConnectResult, connect } from "./connect.js";
+import { CONNECT_CLIENTS, type ConnectResult, connect, type DisconnectResult, disconnect } from "./connect.js";
 import {
   createEmbedder,
   directorySize,
@@ -945,6 +945,33 @@ function connectCli(opts: ConnectCliOptions): void {
   if (result.entries.some((entry) => entry.result === "error")) process.exitCode = 1;
 }
 
+interface DisconnectCliOptions {
+  client?: string[];
+  skill: boolean;
+  dryRun?: boolean;
+}
+
+function printDisconnect(result: DisconnectResult): void {
+  printTable([
+    ["CLIENT", "DETECTED", "CHANGE", "RESULT"],
+    ...result.entries.map((entry) => [entry.client, entry.detected ? "yes" : "no", entry.change, entry.result]),
+  ]);
+
+  for (const entry of result.entries) {
+    if (entry.message) console.log(`\n${entry.client}: ${entry.message}`);
+    if (entry.diff) console.log(`\n--- ${entry.target}\n+++ ${entry.target} (proposed)\n${entry.diff}`);
+    if (!entry.skill) continue;
+    console.log(`\nskill ${entry.client}: ${entry.skill.path} (${entry.skill.result})`);
+    if (entry.skill.message) console.log(entry.skill.message);
+  }
+}
+
+function disconnectCli(clients: readonly string[], opts: DisconnectCliOptions): void {
+  const result = disconnect({ clients: [...clients, ...(opts.client ?? [])], skill: opts.skill, dryRun: opts.dryRun });
+  printDisconnect(result);
+  if (result.entries.some((entry) => entry.result === "error")) process.exitCode = 1;
+}
+
 /** Build the CLI without parsing argv, so references and tests can walk the commands. */
 export function buildProgram(): Command {
   program = new Command("basics")
@@ -1024,6 +1051,14 @@ export function buildProgram(): Command {
     .option("--no-skill", "do not install the Basics skill")
     .option("--dry-run", "print every change without writing anything")
     .action((opts: ConnectCliOptions) => connectCli(opts));
+
+  program
+    .command("disconnect [clients...]")
+    .description("remove the Basics MCP server and skill from your coding agents")
+    .option("--client <names...>", `clients to clean up (${CONNECT_CLIENTS.join(", ")}); default: every client`)
+    .option("--no-skill", "only remove the MCP entry, keep the Basics skill")
+    .option("--dry-run", "print every change without writing anything")
+    .action((clients: string[] | undefined, opts: DisconnectCliOptions) => disconnectCli(clients ?? [], opts));
 
   const pack = program.command("pack").description("manage official and community note packs");
   pack

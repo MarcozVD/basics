@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "The bundled loading page may call the app's own startup commands.",
+  "description": "The bundled loading page may call the app's own startup commands: poll the startup status, retry a failed start, and pick the vault folder on first run.",
   "windows": ["main"],
-  "permissions": ["core:default"]
+  "permissions": ["core:default", "allow-startup-status", "allow-retry-startup", "allow-choose-vault"]
 }

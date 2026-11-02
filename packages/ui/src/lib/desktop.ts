@@ -17,6 +17,12 @@ async function appWindow() {
   return getCurrentWindow();
 }
 
+/** The app's own commands; each one is granted explicitly to the remote capability. */
+async function invokeCommand<T>(command: string, args?: Record<string, unknown>): Promise<T> {
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<T>(command, args);
+}
+
 function warn(action: string, error: unknown) {
   // A missing permission must never break the page: the title bar is chrome, not data.
   console.warn(`[basics] window ${action} failed`, error);
@@ -91,4 +97,71 @@ export function watchMaximized(onChange: (maximized: boolean) => void): () => vo
     unlisten?.();
     unlisten = undefined;
   };
+}
+
+/* ---------------------------------------------------------------------------------------
+ * Desktop settings (Settings → Startup) and the two vault actions in Settings → General.
+ *
+ * Rust owns the values: they live in `desktop-settings.json` in the app config dir and
+ * are read at startup, so a page load is only a mirror. The wire shape is the Rust
+ * struct, snake_case keys included.
+ * ------------------------------------------------------------------------------------- */
+
+export type StartMinimized = "never" | "login" | "always";
+export type CloseBehavior = "tray" | "quit";
+
+export interface DesktopSettings {
+  /** Mirrors the operating system's login item; the app reports the live state. */
+  startAtLogin: boolean;
+  startMinimized: StartMinimized;
+  closeBehavior: CloseBehavior;
+}
+
+interface WireDesktopSettings {
+  start_at_login: boolean;
+  start_minimized: StartMinimized;
+  close_behavior: CloseBehavior;
+}
+
+function fromWire(settings: WireDesktopSettings): DesktopSettings {
+  return {
+    startAtLogin: settings.start_at_login,
+    startMinimized: settings.start_minimized,
+    closeBehavior: settings.close_behavior,
+  };
+}
+
+function toWire(settings: DesktopSettings): WireDesktopSettings {
+  return {
+    start_at_login: settings.startAtLogin,
+    start_minimized: settings.startMinimized,
+    close_behavior: settings.closeBehavior,
+  };
+}
+
+/** The stored settings, or `null` in a browser (no app to ask). */
+export async function readDesktopSettings(): Promise<DesktopSettings | null> {
+  if (!isDesktop()) return null;
+  return fromWire(await invokeCommand<WireDesktopSettings>("get_desktop_settings"));
+}
+
+/** Saves every field and returns what Rust stored, which is the truth for `startAtLogin`. */
+export async function writeDesktopSettings(settings: DesktopSettings): Promise<DesktopSettings> {
+  if (!isDesktop()) throw new Error("the desktop settings only exist in the desktop app");
+  return fromWire(await invokeCommand<WireDesktopSettings>("set_desktop_settings", { settings: toWire(settings) }));
+}
+
+/**
+ * Opens the native folder picker, sets the folder up as a vault (`basics init`) and
+ * restarts the bundled server. Resolves `false` when the picker was dismissed.
+ */
+export async function chooseVaultFolder(): Promise<boolean> {
+  if (!isDesktop()) throw new Error("choosing a vault folder needs the desktop app");
+  return invokeCommand<boolean>("choose_vault");
+}
+
+/** Shows the configured vault folder in the system file manager. */
+export async function openVaultFolder(): Promise<void> {
+  if (!isDesktop()) throw new Error("opening the vault folder needs the desktop app");
+  await invokeCommand<void>("open_vault_folder");
 }

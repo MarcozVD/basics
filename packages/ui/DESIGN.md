@@ -228,6 +228,7 @@ Springs and easings live in `src/lib/ease.ts`.
 | `/graph` | Graph | Full-bleed canvas, floating glass toolbar (types, layer, search, broken links, fit), node drawer. |
 | `/inbox` | Inbox | Proposal cards, create/update filter; ↑/↓, Enter, A, R. |
 | `/inbox/:id` | Proposal | Reason, diff, floating action bar (R / E / A), edit-and-approve modal. |
+| `/settings` | Settings | Six sections in a section list (General, Startup, Agents, Search, Updates, About), `?section=` deep links. Opened from the header gear or `Ctrl`/`⌘+,`, not from the Dock. Changes apply on pick; no Save button. |
 | `/recommend` | Recommend | Prompt (⌘Enter), layer chips, per-layer stepper, profiles and per-layer candidates with reasons, selection bar → STACK.md modal. |
 | overlays | ⌘K palette, New note dialog | Available on every route. |
 

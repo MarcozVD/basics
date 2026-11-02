@@ -12,6 +12,7 @@ import {
   Moon,
   Package,
   Plus,
+  Settings as SettingsIcon,
   Sparkles,
   Sun,
   Terminal,
@@ -51,6 +52,8 @@ interface PaletteItem {
 const ENTER = { duration: 0.16, ease: EASE_OUT };
 const EXIT = { duration: 0.12, ease: EASE_OUT };
 const MAX_PER_GROUP = 8;
+/** The settings chord: `Cmd+,` on macOS, `Ctrl+,` elsewhere. */
+const SETTINGS_HINT = typeof navigator !== "undefined" && /Mac/i.test(navigator.userAgent) ? "⌘," : "Ctrl+,";
 
 function groupStarts(groups: [string, PaletteItem[]][]): number[] {
   const starts: number[] = [];
@@ -199,6 +202,7 @@ export function AppCommandPalette() {
       { to: "/graph", labelKey: "nav.graph", icon: Waypoints, hint: "G G" },
       { to: "/inbox", labelKey: "nav.inbox", icon: InboxIcon, hint: "G I" },
       { to: "/recommend", labelKey: "nav.recommend", icon: Sparkles, hint: "G R" },
+      { to: "/settings", labelKey: "nav.settings", icon: SettingsIcon, hint: SETTINGS_HINT },
     ];
     for (const route of routes) {
       list.push({

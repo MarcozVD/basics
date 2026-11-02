@@ -10,7 +10,8 @@ export type TranslationKey = keyof typeof en;
 
 interface I18nContextValue {
   language: Language;
-  setLanguage: (language: Language) => void;
+  /** Persists the choice; `true` when the server accepted it (the override is reverted otherwise). */
+  setLanguage: (language: Language) => Promise<boolean>;
   t: (key: TranslationKey, vars?: Record<string, string | number>) => string;
 }
 
@@ -27,21 +28,22 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
   const [override, setOverride] = useState<Language | null>(null);
   const language = override ?? config.data?.language ?? detectLanguage();
 
-  const mutation = useMutation({
-    mutationFn: setConfig,
-    onSuccess: (data) => queryClient.setQueryData<AppConfig>(queryKeys.config, data),
-    onError: () => {
-      setOverride(null);
-      toast.error(language === "es" ? es["state.error.title"] : en["state.error.title"]);
-    },
-  });
+  const mutation = useMutation({ mutationFn: setConfig });
 
   const setLanguage = useCallback(
-    (next: Language) => {
+    async (next: Language): Promise<boolean> => {
       setOverride(next);
-      mutation.mutate({ language: next });
+      try {
+        const data = await mutation.mutateAsync({ language: next });
+        queryClient.setQueryData<AppConfig>(queryKeys.config, data);
+        return true;
+      } catch {
+        setOverride(null);
+        toast.error(language === "es" ? es["state.error.title"] : en["state.error.title"]);
+        return false;
+      }
     },
-    [mutation],
+    [mutation, queryClient, language],
   );
 
   useEffect(() => {

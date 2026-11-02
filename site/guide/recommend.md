@@ -92,6 +92,9 @@ basics embeddings disable             # turn it off, keep the downloaded files
 basics embeddings disable --purge     # also delete runtime and model cache
 ```
 
+The same switch is in **Settings → Search** in the web UI, which also shows the one-time download size and the index
+counts. Turning it off there keeps the downloaded files, as `basics embeddings disable` does without `--purge`.
+
 `enable` downloads about 375 MB of runtime (`@huggingface/transformers` + `onnxruntime`) plus the model
 `Xenova/multilingual-e5-small` (about 130 MB): roughly 500 MB in `BASICS_CACHE` or `~/.cache/basics`. Without a
 terminal and without `--yes`, the command aborts.
