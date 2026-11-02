@@ -9,6 +9,7 @@ export const SHORTCUT_ROUTES: Record<string, string> = {
   g: "/graph",
   i: "/inbox",
   r: "/recommend",
+  k: "/skills",
 };
 
 const SEQUENCE_WINDOW = 1000;

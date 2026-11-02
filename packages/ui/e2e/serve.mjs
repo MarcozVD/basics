@@ -27,6 +27,54 @@ const home = path.join(runDir, "home");
 const appData = path.join(home, "AppData", "Roaming");
 fs.mkdirSync(path.join(home, ".cursor"), { recursive: true });
 fs.mkdirSync(appData, { recursive: true });
+
+// Skills for the Skills page: a few agent folders with one or two skills each, the same skill
+// installed for two agents (it must merge into one row), a plugin skill and the shared store.
+// Basics only reads these files; the page's area override writes to the temp config, never here.
+function writeSkill(dir, frontmatter, body) {
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, "SKILL.md"), `---\n${frontmatter}\n---\n\n${body}\n`);
+}
+
+const FRONTEND_DESIGN = [
+  "name: frontend-design",
+  "description: Landing pages and app screens with a strong point of view, from type to motion.",
+  "version: 1.2.0",
+  "category: design",
+].join("\n");
+const frontendBody = "# Frontend design\n\nUse when building or reviewing a public page.";
+writeSkill(path.join(home, ".claude", "skills", "frontend-design"), FRONTEND_DESIGN, frontendBody);
+// Same name and same content in the shared store: one row that lists Claude Code and Shared.
+writeSkill(path.join(home, ".agents", "skills", "frontend-design"), FRONTEND_DESIGN, frontendBody);
+
+writeSkill(
+  path.join(home, ".config", "opencode", "skills", "security-audit"),
+  'name: security-audit\ndescription: "Security review for APIs and web apps: threat models, OWASP checks and dependency audits."',
+  "# Security audit\n\nUse before shipping anything that takes user input.",
+);
+writeSkill(
+  path.join(home, ".codex", "skills", "playwright-cli"),
+  "name: playwright-cli\ndescription: Drive a real browser with Playwright to write and run end-to-end tests.",
+  "# Playwright CLI\n\nUse when a change needs proof in a browser.",
+);
+writeSkill(
+  path.join(home, ".agents", "skills", "caveman-tools"),
+  "name: caveman-tools\ndescription: Compress memory files so an agent spends fewer tokens. Workflow helpers for plans and commits.",
+  "# Caveman tools\n\nUse when the token bill matters.",
+);
+// A plugin installed for the user: `installPath/skills` is scanned and the row carries the name.
+const pluginRoot = path.join(home, ".claude", "plugins", "cache", "acme");
+writeSkill(
+  path.join(pluginRoot, "skills", "acme-docs"),
+  'name: acme-docs\ndescription: "Documentation for the Acme API: endpoints, errors and examples."',
+  "# Acme docs\n\nUse when answering questions about the Acme API.",
+);
+fs.mkdirSync(path.join(home, ".claude", "plugins"), { recursive: true });
+fs.writeFileSync(
+  path.join(home, ".claude", "plugins", "installed_plugins.json"),
+  JSON.stringify({ plugins: { "acme@marketplace": [{ scope: "user", installPath: pluginRoot }] } }, null, 2),
+);
+
 console.log(`[e2e] vault: ${vault}${empty ? " (empty)" : ""}`);
 console.log(`[e2e] home: ${home}`);
 

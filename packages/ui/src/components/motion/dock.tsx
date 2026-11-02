@@ -31,7 +31,10 @@ export function Dock({ children, size = 44, className }: DockProps) {
     <DockContext.Provider value={ctx}>
       <div
         className={cn(
-          "inline-flex h-auto items-end gap-1.5 rounded-2xl border border-border bg-card/80 px-2 py-1 shadow-2xl backdrop-blur-xl",
+          // Basics: seven routes plus the palette now share the Dock, so items step down to
+          // 36px on a phone and return to 44px from `sm` up. `size` stays the fallback.
+          "inline-flex h-auto items-end gap-1 rounded-2xl border border-border bg-card/80 px-2 py-1 shadow-2xl backdrop-blur-xl sm:gap-1.5",
+          "[--dock-item-size:36px] sm:[--dock-item-size:44px]",
           className,
         )}
       >
@@ -69,7 +72,7 @@ export function DockItem({
       className="absolute inset-0.5 -z-10 rounded-xl bg-muted/60"
     />
   ) : null;
-  const sharedStyle = { width: size, height: size };
+  const sharedStyle = { width: `var(--dock-item-size, ${size}px)`, height: `var(--dock-item-size, ${size}px)` };
   const sharedClass = cn(
     "relative flex shrink-0 items-center justify-center rounded-full text-foreground",
     className,

@@ -19,6 +19,7 @@ const routeModules = {
   projects: () => import("@/pages/projects"),
   proposal: () => import("@/pages/proposal"),
   recommend: () => import("@/pages/recommend"),
+  skills: () => import("@/pages/skills"),
   settings: () => import("@/pages/settings"),
 };
 
@@ -29,6 +30,7 @@ const InboxPage = lazy(() => routeModules.inbox().then((module) => ({ default: m
 const ProjectsPage = lazy(() => routeModules.projects().then((module) => ({ default: module.ProjectsPage })));
 const ProposalPage = lazy(() => routeModules.proposal().then((module) => ({ default: module.ProposalPage })));
 const RecommendPage = lazy(() => routeModules.recommend().then((module) => ({ default: module.RecommendPage })));
+const SkillsPage = lazy(() => routeModules.skills().then((module) => ({ default: module.SkillsPage })));
 const SettingsPage = lazy(() => routeModules.settings().then((module) => ({ default: module.SettingsPage })));
 
 /** Quiet placeholder shown only on a cold load of a route: a title bar and a few rows, no spinner jump. */
@@ -122,6 +124,14 @@ const router = createBrowserRouter([
         element: (
           <Lazy>
             <RecommendPage />
+          </Lazy>
+        ),
+      },
+      {
+        path: "skills",
+        element: (
+          <Lazy>
+            <SkillsPage />
           </Lazy>
         ),
       },

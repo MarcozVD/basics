@@ -281,6 +281,61 @@ export function disconnectClients(body: { clients: ConnectClientId[] }): Promise
   return request<DisconnectResult>("/api/disconnect", { method: "POST", body: JSON.stringify(body) });
 }
 
+/** The fixed area set, in the order the page and the CLI show them. Mirrors `SKILL_AREAS`. */
+export const SKILL_AREAS = ["frontend", "backend", "security", "testing", "devops", "data", "ai", "docs", "workflow", "other"] as const;
+export type SkillArea = (typeof SKILL_AREAS)[number];
+
+export const SKILL_AGENTS = ["claude-code", "opencode", "codex", "shared"] as const;
+export type SkillAgentId = (typeof SKILL_AGENTS)[number];
+
+export type SkillAreaSource = "frontmatter" | "keywords" | "override" | "none";
+
+/** One installed skill, as scanned from the agent folders (`GET /api/skills`). */
+export interface SkillEntry {
+  /** Stable, URL-safe id used by the area override. */
+  key: string;
+  name: string;
+  description: string;
+  summary: string;
+  area: SkillArea;
+  areaSource: SkillAreaSource;
+  agents: SkillAgentId[];
+  plugin?: string;
+  /** `~/`-shortened path of the `SKILL.md`. */
+  path: string;
+  version?: string;
+  error?: string;
+}
+
+export interface SkillAgentInfo {
+  id: SkillAgentId;
+  name: string;
+  detected: boolean;
+  dirs: string[];
+}
+
+export interface SkillsResponse {
+  agents: SkillAgentInfo[];
+  skills: SkillEntry[];
+}
+
+/** Every skill installed for this user; read-only, a broken file comes back as a row with `error`. */
+export function getSkills(): Promise<SkillsResponse> {
+  return request<SkillsResponse>("/api/skills");
+}
+
+const skillAreaPath = (key: string) => `/api/skills/${encodeURIComponent(key)}/area`;
+
+/** Save the owner's area for one skill in the Basics config; the skill file is never touched. */
+export function putSkillArea(key: string, area: SkillArea): Promise<{ key: string; area: SkillArea }> {
+  return request<{ key: string; area: SkillArea }>(skillAreaPath(key), { method: "PUT", body: JSON.stringify({ area }) });
+}
+
+/** Forget the override and go back to the detected area. */
+export function deleteSkillArea(key: string): Promise<{ key: string; area: null }> {
+  return request<{ key: string; area: null }>(skillAreaPath(key), { method: "DELETE" });
+}
+
 export function getStats(): Promise<VaultStats> {
   return request<VaultStats>("/api/stats");
 }
