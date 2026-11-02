@@ -64,6 +64,7 @@ import {
 import { createMcpServer, planStackPrompt } from "../mcp/tools.js";
 import { packsDir } from "../packs-dir.js";
 import { getRecommender } from "../recommender.js";
+import { isSkillKey, SKILL_AREAS, scanSkills } from "../skills.js";
 import type { EventHub } from "./events.js";
 
 const { version } = createRequire(import.meta.url)("../../package.json") as { version: string };
@@ -126,6 +127,16 @@ const agentRunRequestSchema = z.object({
   description: z.string().min(1),
   layers: z.array(z.string().min(1)).optional(),
 });
+const skillAreaRequestSchema = z.object({ area: z.enum(SKILL_AREAS) });
+
+/** Overrides live in the Basics config: `skills.areas` keyed by the skill key the scan returned. */
+function saveSkillArea(key: string, area: string | undefined): void {
+  const config = loadConfig();
+  const areas = { ...config.skills.areas };
+  if (area) areas[key] = area;
+  else delete areas[key];
+  saveConfig(configSchema.parse({ ...config, skills: { areas } }));
+}
 
 /** A sessionless POST only creates a session when it carries the initialize request. */
 async function isInitializeRequest(req: Request): Promise<boolean> {
@@ -370,6 +381,29 @@ export function createApp(opts: { root: string; uiDir?: string; events?: EventHu
 
   /** Where each client stands: detected, pointed at this vault, skill installed. Reads only. */
   app.get("/api/connect/status", (c) => c.json(connectStatus({ vault: opts.root })));
+
+  /** Every skill installed for this user; a read-only scan, a broken file becomes a row with `error`. */
+  app.get("/api/skills", (c) => c.json(scanSkills()));
+
+  /** The owner's area for one skill. Validates the key against the scan; never writes a skill file. */
+  app.put("/api/skills/:key/area", async (c) => {
+    const key = c.req.param("key");
+    if (!isSkillKey(key)) return c.json({ error: "invalid", message: "invalid skill key" } satisfies ApiError, 400);
+    const body = skillAreaRequestSchema.parse(await c.req.json());
+    if (!scanSkills().skills.some((skill) => skill.key === key)) {
+      return c.json({ error: "not_found", message: `no skill with key "${key}"` } satisfies ApiError, 404);
+    }
+    saveSkillArea(key, body.area);
+    return c.json({ key, area: body.area });
+  });
+
+  /** Back to the detected area; also clears an override for a skill that is no longer installed. */
+  app.delete("/api/skills/:key/area", (c) => {
+    const key = c.req.param("key");
+    if (!isSkillKey(key)) return c.json({ error: "invalid", message: "invalid skill key" } satisfies ApiError, 400);
+    saveSkillArea(key, undefined);
+    return c.json({ key, area: null });
+  });
 
   /** `clients` is required here, so a stray empty body can never unregister every agent. */
   app.post("/api/disconnect", async (c) => {

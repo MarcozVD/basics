@@ -45,3 +45,5 @@ mkdir -p ~/.claude/skills && cp -r /tmp/basics/skills/basics ~/.claude/skills/
 ```
 
 Restart the agent so it picks up the new skill.
+
+To see the skills installed next to the Basics skill, run `basics skills`; see [Skills](skills).

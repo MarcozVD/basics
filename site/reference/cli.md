@@ -170,6 +170,18 @@ basics disconnect [options] [clients...]
 | `--no-skill` | only remove the MCP entry, keep the Basics skill | — |
 | `--dry-run` | print every change without writing anything | — |
 
+### `basics skills`
+
+list the skills installed for your coding agents, grouped by area
+
+```
+basics skills [options]
+```
+
+| Flag | Description | Default |
+| --- | --- | --- |
+| `--json` | print the full scan as JSON | — |
+
 ### `basics pack`
 
 manage official and community note packs

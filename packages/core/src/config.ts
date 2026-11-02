@@ -9,6 +9,8 @@ export const configSchema = z.object({
   language: z.enum(["en", "es"]).default("en"),
   embeddings: z.boolean().default(false),
   embeddingsModel: z.string().default("Xenova/multilingual-e5-small"),
+  /** User overrides for the Skills page; area values are validated where they are read. */
+  skills: z.object({ areas: z.record(z.string(), z.string()).default({}) }).default({ areas: {} }),
 });
 export type Config = z.infer<typeof configSchema>;
 
