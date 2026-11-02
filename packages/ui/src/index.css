@@ -164,6 +164,10 @@
   .px-page-gutter {
     padding-inline: var(--spacing-gutter);
   }
+  /* One side only: the desktop title bar keeps the left gutter and reaches the window edge on the right. */
+  .pl-page-gutter {
+    padding-inline-start: var(--spacing-gutter);
+  }
   /* Pulls a full-bleed sticky header back out over the frame's gutter. */
   .mx-page-gutter {
     margin-inline: calc(var(--spacing-gutter) * -1);

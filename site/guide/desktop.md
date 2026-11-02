@@ -55,6 +55,29 @@ On the very first launch there is no vault yet. The window shows a **Choose vaul
 - **Single instance**: launching the app a second time focuses the already open window instead of starting a new one.
 - **External links** (for example a link that leaves the vault's local page, or `mailto:`) open in your system browser.
 
+## Title bar and window controls
+
+On Windows and Linux the app has no system title bar. Its own header is the title bar:
+
+- Drag any empty part of the header to move the window. Buttons, **EN | ES** and the theme toggle do not drag.
+- Double-click the empty header to maximize; double-click again to restore.
+- **Minimize**, **Maximize / Restore** and **Close** sit at the top right. **Close** hides the window to the tray, like
+  the window close described above; the server keeps running.
+- Drag any edge or corner of the window to resize it, on the loading page too. A maximized window does not resize.
+
+On macOS the window keeps its native traffic-light buttons, drawn over the header.
+
+A browser opened with `basics ui` has no window controls and no drag area: its header and window stay as the browser
+draws them.
+
+## What the app window can do
+
+The app only lets the page it shows control its own window. The page is served from `127.0.0.1`, and the app grants that
+local page window commands only: minimize, maximize and restore, close, drag, and checking whether the window is
+maximized. It has no permission to run programs, read or write files, or open URLs through the app, so a page loaded
+from that local server cannot use the app to do those things. Everything else keeps the limits described in
+[Security](security).
+
 ## Connecting your agents
 
 The app serves MCP over HTTP at `http://127.0.0.1:<port>/mcp`, exactly like `basics ui`. Use **Copy MCP URL** from the

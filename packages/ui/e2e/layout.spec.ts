@@ -145,3 +145,17 @@ test("every page shares the top bar gutter", async ({ page }) => {
     expect(m.h1Left, `page title left on ${route}`).toBe(40);
   }
 });
+
+test("a browser keeps its own window chrome: the header has no window buttons and no drag region", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 820 });
+  await page.goto("/");
+  await settle(page);
+
+  // The custom title bar belongs to the desktop app only: same UI, native window here.
+  await expect(page.getByTestId("window-controls")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Minimize" })).toHaveCount(0);
+  await expect(page.locator("header[data-tauri-drag-region]")).toHaveCount(0);
+  // No chrome is made unselectable either: the header keeps its usual browser look.
+  const chrome = page.locator("header").filter({ has: page.getByTestId("brand-logo") });
+  await expect(chrome).not.toHaveClass(/select-none/);
+});

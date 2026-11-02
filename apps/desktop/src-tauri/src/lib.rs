@@ -516,11 +516,33 @@ fn open_external(app: &AppHandle, url: &Url) {
 fn build_main_window(app: &AppHandle) -> tauri::Result<()> {
     let nav_app = app.clone();
     let popup_app = app.clone();
-    WebviewWindowBuilder::new(app, "main", WebviewUrl::App("loading.html".into()))
+    let mut builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::App("loading.html".into()))
         .title("Basics")
         .inner_size(1280.0, 820.0)
         .min_inner_size(900.0, 600.0)
-        .center()
+        .center();
+
+    // The app draws its own title bar (the page header in the UI, a small bar on the
+    // loading page), so Windows and Linux drop the native decorations entirely.
+    //
+    // Frameless still resizes by dragging edges and corners: for undecorated windows
+    // Tauri keeps the native resize band (tao hit-tests it; `tauri-runtime-wry` also
+    // overlays a `TAURI_DRAG_RESIZE_BORDERS` child for the top edge on Windows and a
+    // 5px inset on Linux). That path needs the window to stay resizable, and on
+    // Windows it lives in the shadow frame, so keep both options on unless explicit
+    // resize handles are added.
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    {
+        builder = builder.decorations(false).resizable(true).shadow(true);
+    }
+    // macOS keeps its own traffic lights, laid over the page header. The header
+    // reserves 76px on the left for them (see `layout.tsx`).
+    #[cfg(target_os = "macos")]
+    {
+        builder = builder.title_bar_style(tauri::TitleBarStyle::Overlay).hidden_title(true);
+    }
+
+    builder
         // Links that leave the local server open in the system browser.
         .on_navigation(move |url| {
             if is_app_url(url) {
