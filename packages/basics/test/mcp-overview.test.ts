@@ -51,6 +51,11 @@ test("get_vault_overview catalogs layers, techs, profiles and projects", async (
     "# Dashboard",
   );
   vault.writeNote("old-thing", { type: "project", title: "Old thing", status: "archived", stack: {}, tags: [], source: "manual" }, "# Old");
+  vault.writeNote(
+    "shipped-app",
+    { type: "project", title: "Shipped app", status: "done", stack: {}, tags: [], source: "manual" },
+    "# Shipped",
+  );
 
   await withClient(root, async (client) => {
     const result = await client.callTool({ name: "get_vault_overview", arguments: {} });
@@ -80,12 +85,13 @@ test("get_vault_overview catalogs layers, techs, profiles and projects", async (
     assert.ok(saas?.use_when.length);
     assert.ok(saas.stack.frontend.includes("react"));
 
-    assert.deepEqual(
-      overview.projects.map((project) => project.id),
-      ["dashboard"],
-    );
-    assert.deepEqual(overview.projects[0].lessons, ["three", "four", "five"]);
-    assert.ok(overview.projects[0].stack.backend.includes("fastapi"));
+    assert.deepEqual(overview.projects.map((project) => project.id).sort(), ["dashboard", "shipped-app"]);
+    // Archived projects stay out of the catalog; finished ones still teach.
+    const shipped = overview.projects.find((project) => project.id === "shipped-app");
+    assert.equal(shipped?.status, "done");
+    const dashboard = overview.projects.find((project) => project.id === "dashboard");
+    assert.deepEqual(dashboard?.lessons, ["three", "four", "five"]);
+    assert.ok(dashboard?.stack.backend.includes("fastapi"));
 
     const filtered = await client.callTool({ name: "get_vault_overview", arguments: { layers: ["backend"] } });
     const partial = JSON.parse(firstText(filtered)) as { layers: { id: string }[] };

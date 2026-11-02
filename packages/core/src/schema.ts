@@ -90,7 +90,7 @@ export const projectSchema = base.extend({
   description: z.string().optional(),
   // Absolute path of the project on disk.
   path: z.string().optional().describe("Absolute path of the project on disk."),
-  status: z.enum(["active", "paused", "archived"]).default("active"),
+  status: z.enum(["active", "paused", "done", "archived"]).default("active"),
   // Profile id it started from.
   profile: z.string().optional().describe("Profile id it started from."),
   // layer id -> tech ids

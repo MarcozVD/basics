@@ -23,7 +23,7 @@ import { cn } from "@/lib/utils";
 const TYPE_ORDER: NoteType[] = ["tech", "practice", "check", "profile", "project", "layer"];
 const TECH_KINDS = ["language", "framework", "library", "tool", "service", "database"] as const;
 const CHECK_KINDS = ["test", "lint", "review", "build"] as const;
-const PROJECT_STATUSES = ["active", "paused", "archived"] as const;
+const PROJECT_STATUSES = ["active", "paused", "done", "archived"] as const;
 const MORE_KEY = "basics:new-note-more";
 type TechKind = (typeof TECH_KINDS)[number];
 type CheckKind = (typeof CHECK_KINDS)[number];

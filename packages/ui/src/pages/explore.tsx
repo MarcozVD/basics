@@ -643,6 +643,7 @@ function ListRow({ row, index, selected, reduce, layerTitles, onHover, onOpen }:
       role="option"
       aria-selected={selected}
       data-note-row
+      data-note-type={row.type}
       tabIndex={-1}
       onMouseEnter={onHover}
       onClick={onOpen}
@@ -723,6 +724,7 @@ function GridCard({ row, index, selected, reduce, layerTitles, onHover, onOpen }
             role="option"
             aria-selected={selected}
             data-note-row
+            data-note-type={row.type}
             tabIndex={-1}
             onClick={onOpen}
             className={cn(

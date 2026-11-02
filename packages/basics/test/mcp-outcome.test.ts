@@ -30,8 +30,14 @@ function tempVault(): string {
   return dir;
 }
 
-async function withClient(name: string, fn: (call: Client["callTool"]) => Promise<void>): Promise<string> {
+async function withClient(name: string, fn: (call: Client["callTool"]) => Promise<void>, status?: "active" | "done"): Promise<string> {
   const root = tempVault();
+  if (status) {
+    const vault = Vault.load(root);
+    const note = vault.get("demo");
+    if (note?.data.type !== "project") throw new Error("missing demo project");
+    vault.writeNote("demo", { ...note.data, status }, note.body);
+  }
   const server = createMcpServer(() => root);
   const client = new Client({ name, version: "0.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
@@ -64,6 +70,30 @@ test("record_project_outcome proposes project and tech updates", async () => {
   const vault = Vault.load(root);
   assert.equal(vault.listProposals().length, 2);
   assert.equal(vault.getProposal("demo")?.meta.proposed_by, "test-agent");
+});
+
+test("record_project_outcome treats a done project like an active one", async () => {
+  const root = await withClient(
+    "test-agent",
+    async (call) => {
+      const result = await call({
+        name: "record_project_outcome",
+        arguments: { project: "demo", summary: "Closed the loop", lessons: ["Ship small"] },
+      });
+      assert.ok(!result.isError);
+      const [first] = result.content as { type: string; text: string }[];
+      assert.deepEqual(JSON.parse(first.text), { status: "pending_review", proposals: ["demo"] });
+    },
+    "done",
+  );
+
+  const vault = Vault.load(root);
+  const proposal = vault.getProposal("demo");
+  assert.ok(proposal);
+  // The outcome keeps the project finished; only lessons and the log change.
+  assert.equal((proposal.data as { status?: string }).status, "done");
+  assert.deepEqual((proposal.data as { lessons?: string[] }).lessons, ["Ship small"]);
+  assert.match(proposal.body, /## Outcome \d{4}-\d{2}-\d{2}/);
 });
 
 test("record_project_outcome rejects pack agents", async () => {

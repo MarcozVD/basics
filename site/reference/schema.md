@@ -109,7 +109,7 @@ Stored in `projects/`.
 | `type` | `"project"` | yes | — | Note type. |
 | `description` | `string` | no | — | — |
 | `path` | `string` | no | — | Absolute path of the project on disk. |
-| `status` | `active` \| `paused` \| `archived` | no | `active` | — |
+| `status` | `active` \| `paused` \| `done` \| `archived` | no | `active` | — |
 | `profile` | `string` | no | — | Profile id it started from. |
 | `stack` | map<string, `string`[]> | no | `{}` | layer id -> tech ids |
 | `reason` | `string` | no | — | — |

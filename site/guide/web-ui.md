@@ -18,10 +18,11 @@ are no sidebars; secondary panels are overlays closed with `Esc`.
 | --- | --- |
 | **Home** | Pending proposals you can approve inline, the agent activity timeline, and vault health (notes per type, broken links, orphans, recent notes). Each broken link can open the note that holds it or create the missing note. An empty vault shows the starter-pack onboarding. |
 | **Explore** | Filters by layer and type with counts, search, list or grid, keyboard navigation, and the new-note dialog. |
+| **Projects** | Project notes, filtered by status with counts. The status chip on each row is a menu: Active, Paused, Done or Archived. Done projects sort last and collapse into a `Done (N)` group in the All view. |
 | **Editor** | Frontmatter form generated from the note type, Markdown body in edit / preview / split, `[[` wikilink autocomplete, connections (links, backlinks, unresolved) and a local graph. A conflict banner appears if the file changed on disk. |
 | **Graph** | Every note and link, with type and layer filters in a floating toolbar, node search, broken links and neighborhood focus. |
 | **Inbox** | Proposals with a side-by-side or unified diff; Approve, Edit and approve, or Reject. Pack proposals are grouped with **Approve all**. |
-| **Recommend** | Project description and layers → profiles and per-layer candidates with `use_when`, `performs_best` and `avoid_when`, selection, and the export modal with **STACK.md / AGENTS.md / CLAUDE.md / Cursor** tabs, each with copy or download. Shows whether the mode is **Keywords** or **Hybrid** and the score breakdown. |
+| **Recommend** | Project description and layers → profiles and per-layer candidates with `use_when`, `performs_best` and `avoid_when`, selection, and the export modal with **STACK.md / AGENTS.md / CLAUDE.md / Cursor** tabs, each with copy or download. Shows whether the mode is **Keywords** or **Hybrid** and the score breakdown. An **Ask an agent** run is kept per browser tab: it keeps going when you leave the page, and the Dock shows its progress. |
 
 ## Shortcuts
 

@@ -1,7 +1,16 @@
 import { Command, FolderKanban, House, Inbox, LayoutList, Sparkles, Waypoints } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { useRef, useState } from "react";
-import { Link, useLocation, useOutlet } from "react-router";
+import { memo, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Link,
+  type Location,
+  type NavigationType,
+  UNSAFE_LocationContext,
+  useLocation,
+  useNavigate,
+  useNavigationType,
+  useOutlet,
+} from "react-router";
 import { AppCommandPalette } from "@/components/app/command-palette";
 import { Logo } from "@/components/app/logo";
 import { NewNoteDialog } from "@/components/app/new-note-dialog";
@@ -13,10 +22,11 @@ import { ThemeToggle } from "@/components/motion/theme-toggle";
 import { Tooltip } from "@/components/motion/tooltip";
 import { PAGE_GUTTERS } from "@/components/page";
 import { type TranslationKey, useI18n } from "@/i18n";
+import { isAgentRunActive, useAgentRunStatus } from "@/lib/agent-run";
 import { EASE_OUT } from "@/lib/ease";
 import { useHealth, useInbox } from "@/lib/queries";
 import { useGlobalShortcuts } from "@/lib/shortcuts";
-import { dismissToast, useToasts } from "@/lib/toast";
+import { dismissToast, toast, useToasts } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 
 interface DockLink {
@@ -62,10 +72,35 @@ function vaultName(vault: string | undefined): string | undefined {
   return segments[segments.length - 1] ?? vault;
 }
 
+/**
+ * The outlet rendered with the location it was created for. `AnimatePresence` keeps the
+ * outgoing page mounted while it fades out; without this snapshot that page keeps reading the
+ * live router location, so `useSearchParams()` sees the *new* route's empty params and a
+ * filtered Explore (or any page keyed by query params) renders "All" for the length of the
+ * transition. Freezing the location context makes the exiting page render as it last did.
+ */
+const PageFrame = memo(function PageFrame({
+  location,
+  navigationType,
+  outlet,
+}: {
+  location: Location;
+  navigationType: NavigationType;
+  outlet: ReactNode;
+}) {
+  const value = useMemo(() => ({ location, navigationType }), [location, navigationType]);
+  return <UNSAFE_LocationContext.Provider value={value}>{outlet}</UNSAFE_LocationContext.Provider>;
+});
+
 export function Layout() {
   const { t, language, setLanguage } = useI18n();
   const location = useLocation();
+  const navigate = useNavigate();
+  const navigationType = useNavigationType();
   const outlet = useOutlet();
+  const agentStatus = useAgentRunStatus();
+  const agentRunning = isAgentRunActive(agentStatus);
+  const onRecommend = location.pathname === "/recommend";
   const reduce = useReducedMotion();
   const health = useHealth();
   const inbox = useInbox();
@@ -77,6 +112,19 @@ export function Layout() {
   const scrollRef = useRef<HTMLElement>(null);
 
   useGlobalShortcuts();
+
+  // A run started from Recommend keeps going while the user is elsewhere: announce it when it
+  // finishes (the panel already shows the answer when it is on screen) and offer to go back.
+  const lastAgentStatus = useRef(agentStatus);
+  useEffect(() => {
+    const wasRunning = isAgentRunActive(lastAgentStatus.current);
+    lastAgentStatus.current = agentStatus;
+    if (!wasRunning || agentStatus !== "done" || onRecommend) return;
+    toast.success(t("recommend.agent.ready"), {
+      label: t("recommend.agent.readyAction"),
+      onClick: () => navigate("/recommend"),
+    });
+  }, [agentStatus, onRecommend, navigate, t]);
 
   return (
     <div className="flex h-dvh flex-col overflow-hidden bg-background text-foreground">
@@ -149,7 +197,7 @@ export function Layout() {
             transition={{ duration: 0.18, ease: EASE_OUT }}
             className="min-h-full"
           >
-            {outlet}
+            <PageFrame location={location} navigationType={navigationType} outlet={outlet} />
           </motion.div>
         </AnimatePresence>
       </main>
@@ -190,8 +238,15 @@ export function Layout() {
                         <AnimatedNumber value={pending} startOnView={false} duration={0.5} />
                       </span>
                     )}
+                    {item.to === "/recommend" && agentRunning && !onRecommend && (
+                      <span
+                        aria-hidden="true"
+                        className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-primary motion-safe:animate-pulse"
+                      />
+                    )}
                   </Link>
                 </Tooltip>
+                {item.to === "/recommend" && agentRunning ? <span className="sr-only">{t("recommend.agent.runningBadge")}</span> : null}
               </DockItem>
             );
           })}

@@ -20,6 +20,15 @@ test("project notes parse and default status to active", () => {
   assert.deepEqual(p.stack, { backend: ["fastapi"] });
 });
 
+test("project status accepts active, paused, done and archived", () => {
+  for (const status of ["active", "paused", "done", "archived"] as const) {
+    const p = noteSchema.parse({ type: "project", status });
+    if (p.type !== "project") throw new Error(`expected project, got ${p.type}`);
+    assert.equal(p.status, status);
+  }
+  assert.throws(() => noteSchema.parse({ type: "project", status: "finished" }));
+});
+
 test("unknown frontmatter fields survive a write/reload round-trip", () => {
   const v = tempVault();
   v.writeNote(
