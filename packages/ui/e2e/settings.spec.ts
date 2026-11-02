@@ -49,6 +49,11 @@ test("language and theme save from General without a Save button", async ({ page
 
   await page.getByRole("tab", { name: "System" }).click();
   expect(await page.evaluate(() => localStorage.getItem("basics-theme"))).toBe("system");
+
+  // The vault buttons only exist in the desktop app; a browser keeps the CLI hint.
+  await expect(page.getByRole("button", { name: "Open folder" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Change folder" })).toHaveCount(0);
+  await expect(page.getByText("basics config set vault")).toBeVisible();
 });
 
 test("Agents lists every client and connects, then disconnects, Cursor", async ({ page }) => {

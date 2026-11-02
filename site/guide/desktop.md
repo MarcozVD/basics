@@ -42,13 +42,16 @@ On the very first launch there is no vault yet. The window shows a **Choose vaul
 
 ## Tray and window behaviour
 
-- **Closing the window hides it** — the server keeps running, so MCP keeps working for your agents. Use the tray menu
-  (or **Quit Basics**) to actually stop it.
+- **Closing the window hides it** by default — the server keeps running, so MCP keeps working for your agents. Use the
+  tray menu (or **Quit Basics**) to actually stop it. Settings → Startup can change the close button to quit the app
+  instead (see [Desktop settings](#desktop-settings)).
 - The tray menu:
   - **Open Basics** — show the window again.
+  - **Settings...** — show the window on the Settings page.
   - **Copy MCP URL** — copies `http://127.0.0.1:<port>/mcp` to the clipboard (the port the app is actually serving on).
   - **Open vault folder** — opens your vault directory in the file manager.
-  - **Start at login** — checkbox, off by default. Starts the app (and therefore the server) when you sign in.
+  - **Start at login** — checkbox, off by default. Starts the app (and therefore the server) when you sign in. It is the
+    same setting as Settings → Startup.
   - **Check for updates** — opens the GitHub Releases page in your browser.
   - **Quit Basics** — stops the server the app started and exits. If the app only attached to an existing server, it
     simply exits and leaves that server running.
@@ -72,11 +75,16 @@ draws them.
 
 ## What the app window can do
 
-The app only lets the page it shows control its own window. The page is served from `127.0.0.1`, and the app grants that
-local page window commands only: minimize, maximize and restore, close, drag, and checking whether the window is
-maximized. It has no permission to run programs, read or write files, or open URLs through the app, so a page loaded
-from that local server cannot use the app to do those things. Everything else keeps the limits described in
-[Security](security).
+The page the app shows is served from `127.0.0.1`, and the app treats it as a remote page with a short list of allowed
+app commands:
+
+- window controls: minimize, maximize and restore, close, drag, and checking whether the window is maximized;
+- desktop settings: read and save the startup and close options;
+- vault: open the vault folder, and choose a new vault folder.
+
+None of these takes a path from the page. **Open folder** opens the vault the running server reports, and **Change
+folder** accepts only a folder picked in the native dialog. The page has no permission to run programs, read or write
+files directly, or open URLs through the app. Everything else keeps the limits described in [Security](security).
 
 ## Keyboard and browser behaviour
 
@@ -117,6 +125,34 @@ claude mcp add --transport http basics http://127.0.0.1:4747/mcp
 ```
 
 Other clients are covered in [MCP clients](mcp-clients).
+
+## Desktop settings
+
+Settings → **Startup** in the app holds the options that only the desktop app has. Changes apply as soon as you pick
+them; there is no Save button.
+
+- **Start Basics when I sign in** — registers the app as a login item. Off by default. The tray's **Start at login**
+  checkbox is the same setting.
+- **Start minimized** — whether a launch hides the window, leaving only the tray icon and the server:
+  - **Never** (default): the window always shows.
+  - **When I sign in**: hidden only when the app starts at sign-in. A normal launch shows the window.
+  - **Always**: hidden on every launch. Open the window from the tray with **Open Basics**.
+- **Closing the window**:
+  - **Keep running in the tray** (default): the close button hides the window; the server and MCP keep running.
+  - **Quit Basics**: the close button quits the app, as **Quit Basics** in the tray does.
+
+The values are saved as `desktop-settings.json` in the app's config folder. A missing or damaged file means the
+defaults, so the app still starts.
+
+**General → Vault folder** has two buttons:
+
+- **Open folder** opens the vault in your file manager.
+- **Change folder** asks for confirmation, then shows the folder picker. The folder you pick is set up as a vault with
+  `basics init`, the same as on first run, and the server restarts with it. Notes in the old folder are not moved.
+  Cancel changes nothing.
+
+**Settings → Updates** shows the installed version and links to the GitHub Releases page. There is no automatic
+updater yet.
 
 ## Config and vault location
 

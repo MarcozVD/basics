@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowUpRight, Check, ChevronDown, Copy, MonitorSmartphone } from "lucide-react";
+import { ArrowUpRight, Check, ChevronDown, Copy, FolderOpen, MonitorSmartphone } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { type KeyboardEvent as ReactKeyboardEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type KeyboardEvent as ReactKeyboardEvent, type ReactNode, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { Button } from "@/components/motion/button/base";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/motion/collapsible";
@@ -9,10 +9,20 @@ import { Switch } from "@/components/motion/switch";
 import { Tabs, TabsList, TabsTrigger } from "@/components/motion/tabs";
 import { PAGE_SECTIONS, Page } from "@/components/page";
 import { ErrorState, Loading } from "@/components/state";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { type TranslationKey, useI18n, useT } from "@/i18n";
 import { agentColor, agentInitial } from "@/lib/agent-color";
 import { type ConnectClientId, connectClients, disableEmbeddings, disconnectClients, enableEmbeddings, type Language } from "@/lib/api";
-import { isDesktop } from "@/lib/desktop";
+import {
+  type CloseBehavior,
+  chooseVaultFolder,
+  type DesktopSettings,
+  isDesktop,
+  openVaultFolder,
+  readDesktopSettings,
+  type StartMinimized,
+  writeDesktopSettings,
+} from "@/lib/desktop";
 import { useEmbeddingsProgress } from "@/lib/events";
 import { queryKeys, useConnectStatus, useEmbeddings, useHealth } from "@/lib/queries";
 import { type Theme, useTheme } from "@/lib/theme";
@@ -45,7 +55,12 @@ const LINKS = {
   desktop: "https://marcozvd.github.io/basics/guide/desktop.html",
   github: "https://github.com/MarcoZVD/basics",
   licenses: "https://github.com/MarcoZVD/basics/blob/main/THIRD_PARTY_NOTICES.md",
+  releases: "https://github.com/MarcoZVD/basics/releases",
 };
+
+function errorText(cause: unknown): string {
+  return cause instanceof Error ? cause.message : String(cause);
+}
 
 function isSection(value: string | null): value is SectionId {
   return value !== null && (SECTIONS as readonly string[]).includes(value);
@@ -182,6 +197,59 @@ function Chip({ tone, children }: { tone: "primary" | "muted" | "plain"; childre
   );
 }
 
+/**
+ * A small set of mutually exclusive options. Native radios (one per option, one name)
+ * give the correct semantics and arrow-key behaviour; the labels look like the segment
+ * control the rest of the page uses.
+ */
+function ChoiceGroup<T extends string>({
+  label,
+  value,
+  options,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  value: T;
+  options: { value: T; label: string }[];
+  disabled?: boolean;
+  onChange: (value: T) => void;
+}) {
+  const name = useId();
+  return (
+    <fieldset className="m-0 min-w-0 border-0 p-0" aria-label={label}>
+      <div className="inline-flex flex-wrap items-center gap-0 rounded-lg bg-muted/50 p-0.5">
+        {options.map((option) => {
+          const selected = option.value === value;
+          return (
+            <label key={option.value} className="relative inline-flex cursor-pointer items-center">
+              <input
+                type="radio"
+                name={name}
+                value={option.value}
+                checked={selected}
+                disabled={disabled}
+                onChange={() => onChange(option.value)}
+                className="peer sr-only"
+              />
+              <span
+                className={cn(
+                  "inline-flex items-center justify-center rounded-md px-3 py-1 text-xs font-medium whitespace-nowrap transition-colors",
+                  "peer-focus-visible:outline-2 peer-focus-visible:-outline-offset-2 peer-focus-visible:outline-ring",
+                  selected ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
+                  disabled && "cursor-not-allowed opacity-60",
+                )}
+              >
+                {option.label}
+              </span>
+            </label>
+          );
+        })}
+      </div>
+    </fieldset>
+  );
+}
+
 function GeneralSection() {
   const t = useT();
   const { language, setLanguage } = useI18n();
@@ -191,12 +259,44 @@ function GeneralSection() {
   const [savedLanguage, flashLanguage] = useSavedFlash();
   const [savedTheme, flashTheme] = useSavedFlash();
   const [languageError, setLanguageError] = useState(false);
+  // Vault actions exist only in the desktop app; in a browser the CLI hint below is all.
+  const [confirmChange, setConfirmChange] = useState(false);
+  const [vaultBusy, setVaultBusy] = useState(false);
+  const [vaultNote, setVaultNote] = useState<string | null>(null);
+  const [vaultError, setVaultError] = useState<string | null>(null);
 
   const changeLanguage = async (next: Language) => {
     setLanguageError(false);
     const ok = await setLanguage(next);
     if (ok) flashLanguage();
     else setLanguageError(true);
+  };
+
+  const openFolder = async () => {
+    setVaultError(null);
+    try {
+      await openVaultFolder();
+    } catch (cause) {
+      setVaultError(errorText(cause));
+    }
+  };
+
+  const changeFolder = async () => {
+    setConfirmChange(false);
+    setVaultBusy(true);
+    setVaultError(null);
+    setVaultNote(t("settings.vault.restarting"));
+    try {
+      const changed = await chooseVaultFolder();
+      // A folder was picked: `basics init` recorded it and the app restarts the server,
+      // which reloads this page. A dismissed picker leaves everything as it was.
+      if (!changed) setVaultNote(null);
+    } catch (cause) {
+      setVaultError(errorText(cause));
+      setVaultNote(null);
+    } finally {
+      setVaultBusy(false);
+    }
   };
 
   const vault = health.data?.vault;
@@ -251,11 +351,24 @@ function GeneralSection() {
             </Tabs>
           </fieldset>
         </Row>
-        <Row title={t("settings.vault.title")} description={t("settings.vault.description")}>
-          <span title={vault} className="max-w-[42ch] truncate font-mono text-[11px] text-muted-foreground max-sm:max-w-[52vw]">
-            {vault ?? t("nav.vaultUnavailable")}
-          </span>
-          {vault ? <CopyButton value={vault} /> : null}
+        <Row title={t("settings.vault.title")} description={t("settings.vault.description")} vertical={desktop}>
+          <div className="flex min-w-0 items-center gap-2">
+            <span title={vault} className="max-w-[42ch] truncate font-mono text-[11px] text-muted-foreground max-sm:max-w-[52vw]">
+              {vault ?? t("nav.vaultUnavailable")}
+            </span>
+            {vault ? <CopyButton value={vault} /> : null}
+          </div>
+          {desktop ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <Button variant="secondary" size="sm" disabled={!vault || vaultBusy} onClick={() => void openFolder()}>
+                <FolderOpen className="size-3.5" aria-hidden="true" />
+                {t("settings.vault.open")}
+              </Button>
+              <Button variant="secondary" size="sm" disabled={!vault || vaultBusy} onClick={() => setConfirmChange(true)}>
+                {t("settings.vault.change")}
+              </Button>
+            </div>
+          ) : null}
         </Row>
       </Rows>
 
@@ -271,6 +384,42 @@ function GeneralSection() {
           </div>
         </div>
       )}
+
+      {vaultNote && !vaultError ? (
+        <p role="status" className="text-xs text-muted-foreground">
+          {vaultNote}
+        </p>
+      ) : null}
+      {vaultError ? (
+        <p role="alert" className="text-xs text-destructive">
+          {t("settings.vault.failed", { message: vaultError })}
+        </p>
+      ) : null}
+
+      <Dialog open={confirmChange} onOpenChange={setConfirmChange}>
+        <DialogContent showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>{t("settings.vault.changeTitle")}</DialogTitle>
+            <DialogDescription>{t("settings.vault.changeBody")}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <button
+              type="button"
+              onClick={() => setConfirmChange(false)}
+              className="rounded-full border border-border px-4 py-1.5 text-sm font-medium transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            >
+              {t("settings.vault.changeCancel")}
+            </button>
+            <button
+              type="button"
+              onClick={() => void changeFolder()}
+              className="rounded-full bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            >
+              {t("settings.vault.changeConfirm")}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Section>
   );
 }
@@ -302,12 +451,158 @@ function DesktopOnlySection({ id, description, body }: { id: SectionId; descript
   );
 }
 
+/**
+ * Settings → Startup, desktop only. The values live in Rust (`desktop-settings.json`),
+ * not in the browser, so they are read once when the section opens and every change is
+ * written straight away: no Save button, `Saved` once Rust confirms, the previous value
+ * restored if it refuses.
+ */
+function StartupSection() {
+  const t = useT();
+  const desktop = useMemo(() => isDesktop(), []);
+  const [settings, setSettings] = useState<DesktopSettings | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+  const [saved, flashSaved] = useSavedFlash();
+
+  useEffect(() => {
+    if (!desktop) return;
+    let live = true;
+    readDesktopSettings()
+      .then((loaded) => {
+        if (live) setSettings(loaded);
+      })
+      .catch((cause: unknown) => {
+        if (live) setLoadError(errorText(cause));
+      });
+    return () => {
+      live = false;
+    };
+  }, [desktop]);
+
+  const save = async (patch: Partial<DesktopSettings>) => {
+    if (!settings || pending) return;
+    const before = settings;
+    const next = { ...settings, ...patch };
+    setSettings(next);
+    setSaveError(null);
+    setPending(true);
+    try {
+      // Rust answers with what it stored, which is also the live login-item state.
+      setSettings(await writeDesktopSettings(next));
+      flashSaved();
+    } catch (cause) {
+      setSettings(before);
+      setSaveError(errorText(cause));
+    } finally {
+      setPending(false);
+    }
+  };
+
+  if (!desktop) {
+    return <DesktopOnlySection id="startup" description={t("settings.startup.description")} body={t("settings.startup.desktop")} />;
+  }
+
+  if (loadError) {
+    return (
+      <Section id="startup" title={t("settings.startup.title")} description={t("settings.startup.description")}>
+        <ErrorState error={loadError} />
+      </Section>
+    );
+  }
+
+  return (
+    <Section id="startup" title={t("settings.startup.title")} description={t("settings.startup.description")}>
+      {settings ? (
+        <Rows>
+          <Row title={t("settings.startup.signIn.title")} description={t("settings.startup.signIn.description")}>
+            <Switch
+              checked={settings.startAtLogin}
+              disabled={pending}
+              ariaLabel={t("settings.startup.signIn.title")}
+              onCheckedChange={(next) => void save({ startAtLogin: next })}
+            />
+          </Row>
+          <Row title={t("settings.startup.minimized.title")} description={t("settings.startup.minimized.description")} vertical>
+            <ChoiceGroup<StartMinimized>
+              label={t("settings.startup.minimized.title")}
+              value={settings.startMinimized}
+              disabled={pending}
+              onChange={(next) => void save({ startMinimized: next })}
+              options={[
+                { value: "never", label: t("settings.startup.minimized.never") },
+                { value: "login", label: t("settings.startup.minimized.login") },
+                { value: "always", label: t("settings.startup.minimized.always") },
+              ]}
+            />
+          </Row>
+          <Row title={t("settings.startup.closing.title")} description={t("settings.startup.closing.description")} vertical>
+            <ChoiceGroup<CloseBehavior>
+              label={t("settings.startup.closing.title")}
+              value={settings.closeBehavior}
+              disabled={pending}
+              onChange={(next) => void save({ closeBehavior: next })}
+              options={[
+                { value: "tray", label: t("settings.startup.closing.tray") },
+                { value: "quit", label: t("settings.startup.closing.quit") },
+              ]}
+            />
+          </Row>
+        </Rows>
+      ) : (
+        <Loading />
+      )}
+
+      {saveError ? (
+        <p role="alert" className="text-xs text-destructive">
+          {t("settings.startup.failed", { message: saveError })}
+        </p>
+      ) : null}
+      <SavedHint visible={saved} />
+    </Section>
+  );
+}
+
+/** Settings → Updates, desktop only, until V15-T7 adds the in-app updater. */
+function UpdatesSection() {
+  const t = useT();
+  const desktop = useMemo(() => isDesktop(), []);
+  const health = useHealth();
+
+  if (!desktop) {
+    return <DesktopOnlySection id="updates" description={t("settings.updates.description")} body={t("settings.updates.desktop")} />;
+  }
+
+  return (
+    <Section id="updates" title={t("settings.updates.title")} description={t("settings.updates.description")}>
+      <Rows>
+        <Row title={t("settings.updates.version")}>
+          <span className="font-mono text-[11px] text-muted-foreground">{health.data?.version ?? "—"}</span>
+        </Row>
+        <Row title={t("settings.updates.check")} description={t("settings.updates.check.description")}>
+          {/* V15-T7: replace this link with the updater's check, download and
+              "Update and restart". Only the anchor below changes. */}
+          <a
+            href={LINKS.releases}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1 rounded-full border border-border px-3 py-1 text-sm font-medium transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          >
+            {t("settings.updates.openReleases")}
+            <ArrowUpRight className="size-3.5" aria-hidden="true" />
+          </a>
+        </Row>
+      </Rows>
+    </Section>
+  );
+}
+
 interface ClientFeedback {
   diff?: string;
   note?: string;
   error?: string;
 }
-
 function AgentsSection() {
   const t = useT();
   const queryClient = useQueryClient();
@@ -712,14 +1007,10 @@ export function SettingsPage() {
             className="min-w-0"
           >
             {active === "general" ? <GeneralSection /> : null}
-            {active === "startup" ? (
-              <DesktopOnlySection id="startup" description={t("settings.startup.description")} body={t("settings.startup.desktop")} />
-            ) : null}
+            {active === "startup" ? <StartupSection /> : null}
             {active === "agents" ? <AgentsSection /> : null}
             {active === "search" ? <SearchSection /> : null}
-            {active === "updates" ? (
-              <DesktopOnlySection id="updates" description={t("settings.updates.description")} body={t("settings.updates.desktop")} />
-            ) : null}
+            {active === "updates" ? <UpdatesSection /> : null}
             {active === "about" ? <AboutSection /> : null}
           </motion.div>
         </div>

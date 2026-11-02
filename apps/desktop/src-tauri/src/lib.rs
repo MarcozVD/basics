@@ -8,6 +8,7 @@
 use std::collections::VecDeque;
 use std::io::{Read, Write};
 use std::net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream};
+use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
@@ -23,6 +24,10 @@ use tauri_plugin_opener::OpenerExt;
 #[cfg(not(target_os = "linux"))]
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
+
+mod settings;
+
+use settings::{CloseBehavior, DesktopSettings};
 
 const DEFAULT_PORT: u16 = 4747;
 const STARTUP_TIMEOUT: Duration = Duration::from_secs(20);
@@ -93,6 +98,45 @@ struct Server {
 }
 
 struct ServerState(Mutex<Server>);
+
+/// Desktop settings as read at startup; the Settings page edits them through the two
+/// `*_desktop_settings` commands. Kept in memory so the close handler never hits the disk.
+struct Prefs(Mutex<DesktopSettings>);
+
+/// The tray's "Start at login" checkbox, so the page and the tray stay in sync.
+struct TrayMenu(Mutex<Option<CheckMenuItem<tauri::Wry>>>);
+
+fn config_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    app.path()
+        .app_config_dir()
+        .map_err(|err| format!("cannot locate the app config folder: {err}"))
+}
+
+fn autostart_enabled(app: &AppHandle) -> bool {
+    app.autolaunch().is_enabled().unwrap_or(false)
+}
+
+fn set_tray_autostart(app: &AppHandle, enabled: bool) {
+    if let Some(item) = app.state::<TrayMenu>().0.lock().unwrap().as_ref() {
+        let _ = item.set_checked(enabled);
+    }
+}
+
+/// Store `start_at_login` after the tray checkbox changed, leaving the other settings
+/// alone. A failed write is not worth a dialog: the login item itself already changed.
+fn remember_start_at_login(app: &AppHandle, enabled: bool) {
+    let state = app.state::<Prefs>();
+    let mut prefs = state.0.lock().unwrap();
+    if prefs.start_at_login == enabled {
+        return;
+    }
+    prefs.start_at_login = enabled;
+    let snapshot = prefs.clone();
+    drop(prefs);
+    if let Ok(dir) = config_dir(app) {
+        let _ = settings::save(&dir, &snapshot);
+    }
+}
 
 /// `GET /api/health` over a plain socket; `Some` only for a Basics server.
 fn basics_health(port: u16) -> Option<serde_json::Value> {
@@ -398,6 +442,46 @@ fn startup_status(state: tauri::State<'_, ServerState>) -> Status {
     status
 }
 
+/// The Settings page's Startup section. `start_at_login` always reports the real login
+/// item, so the page and the tray checkbox cannot disagree.
+#[tauri::command]
+fn get_desktop_settings(app: AppHandle) -> DesktopSettings {
+    let mut settings = app.state::<Prefs>().0.lock().unwrap().clone();
+    settings.start_at_login = autostart_enabled(&app);
+    settings
+}
+
+/// Save the Startup section and apply what has an immediate effect: the login item and
+/// the tray checkbox. `start_minimized` and `close_behavior` are read by the next launch
+/// (or by the close handler), so they need no extra wiring here.
+#[tauri::command]
+fn set_desktop_settings(app: AppHandle, settings: DesktopSettings) -> Result<DesktopSettings, String> {
+    let launcher = app.autolaunch();
+    let wanted = settings.start_at_login;
+    if wanted != autostart_enabled(&app) {
+        let result = if wanted { launcher.enable() } else { launcher.disable() };
+        result.map_err(|err| format!("could not {} the login item: {err}", if wanted { "add" } else { "remove" }))?;
+    }
+    // Read the state back instead of trusting the request: the OS call is the truth.
+    let mut saved = settings;
+    saved.start_at_login = autostart_enabled(&app);
+    settings::save(&config_dir(&app)?, &saved)?;
+    *app.state::<Prefs>().0.lock().unwrap() = saved.clone();
+    set_tray_autostart(&app, saved.start_at_login);
+    Ok(saved)
+}
+
+/// Open the vault the running server uses in the system file manager. Deliberately takes
+/// no argument: the page can never ask the app to open an arbitrary path.
+#[tauri::command]
+fn open_vault_folder(app: AppHandle) -> Result<(), String> {
+    let vault = app.state::<ServerState>().0.lock().unwrap().vault.clone();
+    let Some(vault) = vault else {
+        return Err("Basics is not running yet.".into());
+    };
+    app.opener().open_path(vault, None::<&str>).map_err(|err| err.to_string())
+}
+
 #[tauri::command]
 fn retry_startup(app: AppHandle) {
     stop_sidecar(&app);
@@ -406,7 +490,9 @@ fn retry_startup(app: AppHandle) {
     std::thread::spawn(move || start(app));
 }
 
-/// First run: pick (or create) a vault folder, run `basics init` there, then start.
+/// First run and Settings → General → "Change folder": pick (or create) a vault folder,
+/// run `basics init` there (which also records it as the configured vault), then restart
+/// the server. Only a folder the person picked in the native dialog is ever written to.
 #[tauri::command]
 async fn choose_vault(app: AppHandle) -> Result<bool, String> {
     let Some(picked) = app.dialog().file().set_title("Choose a folder for your Basics vault").blocking_pick_folder() else {
@@ -513,13 +599,15 @@ fn open_external(app: &AppHandle, url: &Url) {
     }
 }
 
-fn build_main_window(app: &AppHandle) -> tauri::Result<()> {
+fn build_main_window(app: &AppHandle, start_hidden: bool) -> tauri::Result<()> {
     let nav_app = app.clone();
     let popup_app = app.clone();
     let mut builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::App("loading.html".into()))
         .title("Basics")
         .inner_size(1280.0, 820.0)
         .min_inner_size(900.0, 600.0)
+        // A launch at sign-in can hide the window; the tray icon still shows it.
+        .visible(!start_hidden)
         // Ctrl +/-/0 and Ctrl+wheel must not zoom a desktop window (default true in wry).
         .zoom_hotkeys_enabled(false)
         .center();
@@ -611,13 +699,19 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     let copy_mcp = MenuItem::with_id(app, "copy-mcp", "Copy MCP URL", true, None::<&str>)?;
     let vault = MenuItem::with_id(app, "open-vault", "Open vault folder", true, None::<&str>)?;
     let connect = MenuItem::with_id(app, "connect", "Connect agents…", true, None::<&str>)?;
+    let settings_item = MenuItem::with_id(app, "settings", "Settings…", true, None::<&str>)?;
     let autostart = CheckMenuItem::with_id(app, "autostart", "Start at login", true, autostart_on, None::<&str>)?;
     let updates = MenuItem::with_id(app, "updates", "Check for updates", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit Basics", true, None::<&str>)?;
     let separator_a = PredefinedMenuItem::separator(app)?;
     let separator_b = PredefinedMenuItem::separator(app)?;
-    let menu = Menu::with_items(app, &[&open, &copy_mcp, &vault, &connect, &separator_a, &autostart, &updates, &separator_b, &quit])?;
+    let menu = Menu::with_items(
+        app,
+        &[&open, &copy_mcp, &vault, &connect, &settings_item, &separator_a, &autostart, &updates, &separator_b, &quit],
+    )?;
 
+    // Kept so the Settings page can tick the same checkbox.
+    *app.state::<TrayMenu>().0.lock().unwrap() = Some(autostart.clone());
     let autostart_item = autostart.clone();
     let mut tray = TrayIconBuilder::with_id("main").tooltip("Basics").menu(&menu).show_menu_on_left_click(false);
     if let Some(icon) = app.default_window_icon() {
@@ -642,11 +736,23 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
             let app = app.clone();
             std::thread::spawn(move || connect_agents(app));
         }
+        "settings" => {
+            show_main(app);
+            let url = app.state::<ServerState>().0.lock().unwrap().status.url.clone();
+            if let Some(url) = url {
+                open_in_window(app, &format!("{url}/settings"));
+            }
+        }
         "autostart" => {
             let launcher = app.autolaunch();
-            let enable = !launcher.is_enabled().unwrap_or(false);
-            let _ = if enable { launcher.enable() } else { launcher.disable() };
-            let _ = autostart_item.set_checked(launcher.is_enabled().unwrap_or(enable));
+            let enable = !autostart_enabled(app);
+            let changed = if enable { launcher.enable() } else { launcher.disable() };
+            if changed.is_ok() {
+                let enabled = autostart_enabled(app);
+                let _ = autostart_item.set_checked(enabled);
+                // Same setting as Settings → Startup, so keep the stored copy honest.
+                remember_start_at_login(app, enabled);
+            }
         }
         "updates" => {
             let _ = app.opener().open_url(RELEASES_URL, None::<&str>);
@@ -672,22 +778,45 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_clipboard_manager::init())
-        .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, None))
+        // The login item always carries `--minimized`; whether that hides the window is
+        // the `start_minimized` setting's decision, so it can change without re-registering.
+        .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, Some(vec![settings::MINIMIZED_ARG])))
         .manage(ServerState(Mutex::new(Server::default())))
-        .invoke_handler(tauri::generate_handler![startup_status, retry_startup, choose_vault])
+        .manage(Prefs(Mutex::new(DesktopSettings::default())))
+        .manage(TrayMenu(Mutex::new(None)))
+        .invoke_handler(tauri::generate_handler![
+            startup_status,
+            retry_startup,
+            choose_vault,
+            open_vault_folder,
+            get_desktop_settings,
+            set_desktop_settings
+        ])
         .setup(|app| {
             let handle = app.handle().clone();
-            build_main_window(&handle)?;
+            // Read the settings before the window exists: `start_minimized` decides
+            // whether it is shown at all, and the close handler needs `close_behavior`.
+            let prefs = config_dir(&handle).map(|dir| settings::load(&dir)).unwrap_or_default();
+            let start_hidden = settings::start_hidden(&prefs, settings::launched_at_login(std::env::args()));
+            *handle.state::<Prefs>().0.lock().unwrap() = prefs;
+            build_main_window(&handle, start_hidden)?;
             build_tray(&handle)?;
             std::thread::spawn(move || start(handle));
             Ok(())
         })
         .on_window_event(|window, event| {
-            // Closing hides the window; the server keeps serving MCP until Quit.
+            // Closing hides the window by default, so the server keeps serving MCP until
+            // Quit; "Quit Basics" in Settings → Startup makes the button quit instead.
             if let WindowEvent::CloseRequested { api, .. } = event {
                 if window.label() == "main" {
-                    api.prevent_close();
-                    let _ = window.hide();
+                    let quit = window.app_handle().state::<Prefs>().0.lock().unwrap().close_behavior == CloseBehavior::Quit;
+                    if quit {
+                        api.prevent_close();
+                        window.app_handle().exit(0);
+                    } else {
+                        api.prevent_close();
+                        let _ = window.hide();
+                    }
                 }
             }
         })
