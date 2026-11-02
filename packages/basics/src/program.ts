@@ -70,6 +70,7 @@ import {
 } from "./embeddings-runtime.js";
 import { packsDir } from "./packs-dir.js";
 import { getRecommender } from "./recommender.js";
+import { SKILL_AREA_LABELS, SKILL_AREAS, type SkillEntry, type SkillsResponse, scanSkills } from "./skills.js";
 
 const { version } = createRequire(import.meta.url)("../package.json") as { version: string };
 
@@ -972,6 +973,54 @@ function disconnectCli(clients: readonly string[], opts: DisconnectCliOptions): 
   if (result.entries.some((entry) => entry.result === "error")) process.exitCode = 1;
 }
 
+interface SkillsCliOptions {
+  json?: boolean;
+}
+
+function skillPurpose(entry: SkillEntry): string {
+  if (entry.error) return entry.error;
+  const text = entry.summary.replace(/\s+/g, " ").trim();
+  return text.length > 80 ? `${text.slice(0, 77)}...` : text;
+}
+
+function printSkills(result: SkillsResponse): void {
+  printTable([
+    ["AGENT", "DETECTED", "FOLDERS"],
+    ...result.agents.map((agent) => [agent.name, agent.detected ? "yes" : "no", agent.dirs.join(", ") || "—"]),
+  ]);
+
+  if (!result.skills.length) {
+    console.log("\nno skills found");
+    return;
+  }
+
+  const agentNames = new Map(result.agents.map((agent) => [agent.id, agent.name.replace(/ \(.*\)$/, "")]));
+  const rows: string[][] = [["AREA", "SKILL", "AGENTS", "WHAT IT IS FOR"]];
+  let lastArea: string | undefined;
+  for (const area of SKILL_AREAS) {
+    for (const entry of result.skills.filter((skill) => skill.area === area)) {
+      rows.push([
+        lastArea === area ? "" : SKILL_AREA_LABELS[area],
+        entry.plugin ? `${entry.name} (${entry.plugin})` : entry.name,
+        entry.agents.map((agent) => agentNames.get(agent) ?? agent).join(", "),
+        skillPurpose(entry),
+      ]);
+      lastArea = area;
+    }
+  }
+  console.log("");
+  printTable(rows);
+}
+
+function skillsCli(opts: SkillsCliOptions): void {
+  const result = scanSkills();
+  if (opts.json) {
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+  printSkills(result);
+}
+
 /** Build the CLI without parsing argv, so references and tests can walk the commands. */
 export function buildProgram(): Command {
   program = new Command("basics")
@@ -1059,6 +1108,12 @@ export function buildProgram(): Command {
     .option("--no-skill", "only remove the MCP entry, keep the Basics skill")
     .option("--dry-run", "print every change without writing anything")
     .action((clients: string[] | undefined, opts: DisconnectCliOptions) => disconnectCli(clients ?? [], opts));
+
+  program
+    .command("skills")
+    .description("list the skills installed for your coding agents, grouped by area")
+    .option("--json", "print the full scan as JSON")
+    .action((opts: SkillsCliOptions) => skillsCli(opts));
 
   const pack = program.command("pack").description("manage official and community note packs");
   pack

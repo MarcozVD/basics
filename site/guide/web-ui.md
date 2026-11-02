@@ -11,7 +11,7 @@ reload.
 
 ## Screens
 
-Navigation is a floating dock at the bottom: Home, Explore, Graph, Inbox (with the pending count) and Recommend. There
+Navigation is a floating dock at the bottom: Home, Explore, Projects, Graph, Inbox (with the pending count), Recommend and Skills. There
 are no sidebars; secondary panels are overlays closed with `Esc`. **Settings** is not in the dock: open it with the gear
 in the header or with `Ctrl`/`⌘+,`.
 
@@ -24,6 +24,7 @@ in the header or with `Ctrl`/`⌘+,`.
 | **Graph** | Every note and link, with type and layer filters in a floating toolbar, node search, broken links and neighborhood focus. |
 | **Inbox** | Proposals with a side-by-side or unified diff; Approve, Edit and approve, or Reject. Pack proposals are grouped with **Approve all**. |
 | **Settings** | Six sections: **General** (language, theme, vault path; in the [desktop app](desktop) also **Open folder** and **Change folder**), **Startup**, **Agents** (connect or disconnect each coding agent and see the file change it makes), **Search** (semantic search on or off), **Updates** and **About**. Each change applies as soon as you pick it; there is no Save button. Startup and Updates are desktop-only; see [Desktop settings](desktop#desktop-settings). |
+| **Skills** | Every skill installed for your coding agents, grouped by area: filter by agent or area, search by name and description, change a skill's area, and expand a row for its path and version. |
 | **Recommend** | Project description and layers → profiles and per-layer candidates with `use_when`, `performs_best` and `avoid_when`, selection, and the export modal with **STACK.md / AGENTS.md / CLAUDE.md / Cursor** tabs, each with copy or download. Shows whether the mode is **Keywords** or **Hybrid** and the score breakdown. An **Ask an agent** run is kept per browser tab: it keeps going when you leave the page, and the Dock shows its progress. |
 
 ## Shortcuts
@@ -32,7 +33,7 @@ in the header or with `Ctrl`/`⌘+,`.
 | --- | --- |
 | `Ctrl`/`⌘+K` | Command palette: search notes and proposals, jump to any screen, run actions (including copying the MCP command) |
 | `Ctrl`/`⌘+,` | Open Settings |
-| `g` then `h` / `e` / `g` / `i` / `r` | Go to Home / Explore / Graph / Inbox / Recommend |
+| `g` then `h` / `e` / `p` / `g` / `i` / `r` / `k` | Go to Home / Explore / Projects / Graph / Inbox / Recommend / Skills |
 | `Ctrl`/`⌘+S` | Save the note in the editor |
 | `Ctrl`/`⌘+F` | Focus search in Explore and in the graph. In the [desktop app](desktop) it opens the command palette search instead |
 | `↑` / `↓`, `Enter` | Move through lists (Explore, Inbox, palette) and open |

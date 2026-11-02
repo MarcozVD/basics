@@ -1,4 +1,4 @@
-import { Command, FolderKanban, House, Inbox, LayoutList, Settings, Sparkles, Waypoints } from "lucide-react";
+import { Command, FolderKanban, House, Inbox, LayoutList, Puzzle, Settings, Sparkles, Waypoints } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { memo, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -46,6 +46,7 @@ const dockLinks: DockLink[] = [
   { to: "/graph", labelKey: "nav.graph", icon: Waypoints, shortcut: "G" },
   { to: "/inbox", labelKey: "nav.inbox", icon: Inbox, shortcut: "I" },
   { to: "/recommend", labelKey: "nav.recommend", icon: Sparkles, shortcut: "R" },
+  { to: "/skills", labelKey: "nav.skills", icon: Puzzle, shortcut: "K" },
 ];
 
 /** Height of the floating Dock itself. */

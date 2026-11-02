@@ -67,7 +67,8 @@ Agent names starting with `pack:` are reserved, so an agent cannot forge pack pr
 ## Configuration
 
 Global config lives in `~/.config/basics/config.json` (override the path with `BASICS_CONFIG`). Keys: `vault`,
-`language` (`en` or `es`), `embeddings` (`true` or `false`) and `embeddingsModel`.
+`language` (`en` or `es`), `embeddings` (`true` or `false`) and `embeddingsModel`. `skills.areas` is an optional map from a
+skill key to an area, set by the skill area API; see [Skills](skills).
 
 ```bash
 basics config path

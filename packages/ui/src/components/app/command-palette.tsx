@@ -12,6 +12,7 @@ import {
   Moon,
   Package,
   Plus,
+  Puzzle,
   Settings as SettingsIcon,
   Sparkles,
   Sun,
@@ -202,6 +203,7 @@ export function AppCommandPalette() {
       { to: "/graph", labelKey: "nav.graph", icon: Waypoints, hint: "G G" },
       { to: "/inbox", labelKey: "nav.inbox", icon: InboxIcon, hint: "G I" },
       { to: "/recommend", labelKey: "nav.recommend", icon: Sparkles, hint: "G R" },
+      { to: "/skills", labelKey: "nav.skills", icon: Puzzle, hint: "G K" },
       { to: "/settings", labelKey: "nav.settings", icon: SettingsIcon, hint: SETTINGS_HINT },
     ];
     for (const route of routes) {

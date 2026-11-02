@@ -14,6 +14,7 @@ import {
   getNotes,
   getPacks,
   getProposal,
+  getSkills,
   getStats,
   type NoteFilter,
   search,
@@ -35,6 +36,7 @@ export const queryKeys = {
   graph: (broken: boolean) => ["graph", broken] as const,
   agents: ["agents"] as const,
   connectStatus: ["connect-status"] as const,
+  skills: ["skills"] as const,
 };
 
 export function useHealth() {
@@ -97,4 +99,9 @@ export function useAgents() {
 /** Which coding clients exist here and whether each one points at this vault. */
 export function useConnectStatus() {
   return useQuery({ queryKey: queryKeys.connectStatus, queryFn: getConnectStatus });
+}
+
+/** Skills installed in the coding agents' own folders; the server re-scans on every request. */
+export function useSkills() {
+  return useQuery({ queryKey: queryKeys.skills, queryFn: getSkills });
 }
