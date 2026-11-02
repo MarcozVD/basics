@@ -52,7 +52,7 @@ import { type Context, Hono, type Next } from "hono";
 import { streamSSE } from "hono/streaming";
 import { ZodError, z } from "zod";
 import { AGENT_DECISION_SUFFIX, AgentBusyError, AgentRunner, AgentUnavailableError, listAgents } from "../agents.js";
-import { CONNECT_CLIENTS, connect } from "../connect.js";
+import { CONNECT_CLIENTS, connect, connectStatus, disconnect } from "../connect.js";
 import {
   createEmbedder,
   installRuntime,
@@ -111,6 +111,12 @@ const connectRequestSchema = z.object({
   clients: z.array(z.enum(CONNECT_CLIENTS)).optional(),
   transport: z.enum(["stdio", "http"]).optional(),
   port: z.number().int().min(1).max(65535).optional(),
+  skill: z.boolean().optional(),
+  dryRun: z.boolean().optional(),
+});
+const disconnectRequestSchema = z.object({
+  // Required and non-empty: an empty or malformed body must never wipe every agent at once.
+  clients: z.array(z.enum(CONNECT_CLIENTS)).min(1),
   skill: z.boolean().optional(),
   dryRun: z.boolean().optional(),
 });
@@ -360,6 +366,15 @@ export function createApp(opts: { root: string; uiDir?: string; events?: EventHu
   app.post("/api/connect", async (c) => {
     const body = connectRequestSchema.parse(await c.req.json().catch(() => ({})));
     return c.json(connect({ vault: opts.root, ...body }));
+  });
+
+  /** Where each client stands: detected, pointed at this vault, skill installed. Reads only. */
+  app.get("/api/connect/status", (c) => c.json(connectStatus({ vault: opts.root })));
+
+  /** `clients` is required here, so a stray empty body can never unregister every agent. */
+  app.post("/api/disconnect", async (c) => {
+    const body = disconnectRequestSchema.parse(await c.req.json().catch(() => ({})));
+    return c.json(disconnect(body));
   });
 
   app.get("/api/agents", (c) => c.json({ agents: listAgents() } satisfies AgentsResponse));

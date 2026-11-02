@@ -156,6 +156,20 @@ basics connect [options]
 | `--no-skill` | do not install the Basics skill | — |
 | `--dry-run` | print every change without writing anything | — |
 
+### `basics disconnect`
+
+remove the Basics MCP server and skill from your coding agents
+
+```
+basics disconnect [options] [clients...]
+```
+
+| Flag | Description | Default |
+| --- | --- | --- |
+| `--client <names...>` | clients to clean up (claude-code, opencode, codex, cursor, claude-desktop); default: every client | — |
+| `--no-skill` | only remove the MCP entry, keep the Basics skill | — |
+| `--dry-run` | print every change without writing anything | — |
+
 ### `basics pack`
 
 manage official and community note packs

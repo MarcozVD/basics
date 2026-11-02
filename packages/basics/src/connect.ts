@@ -9,6 +9,7 @@ export const CONNECT_CLIENTS = ["claude-code", "opencode", "codex", "cursor", "c
 export type ConnectClient = (typeof CONNECT_CLIENTS)[number];
 export type ConnectTransport = "stdio" | "http";
 export type ConnectOutcome = "registered" | "updated" | "unchanged" | "skipped" | "dry-run" | "manual" | "error";
+export type DisconnectOutcome = "removed" | "absent" | "dry-run" | "manual" | "error";
 
 export interface ConnectOptions {
   /** Absolute path of the global vault every client points at. */
@@ -54,6 +55,64 @@ export interface ConnectResult {
   skillError?: string;
 }
 
+/** One row of `GET /api/connect/status`: what a client has installed and whether it points here. */
+export interface ConnectStatusEntry {
+  client: ConnectClient;
+  /** The client's config directory or binary exists on this machine. */
+  detected: boolean;
+  /** The config already points this client at this vault (stdio argv) or a local MCP URL. */
+  connected: boolean;
+  /** Transport of the entry found, only when `connected`. */
+  transport?: ConnectTransport;
+  /** The Basics skill is installed; `null` when this client has no skill support. */
+  skill: boolean | null;
+  /** Config file, `~/`-shortened for display. */
+  configPath: string;
+}
+
+export interface ConnectStatusResult {
+  vault: string;
+  clients: ConnectStatusEntry[];
+}
+
+export interface ConnectStatusOptions {
+  /** Absolute path of the current vault. */
+  vault: string;
+  home?: string;
+}
+
+export interface DisconnectSkillResult {
+  path: string;
+  result: "removed" | "absent" | "dry-run" | "error";
+  message?: string;
+}
+
+export interface DisconnectEntry {
+  client: ConnectClient;
+  detected: boolean;
+  /** File (or claude CLI) used to unregister this client. */
+  target: string;
+  /** One line describing what this run changes. */
+  change: string;
+  result: DisconnectOutcome;
+  message?: string;
+  diff?: string;
+  skill?: DisconnectSkillResult;
+}
+
+export interface DisconnectResult {
+  entries: DisconnectEntry[];
+}
+
+export interface DisconnectOptions {
+  /** Clients to clean up. Default: every client. */
+  clients?: readonly string[];
+  /** Also remove `skills/basics/SKILL.md`. Default true. */
+  skill?: boolean;
+  dryRun?: boolean;
+  home?: string;
+}
+
 interface FileEdit {
   file: string;
   before: string | null;
@@ -70,6 +129,9 @@ const SKILL_DIRS: Partial<Record<ConnectClient, (home: string) => string>> = {
 };
 
 const SERVER_RELATIVE = path.join("dist", "mcp", "server.js");
+
+/** An MCP endpoint this machine serves: the UI's `http://127.0.0.1:<port>/mcp`. */
+const LOCAL_MCP_URL = /^https?:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::\d{1,5})?\/mcp\/?$/i;
 
 function packageRoot(): string {
   return path.resolve(import.meta.dirname, "..");
@@ -161,6 +223,124 @@ export function displayPath(file: string, home = os.homedir()): string {
   const relative = path.relative(home, file);
   if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) return file;
   return `~/${relative.split(path.sep).join("/")}`;
+}
+
+/** What a client's `basics` entry says, whichever format it is written in. */
+interface EntryInfo {
+  transport: ConnectTransport;
+  /** Present for the http transport. */
+  url?: string;
+  /** command + args, present for the stdio transport. */
+  argv: string[];
+}
+
+function stringList(value: unknown): string[] {
+  if (typeof value === "string") return [value];
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === "string");
+}
+
+/** Normalise a config entry (`{command, args}`, opencode's `{command: [...]}` or `{url}`). */
+function entryInfo(value: unknown): EntryInfo | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const entry = value as Record<string, unknown>;
+  if (typeof entry.url === "string") return { transport: "http", url: entry.url, argv: [] };
+  const argv = [...stringList(entry.command), ...stringList(entry.args)];
+  return argv.length ? { transport: "stdio", argv } : undefined;
+}
+
+/** Case-insensitive on Windows, where the same vault can be spelled with any drive-letter case. */
+function samePath(a: string, b: string): boolean {
+  const normalize = (value: string) => {
+    const resolved = path.resolve(value);
+    return process.platform === "win32" ? resolved.toLowerCase() : resolved;
+  };
+  return normalize(a) === normalize(b);
+}
+
+function pointsAtVault(info: EntryInfo, vault: string): boolean {
+  if (info.transport === "http") return LOCAL_MCP_URL.test(info.url ?? "");
+  return info.argv.some((arg) => samePath(arg, vault));
+}
+
+/** String literals of one `command =` / `args =` line of the codex TOML file. */
+function tomlStrings(value: string): string[] {
+  const found: string[] = [];
+  for (const match of value.matchAll(/"((?:[^"\\]|\\.)*)"/g)) {
+    try {
+      found.push(JSON.parse(`"${match[1]}"`) as string);
+    } catch {
+      found.push(match[1].replace(/\\(.)/g, "$1"));
+    }
+  }
+  return found;
+}
+
+/** The `[mcp_servers.basics]` section of a codex `config.toml`, as an entry. */
+function readTomlEntry(file: string): EntryInfo | undefined {
+  const lines = fs.readFileSync(file, "utf8").split(/\r?\n/);
+  const index = lines.findIndex((line) => line.trim() === TOML_HEADER);
+  if (index === -1) return undefined;
+  let end = lines.length;
+  for (let i = index + 1; i < lines.length; i++) {
+    if (/^\s*\[/.test(lines[i])) {
+      end = i;
+      break;
+    }
+  }
+  const argv: string[] = [];
+  for (const line of lines.slice(index + 1, end)) {
+    const match = /^\s*(?:command|args)\s*=\s*(.+)$/.exec(line);
+    if (match) argv.push(...tomlStrings(match[1]));
+  }
+  return argv.length ? { transport: "stdio", argv } : undefined;
+}
+
+/** The `basics` entry of one client, or `undefined` when the file is missing, unreadable or has none. */
+function readClientEntry(client: ConnectClient, file: string): EntryInfo | undefined {
+  if (!fs.existsSync(file)) return undefined;
+  try {
+    if (client === "codex") return readTomlEntry(file);
+    let cursor: unknown = JSON.parse(fs.readFileSync(file, "utf8"));
+    for (const key of keyPathFor(client)) {
+      if (!cursor || typeof cursor !== "object" || Array.isArray(cursor)) return undefined;
+      cursor = (cursor as Record<string, unknown>)[key];
+    }
+    return entryInfo(cursor);
+  } catch {
+    // Unparseable config: treat as not connected rather than failing the whole list.
+    return undefined;
+  }
+}
+
+function skillInstalled(client: ConnectClient, home: string): boolean | null {
+  const dir = SKILL_DIRS[client]?.(home);
+  if (!dir) return null;
+  return fs.existsSync(path.join(dir, "SKILL.md"));
+}
+
+/**
+ * Where every client stands: installed on this machine, already pointed at this vault, and
+ * whether the Basics skill is copied in. Read-only; nothing is written.
+ */
+export function connectStatus(opts: ConnectStatusOptions): ConnectStatusResult {
+  const home = opts.home ?? os.homedir();
+  const vault = path.resolve(opts.vault);
+  const detected = detectClients(home);
+  const clients = CONNECT_CLIENTS.map((client): ConnectStatusEntry => {
+    const file = clientFile(client, home);
+    const info = readClientEntry(client, file);
+    const connected = info ? pointsAtVault(info, vault) : false;
+    return {
+      client,
+      detected: detected[client],
+      connected,
+      ...(connected && info ? { transport: info.transport } : {}),
+      skill: skillInstalled(client, home),
+      configPath: displayPath(file, home),
+    };
+  });
+  return { vault, clients };
 }
 
 function desiredEntry(client: ConnectClient, command: string[], url: string | undefined): Record<string, unknown> {
@@ -501,4 +681,186 @@ export function connect(opts: ConnectOptions): ConnectResult {
   }
 
   return { vault: path.resolve(opts.vault), transport, url, command, entries, skillError };
+}
+
+interface RemoveEdit {
+  file: string;
+  before: string | null;
+  /** New file contents; `null` means the file only held the Basics entry and is deleted. */
+  after: string | null;
+  changed: boolean;
+  absent: boolean;
+  parseError?: string;
+}
+
+/** Drop a nested `basics` key, keeping every other key and byte of the file. */
+function removeJsonEntry(file: string, keyPath: string[]): RemoveEdit {
+  if (!fs.existsSync(file)) return { file, before: null, after: null, changed: false, absent: true };
+  const before = fs.readFileSync(file, "utf8");
+  let root: Record<string, unknown>;
+  try {
+    const parsed: unknown = JSON.parse(before);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("expected a JSON object");
+    root = parsed as Record<string, unknown>;
+  } catch (err) {
+    return {
+      file,
+      before,
+      after: before,
+      changed: false,
+      absent: false,
+      parseError: err instanceof Error ? err.message : String(err),
+    };
+  }
+
+  let cursor: Record<string, unknown> = root;
+  for (const key of keyPath.slice(0, -1)) {
+    const next = cursor[key];
+    if (!next || typeof next !== "object" || Array.isArray(next)) {
+      return { file, before, after: before, changed: false, absent: true };
+    }
+    cursor = next as Record<string, unknown>;
+  }
+  const last = keyPath[keyPath.length - 1];
+  if (!(last in cursor)) return { file, before, after: before, changed: false, absent: true };
+  delete cursor[last];
+
+  // `basics connect` may have created the file: when nothing but empty wrappers is left, delete it.
+  const emptyRoot = Object.values(root).every(isEmptyObject);
+  const after = emptyRoot ? null : `${JSON.stringify(root, null, 2)}\n`;
+  return { file, before, after, changed: true, absent: false };
+}
+
+function isEmptyObject(value: unknown): boolean {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value) && Object.keys(value as object).length === 0;
+}
+
+/** Drop the whole `[mcp_servers.basics]` section from a codex `config.toml`. */
+function removeTomlEntry(file: string): RemoveEdit {
+  if (!fs.existsSync(file)) return { file, before: null, after: null, changed: false, absent: true };
+  const before = fs.readFileSync(file, "utf8");
+  const nl = before.includes("\r\n") ? "\r\n" : "\n";
+  const lines = before.split(/\r?\n/);
+  if (lines.length && lines[lines.length - 1] === "") lines.pop();
+
+  const index = lines.findIndex((line) => line.trim() === TOML_HEADER);
+  if (index === -1) return { file, before, after: before, changed: false, absent: true };
+
+  let end = lines.length;
+  for (let i = index + 1; i < lines.length; i++) {
+    if (/^\s*\[/.test(lines[i])) {
+      end = i;
+      break;
+    }
+  }
+  // Take the blank line that separated the section from the one before it, so no gap is left behind.
+  const start = index > 0 && lines[index - 1].trim() === "" ? index - 1 : index;
+  const next = [...lines.slice(0, start), ...lines.slice(end)];
+  while (next.length && next[next.length - 1].trim() === "") next.pop();
+  const after = next.length ? `${next.join(nl)}${nl}` : null;
+  return { file, before, after, changed: true, absent: false };
+}
+
+function applyRemove(
+  edit: RemoveEdit,
+  keyPath: string[],
+  home: string,
+  dryRun: boolean,
+): Pick<DisconnectEntry, "result" | "message" | "diff"> {
+  const target = displayPath(edit.file, home);
+  if (edit.parseError) {
+    return {
+      result: "manual",
+      message: `cannot parse ${target} (${edit.parseError}); remove the "${keyPath.join(".")}" entry by hand`,
+    };
+  }
+  if (edit.absent) return { result: "absent" };
+  const diff = diffText(edit.before, edit.after ?? "");
+  if (dryRun) return { result: "dry-run", diff };
+  if (edit.after === null) fs.rmSync(edit.file, { force: true });
+  else atomicWrite(edit.file, edit.after);
+  return { result: "removed", diff };
+}
+
+function removeSkill(client: ConnectClient, home: string, dryRun: boolean): DisconnectSkillResult | undefined {
+  const dir = SKILL_DIRS[client]?.(home);
+  if (!dir) return undefined;
+  const file = path.join(dir, "SKILL.md");
+  const display = displayPath(file, home);
+  try {
+    if (!fs.existsSync(file)) return { path: display, result: "absent" };
+    if (dryRun) return { path: display, result: "dry-run" };
+    fs.rmSync(file);
+    // Remove the `basics` skill folder too when the skill was its only content.
+    if (fs.readdirSync(dir).length === 0) fs.rmdirSync(dir);
+    return { path: display, result: "removed" };
+  } catch (err) {
+    return { path: display, result: "error", message: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+function unregister(
+  client: ConnectClient,
+  home: string,
+  dryRun: boolean,
+  allowCli: boolean,
+): Pick<DisconnectEntry, "target" | "change" | "result" | "message" | "diff"> {
+  const file = clientFile(client, home);
+  const keyPath = keyPathFor(client);
+  const target = displayPath(file, home);
+
+  if (client === "claude-code" && allowCli && onPath("claude") && process.env.BASICS_CONNECT_NO_CLI !== "1") {
+    if (dryRun) {
+      const edit = removeJsonEntry(file, keyPath);
+      return { target, change: `remove ${keyPath.join(".")}`, ...applyRemove(edit, keyPath, home, true) };
+    }
+    const cli = runClaude(["mcp", "remove", "--scope", "user", "basics"]);
+    // The CLI also leaves `~/.claude.json` alone when the entry never existed, so fall through then.
+    if (cli.ok)
+      return {
+        target,
+        change: `remove ${keyPath.join(".")}`,
+        result: "removed",
+        message: "via `claude mcp remove --scope user`",
+      };
+  }
+
+  const edit = client === "codex" ? removeTomlEntry(file) : removeJsonEntry(file, keyPath);
+  const change = edit.absent ? "none" : `remove ${keyPath.join(".")}`;
+  return { target, change, ...applyRemove(edit, keyPath, home, dryRun) };
+}
+
+/**
+ * Remove the Basics MCP entry (and skill) from each client, touching nothing else in their
+ * config files. Matches `basics connect`: no client list means every client, no writing with
+ * `dryRun`.
+ */
+export function disconnect(opts: DisconnectOptions = {}): DisconnectResult {
+  const home = opts.home ?? os.homedir();
+  const dryRun = opts.dryRun ?? false;
+  // The claude CLI always edits the real user config, so only reach for it when home is the real one.
+  const allowCli = !opts.home || samePath(opts.home, os.homedir());
+  const detected = detectClients(home);
+  const selected = opts.clients?.length ? normalizeClients(opts.clients) : [...CONNECT_CLIENTS];
+
+  const entries: DisconnectEntry[] = [];
+  for (const client of selected) {
+    let outcome: Pick<DisconnectEntry, "target" | "change" | "result" | "message" | "diff">;
+    try {
+      outcome = unregister(client, home, dryRun, allowCli);
+    } catch (err) {
+      outcome = {
+        target: displayPath(clientFile(client, home), home),
+        change: "none",
+        result: "error",
+        message: err instanceof Error ? err.message : String(err),
+      };
+    }
+
+    const entry: DisconnectEntry = { client, detected: detected[client], ...outcome };
+    if (opts.skill !== false) entry.skill = removeSkill(client, home, dryRun);
+    entries.push(entry);
+  }
+
+  return { entries };
 }

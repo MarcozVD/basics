@@ -28,6 +28,9 @@ basics connect             # server + skill
 basics connect --no-skill  # server only
 ```
 
+`basics disconnect` removes the skill again, along with the server entry; `--no-skill` keeps the skill. Any other files
+in the skill folder are kept. See [MCP clients](./mcp-clients.md).
+
 To install it by hand, copy the `skills/basics` folder into the agent's skills directory.
 
 | Agent | Directory |
