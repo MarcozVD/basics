@@ -145,3 +145,39 @@ test("every page shares the top bar gutter", async ({ page }) => {
     expect(m.h1Left, `page title left on ${route}`).toBe(40);
   }
 });
+
+test("a browser keeps its own window chrome: the header has no window buttons and no drag region", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 820 });
+  await page.goto("/");
+  await settle(page);
+
+  // The custom title bar belongs to the desktop app only: same UI, native window here.
+  await expect(page.getByTestId("window-controls")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Minimize" })).toHaveCount(0);
+  await expect(page.locator("header[data-tauri-drag-region]")).toHaveCount(0);
+  // No chrome is made unselectable either: the header keeps its usual browser look.
+  const chrome = page.locator("header").filter({ has: page.getByTestId("brand-logo") });
+  await expect(chrome).not.toHaveClass(/select-none/);
+});
+
+test("a browser keeps its own shortcuts: Ctrl+F and right-click are not taken over", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 820 });
+  await page.goto("/");
+  await settle(page);
+
+  // The desktop key filter is installed only in the app (see useDesktopShell).
+  const find = await page.evaluate(() => {
+    const event = new KeyboardEvent("keydown", { key: "f", ctrlKey: true, bubbles: true, cancelable: true });
+    document.body.dispatchEvent(event);
+    return event.defaultPrevented;
+  });
+  expect(find).toBe(false);
+  await expect(page.getByRole("dialog", { name: "Command palette" })).toHaveCount(0);
+
+  const menu = await page.evaluate(() => {
+    const event = new MouseEvent("contextmenu", { bubbles: true, cancelable: true });
+    document.body.dispatchEvent(event);
+    return event.defaultPrevented;
+  });
+  expect(menu).toBe(false);
+});

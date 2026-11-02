@@ -30,6 +30,10 @@ tauri-plugin-autostart = "2"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_JobObjects", "Win32_System_Threading"] }
+# WebView2 settings (browser accelerator keys): shipped by wry already, used directly to
+# switch them off in release builds. Keep both versions in step with wry's transitive deps.
+webview2-com = "0.39"
+windows = { version = "0.62", features = ["Win32_Foundation"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 libc = "0.2"

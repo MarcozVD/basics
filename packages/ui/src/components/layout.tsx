@@ -14,6 +14,7 @@ import {
 import { AppCommandPalette } from "@/components/app/command-palette";
 import { Logo } from "@/components/app/logo";
 import { NewNoteDialog } from "@/components/app/new-note-dialog";
+import { WindowControls } from "@/components/app/window-controls";
 import { AnimatedNumber } from "@/components/motion/animated-number";
 import { AnimatedToastStack } from "@/components/motion/animated-toast-stack";
 import { Dock, DockItem, DockSeparator } from "@/components/motion/dock";
@@ -23,6 +24,8 @@ import { Tooltip } from "@/components/motion/tooltip";
 import { PAGE_GUTTERS } from "@/components/page";
 import { type TranslationKey, useI18n } from "@/i18n";
 import { isAgentRunActive, useAgentRunStatus } from "@/lib/agent-run";
+import { isDesktop, isMacos } from "@/lib/desktop";
+import { PALETTE_SEARCH_EVENT, useDesktopShell } from "@/lib/desktop-shell";
 import { EASE_OUT } from "@/lib/ease";
 import { useHealth, useInbox } from "@/lib/queries";
 import { useGlobalShortcuts } from "@/lib/shortcuts";
@@ -110,8 +113,15 @@ export function Layout() {
   const folder = vaultName(vault);
   const [scrolled, setScrolled] = useState(false);
   const scrollRef = useRef<HTMLElement>(null);
+  // Window chrome is the app's own only inside the desktop app; a browser keeps its
+  // native title bar, find bar and reload. `isDesktop()` never changes for a page.
+  const desktop = useMemo(() => isDesktop(), []);
+  const mac = useMemo(() => desktop && isMacos(), [desktop]);
 
   useGlobalShortcuts();
+  // No browser behaviour in the app: Ctrl+F searches here, reload/print/source/zoom/…
+  // are swallowed, and the native context menu only survives in editable fields.
+  useDesktopShell(desktop);
 
   // A run started from Recommend keeps going while the user is elsewhere: announce it when it
   // finishes (the panel already shows the answer when it is on screen) and offer to go back.
@@ -129,10 +139,12 @@ export function Layout() {
   return (
     <div className="flex h-dvh flex-col overflow-hidden bg-background text-foreground">
       <header
+        // In the desktop app the whole header drags the window (double-click maximizes);
+        // a browser gets no drag attribute, so nothing changes there.
+        data-tauri-drag-region={desktop ? "deep" : undefined}
         className={cn(
-          "sticky top-0 z-30 flex shrink-0 items-center justify-between gap-3 bg-background py-4",
-          PAGE_GUTTERS,
-          "border-b transition-colors",
+          "sticky top-0 z-30 flex shrink-0 items-center justify-between gap-3 border-b bg-background transition-colors",
+          desktop ? cn("h-12 select-none py-0 pr-0", mac ? "pl-[76px]" : "pl-page-gutter") : cn("py-4", PAGE_GUTTERS),
           scrolled ? "border-border" : "border-transparent",
         )}
       >
@@ -161,7 +173,7 @@ export function Layout() {
           </Tooltip>
         </div>
 
-        <div className="flex shrink-0 items-center gap-2">
+        <div className={cn("flex shrink-0 items-center gap-2", desktop && "h-full self-stretch")}>
           <fieldset className="m-0 min-w-0 border-0 p-0" aria-label={t("nav.language")}>
             <Tabs value={language} onValueChange={(value) => setLanguage(value as "en" | "es")} variant="segment">
               <TabsList>
@@ -179,6 +191,7 @@ export function Layout() {
             className="size-8 rounded-full text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
             iconClassName="size-4"
           />
+          {desktop ? <WindowControls /> : null}
         </div>
       </header>
 
@@ -202,7 +215,7 @@ export function Layout() {
         </AnimatePresence>
       </main>
 
-      <nav aria-label={t("nav.primary")} className="fixed bottom-4 left-1/2 z-40 -translate-x-1/2">
+      <nav aria-label={t("nav.primary")} className={cn("fixed bottom-4 left-1/2 z-40 -translate-x-1/2", desktop && "select-none")}>
         <span className="sr-only">{t("shortcuts.help")}</span>
         <Dock className="shadow-[0_8px_30px_rgba(0,0,0,0.25)]">
           {dockLinks.map((item) => {
@@ -265,7 +278,7 @@ export function Layout() {
               <button
                 type="button"
                 aria-label={t("nav.palette")}
-                onClick={() => window.dispatchEvent(new Event("basics:open-palette"))}
+                onClick={() => window.dispatchEvent(new Event(PALETTE_SEARCH_EVENT))}
                 className="grid size-full place-items-center rounded-full text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
               >
                 <Command className="size-4" aria-hidden="true" />

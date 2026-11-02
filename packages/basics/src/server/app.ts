@@ -48,7 +48,7 @@ import {
 } from "@marcozvd/basics-core";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
-import { Hono } from "hono";
+import { type Context, Hono, type Next } from "hono";
 import { streamSSE } from "hono/streaming";
 import { ZodError, z } from "zod";
 import { AGENT_DECISION_SUFFIX, AgentBusyError, AgentRunner, AgentUnavailableError, listAgents } from "../agents.js";
@@ -555,6 +555,22 @@ export function createApp(opts: { root: string; uiDir?: string; events?: EventHu
 
   if (opts.uiDir && fs.existsSync(opts.uiDir)) {
     const uiDir = opts.uiDir;
+
+    // Pin the cache policy of everything the UI serves. Without it the browser falls back to
+    // heuristic caching (from last-modified) and can keep an old index.html for hours — the
+    // stale page then asks for hashed chunks that no longer exist, which is why a build could
+    // still run the previous UI after an update.
+    const cachePolicy = async (c: Context, next: Next) => {
+      await next();
+      // Only successful responses: a 404 for a missing chunk stays a plain 404.
+      if (!c.res || c.res.status >= 400) return;
+      const immutable = c.req.path.startsWith("/assets/");
+      // Copy the response so the header lands on what actually leaves the server.
+      c.res = new Response(c.res.body, c.res);
+      c.res.headers.set("Cache-Control", immutable ? "public, max-age=31536000, immutable" : "no-cache");
+    };
+
+    app.use("/*", cachePolicy);
     app.use("/*", serveStatic({ root: uiDir }));
     app.get("*", async (c) => {
       // A missing hashed asset (an old build's chunk) must 404, not fall back to index.html,
@@ -563,8 +579,6 @@ export function createApp(opts: { root: string; uiDir?: string; events?: EventHu
         return c.notFound();
       }
       const res = await serveStatic({ root: uiDir, path: path.join("index.html") })(c, async () => {});
-      // index.html names the current chunks; never let the browser cache it.
-      res?.headers.set("Cache-Control", "no-cache");
       return res ?? c.notFound();
     });
   }

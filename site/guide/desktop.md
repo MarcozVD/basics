@@ -55,6 +55,52 @@ On the very first launch there is no vault yet. The window shows a **Choose vaul
 - **Single instance**: launching the app a second time focuses the already open window instead of starting a new one.
 - **External links** (for example a link that leaves the vault's local page, or `mailto:`) open in your system browser.
 
+## Title bar and window controls
+
+On Windows and Linux the app has no system title bar. Its own header is the title bar:
+
+- Drag any empty part of the header to move the window. Buttons, **EN | ES** and the theme toggle do not drag.
+- Double-click the empty header to maximize; double-click again to restore.
+- **Minimize**, **Maximize / Restore** and **Close** sit at the top right. **Close** hides the window to the tray, like
+  the window close described above; the server keeps running.
+- Drag any edge or corner of the window to resize it, on the loading page too. A maximized window does not resize.
+
+On macOS the window keeps its native traffic-light buttons, drawn over the header.
+
+A browser opened with `basics ui` has no window controls and no drag area: its header and window stay as the browser
+draws them.
+
+## What the app window can do
+
+The app only lets the page it shows control its own window. The page is served from `127.0.0.1`, and the app grants that
+local page window commands only: minimize, maximize and restore, close, drag, and checking whether the window is
+maximized. It has no permission to run programs, read or write files, or open URLs through the app, so a page loaded
+from that local server cannot use the app to do those things. Everything else keeps the limits described in
+[Security](security).
+
+## Keyboard and browser behaviour
+
+The app window is an application, not a browser tab, so the browser's own keys and menus are turned off inside it.
+A browser running the same UI (`basics ui`) keeps all of them.
+
+- **Ctrl+F** / **⌘F** opens the command palette in search mode, with the field empty and focused. Pressing it again
+  while the palette is open clears the query. It does not open the browser find bar, and on Explore and Graph it opens
+  the palette instead of their own filter field.
+- **Ctrl+S** / **⌘S** saves the note in the editor and does nothing else.
+- Off: reload (F5, Ctrl+R, Ctrl+Shift+R), print (Ctrl+P), view source (Ctrl+U), downloads (Ctrl+J), history (Ctrl+H),
+  find next (F3, Ctrl+G), caret browsing (F7), zoom (Ctrl and `+`, `-`, `0`, Ctrl+mouse wheel, trackpad pinch) and back / forward
+  (Alt+Left, Alt+Right) on a page.
+- Inside a text field, the editing keys keep working: copy, paste, cut, select all and undo. On macOS, Ctrl keeps its
+  caret movement keys inside fields.
+- Right-click shows no browser menu, except in fields (inputs and the note editor), where you get copy and paste.
+- Links and images cannot be dragged out of the window. The header and the Dock cannot be selected with the mouse;
+  text on the page can.
+
+**DevTools** (F12, Ctrl+Shift+I) are not available in the installed app. The Windows release turns off WebView2's
+browser keys, and the app has no menu to open them. Development builds (`npm run desktop:dev`) keep those keys on, so
+F12 opens DevTools there. In development builds, F5, Ctrl+P and Ctrl+R can still act inside WebView2 even though the
+page cancels them where it can. On Linux and macOS the page-level filter is the only guard.
+
 ## Connecting your agents
 
 The app serves MCP over HTTP at `http://127.0.0.1:<port>/mcp`, exactly like `basics ui`. Use **Copy MCP URL** from the

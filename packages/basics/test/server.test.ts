@@ -338,3 +338,42 @@ test("ui: missing hashed assets 404 instead of falling back to index.html", asyn
     fs.rmSync(uiDir, { recursive: true, force: true });
   }
 });
+
+test("ui: index.html is never cached, hashed assets are immutable", async () => {
+  const vault = tempVault();
+  const uiDir = fs.mkdtempSync(path.join(os.tmpdir(), "basics-ui-"));
+  try {
+    fs.mkdirSync(path.join(uiDir, "assets"));
+    fs.writeFileSync(path.join(uiDir, "index.html"), "<!doctype html><title>Basics</title>");
+    fs.writeFileSync(path.join(uiDir, "assets", "app-abc123.js"), "export {};");
+    fs.writeFileSync(path.join(uiDir, "favicon.svg"), "<svg></svg>");
+    const app = createApp({ root: vault.root, uiDir });
+
+    // The page that names the chunks must be revalidated every time: an old copy points at
+    // chunks that no longer exist. "/", the file itself and any deep SPA route all count.
+    for (const route of ["/", "/index.html", "/explore", "/notes/fastapi"]) {
+      const res = await app.request(route, { headers: HOST });
+      assert.equal(res.status, 200, route);
+      assert.equal(res.headers.get("cache-control"), "no-cache", route);
+      assert.match(await res.text(), /<title>Basics<\/title>/, route);
+    }
+
+    // Chunk names carry a content hash, so a new build never reuses one.
+    const asset = await app.request("/assets/app-abc123.js", { headers: HOST });
+    assert.equal(asset.status, 200);
+    assert.equal(asset.headers.get("cache-control"), "public, max-age=31536000, immutable");
+
+    // A chunk from an older build is gone for good: 404, no cache header to keep it alive.
+    const missing = await app.request("/assets/app-old.js", { headers: HOST });
+    assert.equal(missing.status, 404);
+    assert.equal(missing.headers.get("cache-control"), null);
+
+    // Everything else served from the UI folder (icons, manifest) revalidates too.
+    const icon = await app.request("/favicon.svg", { headers: HOST });
+    assert.equal(icon.status, 200);
+    assert.equal(icon.headers.get("cache-control"), "no-cache");
+  } finally {
+    fs.rmSync(vault.root, { recursive: true, force: true });
+    fs.rmSync(uiDir, { recursive: true, force: true });
+  }
+});
