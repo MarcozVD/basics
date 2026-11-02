@@ -51,6 +51,13 @@ When the answer is done, **Select these (n)** adds the tech notes it cited with 
 yet, it proposes that note to the **Inbox**; the panel lists the proposed ids with a link, and nothing is applied until
 you approve it there.
 
+The run belongs to the browser tab, not to the panel. Leaving **Recommend** does not stop it: the Dock marks
+Recommend with a pulsing dot while it streams, and a toast offers **Open Recommend** when it finishes elsewhere.
+The answer, the cited ids and the proposals stay when you come back and after a reload. A run cut short by a
+reload shows **Interrupted** with **Retry**, which runs the same prompt again. Each tab has at most one agent run;
+a run abandoned by a reload is stopped rather than left to finish unattended. **Clear** on Recommend also clears
+the agent answer.
+
 Basics only passes the agent the description, the chosen layers and the `plan-stack` prompt; the run uses the same
 5-minute limit as `basics` itself. Nothing is downloaded or installed to ask an agent.
 

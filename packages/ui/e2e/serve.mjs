@@ -21,8 +21,9 @@ fs.writeFileSync(path.join(here, stateFile), vault);
 console.log(`[e2e] vault: ${vault}${empty ? " (empty)" : ""}`);
 
 // A fake Claude Code CLI, never a real one: a node script that emits Claude's `stream-json` shape.
-// It is placed first on the UI server's PATH so GET /api/agents detects it; a prompt containing
-// BASICS_E2E_SLEEP keeps running so a spec can exercise Cancel.
+// It is placed first on the UI server's PATH so GET /api/agents detects it. A prompt containing
+// BASICS_E2E_SLEEP keeps running so a spec can exercise Cancel; BASICS_E2E_SLOW answers after a
+// short delay, so a run can be left and finish while the user is on another page.
 const FAKE_AGENT = [
   "const args = process.argv.slice(2);",
   "const prompt = args[1] || '';",
@@ -30,8 +31,11 @@ const FAKE_AGENT = [
   "if (prompt.includes('BASICS_E2E_SLEEP')) { setInterval(function () {}, 1000); }",
   "else {",
   "  const text = 'Decisión: backend: fastapi [[fastapi]].';",
-  "  line({ type: 'assistant', message: { content: [{ type: 'text', text: text }] } });",
-  "  line({ type: 'result', subtype: 'success', result: text });",
+  "  const emit = function () {",
+  "    line({ type: 'assistant', message: { content: [{ type: 'text', text: text }] } });",
+  "    line({ type: 'result', subtype: 'success', result: text });",
+  "  };",
+  "  if (prompt.includes('BASICS_E2E_SLOW')) { setTimeout(emit, 1500); } else { emit(); }",
   "}",
 ].join("\n");
 

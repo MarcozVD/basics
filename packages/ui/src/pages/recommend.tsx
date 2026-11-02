@@ -24,11 +24,12 @@ import { AgentPanel } from "@/components/recommend/agent-panel";
 import { CreateProjectDialog } from "@/components/recommend/create-project-dialog";
 import { ErrorState } from "@/components/state";
 import { type TranslationKey, useT } from "@/i18n";
+import { resetAgentRun } from "@/lib/agent-run";
 import { enableEmbeddings, exportStack, recommend } from "@/lib/api";
 import { EASE_OUT, SPRING_PANEL } from "@/lib/ease";
 import { useEmbeddingsProgress } from "@/lib/events";
 import { queryKeys, useEmbeddings, useLayers } from "@/lib/queries";
-import { clearRecommend, updateRecommend, useRecommendStore } from "@/lib/recommend-store";
+import { clearRecommend, updateAgent, updateRecommend, useRecommendStore } from "@/lib/recommend-store";
 import { useReturnFocus } from "@/lib/return-focus";
 import { toast } from "@/lib/toast";
 import { tintStyle } from "@/lib/type-color";
@@ -349,7 +350,8 @@ export function RecommendPage() {
   const [stackIds, setStackIds] = useState<string[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
-  const [agentOpen, setAgentOpen] = useState(false);
+  const agentOpen = store.agent.open;
+  const setAgentOpen = (open: boolean) => updateAgent({ open });
   const generateRef = useRef<HTMLButtonElement>(null);
   const createRef = useRef<HTMLButtonElement>(null);
   useReturnFocus(dialogOpen, generateRef);
@@ -430,7 +432,7 @@ export function RecommendPage() {
     setStackIds([]);
     setDialogOpen(false);
     setCreateOpen(false);
-    setAgentOpen(false);
+    resetAgentRun();
     clearRecommend();
   };
 
@@ -564,7 +566,7 @@ export function RecommendPage() {
               pressScale={0.97}
               className="h-8"
               aria-expanded={agentOpen}
-              onClick={() => setAgentOpen((open) => !open)}
+              onClick={() => setAgentOpen(!agentOpen)}
             >
               <MessageSquareText className="size-3.5" aria-hidden="true" />
               {t("recommend.agent.open")}
@@ -646,7 +648,7 @@ export function RecommendPage() {
                 layers={activeLayers}
                 onSelectTechs={selectMentioned}
                 onClose={() => setAgentOpen(false)}
-              />
+              />{" "}
             </motion.div>
           ) : null}
         </AnimatePresence>
