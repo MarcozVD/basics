@@ -86,13 +86,20 @@ function readJson(file: string): Record<string, unknown> {
   return JSON.parse(fs.readFileSync(file, "utf8")) as Record<string, unknown>;
 }
 
+/** Claude Desktop's config directory for this platform, under the sandbox home. */
+function desktopDir(box: Sandbox): string {
+  if (process.platform === "win32") return path.join(box.env.APPDATA ?? "", "Claude");
+  if (process.platform === "darwin") return path.join(box.home, "Library", "Application Support", "Claude");
+  return path.join(box.home, ".config", "Claude");
+}
+
 /** Every client directory exists, so `connect` with no client list picks all five up. */
 function installAllClients(box: Sandbox): void {
   fs.mkdirSync(path.join(box.home, ".claude"), { recursive: true });
   fs.mkdirSync(path.join(box.home, ".config", "opencode"), { recursive: true });
   fs.mkdirSync(path.join(box.home, ".codex"), { recursive: true });
   fs.mkdirSync(path.join(box.home, ".cursor"), { recursive: true });
-  fs.mkdirSync(path.join(box.env.APPDATA ?? "", "Claude"), { recursive: true });
+  fs.mkdirSync(desktopDir(box), { recursive: true });
 }
 
 test("connectStatus reports a fresh machine as neither installed nor connected", () => {
@@ -223,7 +230,7 @@ test("disconnect removes only the Basics entry and the skill, keeping every othe
     );
     const cursor = path.join(home, ".cursor", "mcp.json");
     writeJson(cursor, { mcpServers: { basics: { command: "x", args: [] } } });
-    const desktop = path.join(box.env.APPDATA ?? "", "Claude", "claude_desktop_config.json");
+    const desktop = path.join(desktopDir(box), "claude_desktop_config.json");
     writeJson(desktop, {
       globalShortcut: "ctrl+space",
       mcpServers: { other: { command: "z" }, basics: { command: "x", args: [] } },
