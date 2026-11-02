@@ -1,7 +1,7 @@
 import { Command, FolderKanban, House, Inbox, LayoutList, Sparkles, Waypoints } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { useRef, useState } from "react";
-import { Link, useLocation, useOutlet } from "react-router";
+import { memo, type ReactNode, useMemo, useRef, useState } from "react";
+import { Link, type Location, type NavigationType, UNSAFE_LocationContext, useLocation, useNavigationType, useOutlet } from "react-router";
 import { AppCommandPalette } from "@/components/app/command-palette";
 import { Logo } from "@/components/app/logo";
 import { NewNoteDialog } from "@/components/app/new-note-dialog";
@@ -62,9 +62,30 @@ function vaultName(vault: string | undefined): string | undefined {
   return segments[segments.length - 1] ?? vault;
 }
 
+/**
+ * The outlet rendered with the location it was created for. `AnimatePresence` keeps the
+ * outgoing page mounted while it fades out; without this snapshot that page keeps reading the
+ * live router location, so `useSearchParams()` sees the *new* route's empty params and a
+ * filtered Explore (or any page keyed by query params) renders "All" for the length of the
+ * transition. Freezing the location context makes the exiting page render as it last did.
+ */
+const PageFrame = memo(function PageFrame({
+  location,
+  navigationType,
+  outlet,
+}: {
+  location: Location;
+  navigationType: NavigationType;
+  outlet: ReactNode;
+}) {
+  const value = useMemo(() => ({ location, navigationType }), [location, navigationType]);
+  return <UNSAFE_LocationContext.Provider value={value}>{outlet}</UNSAFE_LocationContext.Provider>;
+});
+
 export function Layout() {
   const { t, language, setLanguage } = useI18n();
   const location = useLocation();
+  const navigationType = useNavigationType();
   const outlet = useOutlet();
   const reduce = useReducedMotion();
   const health = useHealth();
@@ -149,7 +170,7 @@ export function Layout() {
             transition={{ duration: 0.18, ease: EASE_OUT }}
             className="min-h-full"
           >
-            {outlet}
+            <PageFrame location={location} navigationType={navigationType} outlet={outlet} />
           </motion.div>
         </AnimatePresence>
       </main>
