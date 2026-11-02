@@ -5,6 +5,7 @@ export * from "./detect.js";
 export * from "./embeddings.js";
 export * from "./eval.js";
 export * from "./export.js";
+export * from "./frontmatter.js";
 export * from "./fsutil.js";
 export * from "./negation.js";
 export * from "./outcome.js";

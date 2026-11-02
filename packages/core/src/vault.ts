@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import matter from "gray-matter";
 import { ZodError } from "zod";
+import { parseFrontmatter } from "./frontmatter.js";
 import { atomicWrite, sha256 } from "./fsutil.js";
 import {
   type Note,
@@ -187,7 +188,7 @@ export class Vault {
   private parseFile(file: string): Note | undefined {
     try {
       const raw = fs.readFileSync(file, "utf8");
-      const { data, content } = matter(raw);
+      const { data, content } = parseFrontmatter(raw);
       const parsed = noteSchema.safeParse(data);
       if (!parsed.success) {
         this.issues.push({ path: file, message: parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ") });
@@ -275,7 +276,7 @@ export class Vault {
     for (const file of walk(path.join(this.root, INBOX_DIR))) {
       const id = slugify(path.basename(file, ".md"));
       try {
-        const { data, content } = matter(fs.readFileSync(file, "utf8"));
+        const { data, content } = parseFrontmatter(fs.readFileSync(file, "utf8"));
         const { proposal, ...rest } = data;
         const meta = proposalMetaSchema.safeParse(proposal);
         if (!meta.success) {

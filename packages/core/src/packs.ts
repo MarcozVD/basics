@@ -1,8 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
-import matter from "gray-matter";
 import { z } from "zod";
 import type { PackAddResult, PackInstallResult, PackUpdateResult } from "./api.js";
+import { parseFrontmatter } from "./frontmatter.js";
 import { type Note, type NoteData, type NoteType, noteSchema, TYPE_DIRS } from "./schema.js";
 import { parseTarGz } from "./tar.js";
 import { NotFoundError, slugify, type Vault } from "./vault.js";
@@ -112,7 +112,7 @@ export function packNotes(packsDir: string, name: string, lang?: string): { id: 
   const dir = path.join(packsDir, name, "notes", language);
   if (!fs.existsSync(dir)) throw new NotFoundError(`pack:${name}:${language}`);
   return noteFiles(dir).map((file) => {
-    const { data, content } = matter(fs.readFileSync(file, "utf8"));
+    const { data, content } = parseFrontmatter(fs.readFileSync(file, "utf8"));
     const parsed = noteSchema.parse(data);
     return { id: slugify(path.basename(file, ".md")), type: parsed.type, data: parsed, body: content.trim() };
   });
@@ -442,7 +442,7 @@ export function extractCommunityPack(entries: { path: string; data: Buffer }[]):
     if (!Object.values(TYPE_DIRS).includes(typeDir)) continue;
     const id = slugify(fileName.slice(0, -3));
     try {
-      const { data, content } = matter(entry.data.toString("utf8"));
+      const { data, content } = parseFrontmatter(entry.data.toString("utf8"));
       // A markdown file with no `type` (e.g. no frontmatter at all) is not a
       // note; ignore it rather than reporting it as invalid.
       if (typeof data.type !== "string") continue;
