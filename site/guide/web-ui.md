@@ -31,7 +31,7 @@ are no sidebars; secondary panels are overlays closed with `Esc`.
 | `Ctrl`/`⌘+K` | Command palette: search notes and proposals, jump to any screen, run actions (including copying the MCP command) |
 | `g` then `h` / `e` / `g` / `i` / `r` | Go to Home / Explore / Graph / Inbox / Recommend |
 | `Ctrl`/`⌘+S` | Save the note in the editor |
-| `Ctrl`/`⌘+F` | Focus search in Explore and in the graph |
+| `Ctrl`/`⌘+F` | Focus search in Explore and in the graph. In the [desktop app](desktop) it opens the command palette search instead |
 | `↑` / `↓`, `Enter` | Move through lists (Explore, Inbox, palette) and open |
 | `a` / `r` | Approve / reject the selected proposal in the Inbox |
 | `a` / `e` / `r` | Approve / edit and approve / reject in a proposal |

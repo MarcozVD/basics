@@ -520,6 +520,8 @@ fn build_main_window(app: &AppHandle) -> tauri::Result<()> {
         .title("Basics")
         .inner_size(1280.0, 820.0)
         .min_inner_size(900.0, 600.0)
+        // Ctrl +/-/0 and Ctrl+wheel must not zoom a desktop window (default true in wry).
+        .zoom_hotkeys_enabled(false)
         .center();
 
     // The app draws its own title bar (the page header in the UI, a small bar on the
@@ -542,7 +544,7 @@ fn build_main_window(app: &AppHandle) -> tauri::Result<()> {
         builder = builder.title_bar_style(tauri::TitleBarStyle::Overlay).hidden_title(true);
     }
 
-    builder
+    let window = builder
         // Links that leave the local server open in the system browser.
         .on_navigation(move |url| {
             if is_app_url(url) {
@@ -562,8 +564,46 @@ fn build_main_window(app: &AppHandle) -> tauri::Result<()> {
             NewWindowResponse::Deny
         })
         .build()?;
+
+    disable_browser_accelerator_keys(&window);
     Ok(())
 }
+
+/// WebView2 handles a few keys itself (F5, Ctrl+P, Ctrl+F, Ctrl+Shift+I, zoom) before the
+/// page can `preventDefault` them, so the UI's key filter alone cannot stop reload/print.
+/// wry exposes this as `browser_accelerator_keys`, but tauri-runtime-wry does not plumb that
+/// attribute through, so reach the WebView2 settings directly. Text keys (Ctrl+C/V/X/A/Z,
+/// Home/End/PgUp/PgDn) keep working: only browser-specific accelerators are turned off.
+///
+/// Debug builds keep them on: F12/DevTools and F5 are development tools, and the page filter
+/// still swallows everything it can see. Release builds are where "no browser" matters.
+#[cfg(all(windows, not(debug_assertions)))]
+fn disable_browser_accelerator_keys(window: &tauri::WebviewWindow) {
+    use tauri::webview::PlatformWebview;
+    use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2Settings3;
+    use windows::core::Interface;
+
+    let apply = |webview: PlatformWebview| {
+        let settings = (|| -> windows::core::Result<()> {
+            let core = unsafe { webview.controller().CoreWebView2()? };
+            let settings: ICoreWebView2Settings3 = unsafe { core.Settings()? }.cast()?;
+            unsafe { settings.SetAreBrowserAcceleratorKeysEnabled(false.into()) }
+        })();
+        // Chrome-only window settings must never take the app down.
+        if let Err(error) = settings {
+            eprintln!("basics: could not disable WebView2 browser accelerator keys: {error}");
+        }
+    };
+
+    if let Err(error) = window.with_webview(apply) {
+        eprintln!("basics: could not reach the WebView2 webview: {error}");
+    }
+}
+
+/// Everything that is not a Windows release build: other engines (wry maps
+/// `zoom_hotkeys_enabled` for them) and debug builds, where F12/DevTools and F5 stay usable.
+#[cfg(not(all(windows, not(debug_assertions))))]
+fn disable_browser_accelerator_keys(_window: &tauri::WebviewWindow) {}
 
 fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     let autostart_on = app.autolaunch().is_enabled().unwrap_or(false);

@@ -275,6 +275,8 @@ dependencies = [
  "tauri-plugin-opener",
  "tauri-plugin-shell",
  "tauri-plugin-single-instance",
+ "webview2-com",
+ "windows",
  "windows-sys 0.61.2",
 ]
 

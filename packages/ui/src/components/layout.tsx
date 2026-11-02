@@ -25,6 +25,7 @@ import { PAGE_GUTTERS } from "@/components/page";
 import { type TranslationKey, useI18n } from "@/i18n";
 import { isAgentRunActive, useAgentRunStatus } from "@/lib/agent-run";
 import { isDesktop, isMacos } from "@/lib/desktop";
+import { PALETTE_SEARCH_EVENT, useDesktopShell } from "@/lib/desktop-shell";
 import { EASE_OUT } from "@/lib/ease";
 import { useHealth, useInbox } from "@/lib/queries";
 import { useGlobalShortcuts } from "@/lib/shortcuts";
@@ -118,6 +119,9 @@ export function Layout() {
   const mac = useMemo(() => desktop && isMacos(), [desktop]);
 
   useGlobalShortcuts();
+  // No browser behaviour in the app: Ctrl+F searches here, reload/print/source/zoom/…
+  // are swallowed, and the native context menu only survives in editable fields.
+  useDesktopShell(desktop);
 
   // A run started from Recommend keeps going while the user is elsewhere: announce it when it
   // finishes (the panel already shows the answer when it is on screen) and offer to go back.
@@ -211,7 +215,7 @@ export function Layout() {
         </AnimatePresence>
       </main>
 
-      <nav aria-label={t("nav.primary")} className="fixed bottom-4 left-1/2 z-40 -translate-x-1/2">
+      <nav aria-label={t("nav.primary")} className={cn("fixed bottom-4 left-1/2 z-40 -translate-x-1/2", desktop && "select-none")}>
         <span className="sr-only">{t("shortcuts.help")}</span>
         <Dock className="shadow-[0_8px_30px_rgba(0,0,0,0.25)]">
           {dockLinks.map((item) => {
@@ -274,7 +278,7 @@ export function Layout() {
               <button
                 type="button"
                 aria-label={t("nav.palette")}
-                onClick={() => window.dispatchEvent(new Event("basics:open-palette"))}
+                onClick={() => window.dispatchEvent(new Event(PALETTE_SEARCH_EVENT))}
                 className="grid size-full place-items-center rounded-full text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
               >
                 <Command className="size-4" aria-hidden="true" />

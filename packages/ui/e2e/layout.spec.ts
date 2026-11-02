@@ -159,3 +159,25 @@ test("a browser keeps its own window chrome: the header has no window buttons an
   const chrome = page.locator("header").filter({ has: page.getByTestId("brand-logo") });
   await expect(chrome).not.toHaveClass(/select-none/);
 });
+
+test("a browser keeps its own shortcuts: Ctrl+F and right-click are not taken over", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 820 });
+  await page.goto("/");
+  await settle(page);
+
+  // The desktop key filter is installed only in the app (see useDesktopShell).
+  const find = await page.evaluate(() => {
+    const event = new KeyboardEvent("keydown", { key: "f", ctrlKey: true, bubbles: true, cancelable: true });
+    document.body.dispatchEvent(event);
+    return event.defaultPrevented;
+  });
+  expect(find).toBe(false);
+  await expect(page.getByRole("dialog", { name: "Command palette" })).toHaveCount(0);
+
+  const menu = await page.evaluate(() => {
+    const event = new MouseEvent("contextmenu", { bubbles: true, cancelable: true });
+    document.body.dispatchEvent(event);
+    return event.defaultPrevented;
+  });
+  expect(menu).toBe(false);
+});

@@ -23,6 +23,7 @@ import { createPortal } from "react-dom";
 import { useNavigate } from "react-router";
 import { type TranslationKey, useI18n } from "@/i18n";
 import { searchCommands } from "@/lib/command-search";
+import { PALETTE_SEARCH_EVENT } from "@/lib/desktop-shell";
 import { EASE_OUT } from "@/lib/ease";
 import { useOnOpen } from "@/lib/hooks/use-on-open";
 import { useRowCursor } from "@/lib/hooks/use-row-cursor";
@@ -98,9 +99,16 @@ export function AppCommandPalette() {
   }, [open]);
 
   useEffect(() => {
-    const onOpen = () => setOpen(true);
-    window.addEventListener("basics:open-palette", onOpen);
-    return () => window.removeEventListener("basics:open-palette", onOpen);
+    const onOpen = (event: Event) => {
+      const mode = (event as CustomEvent<{ mode?: string }>).detail?.mode;
+      setOpen(true);
+      if (mode !== "search") return;
+      // Ctrl/Cmd+F: empty the field and put the caret in it, even when already open.
+      setQuery("");
+      requestAnimationFrame(() => inputRef.current?.focus());
+    };
+    window.addEventListener(PALETTE_SEARCH_EVENT, onOpen);
+    return () => window.removeEventListener(PALETTE_SEARCH_EVENT, onOpen);
   }, []);
 
   useEffect(() => {
