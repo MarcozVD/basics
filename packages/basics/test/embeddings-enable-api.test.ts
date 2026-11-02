@@ -81,6 +81,35 @@ test("POST /api/embeddings/enable switches the next recommendation to hybrid", a
   });
 });
 
+test("POST /api/embeddings/disable returns to keyword search and keeps the downloaded files", async () => {
+  await withVault(async (vaultDir, configFile) => {
+    const app = createApp({ root: vaultDir });
+    assert.equal((await app.request("/api/embeddings/enable", jsonInit({}))).status, 200);
+
+    const res = await app.request("/api/embeddings/disable", jsonInit({}));
+    assert.equal(res.status, 200);
+    assert.deepEqual(await res.json(), { enabled: false });
+
+    const config = JSON.parse(fs.readFileSync(configFile, "utf8")) as { embeddings: boolean };
+    assert.equal(config.embeddings, false);
+
+    const status = (await (await app.request("/api/embeddings", { headers: HOST })).json()) as { enabled: boolean };
+    assert.equal(status.enabled, false);
+  });
+});
+
+test("POST /api/embeddings/disable rejects a non-local origin", async () => {
+  await withVault(async (vaultDir) => {
+    const app = createApp({ root: vaultDir });
+    const res = await app.request("/api/embeddings/disable", {
+      method: "POST",
+      headers: { ...HOST, "content-type": "application/json", origin: "https://evil.com" },
+      body: "{}",
+    });
+    assert.equal(res.status, 403);
+  });
+});
+
 test("POST /api/embeddings/enable reports a clear error when the runtime is absent", async () => {
   await withVault(async (vaultDir, configFile) => {
     vi.mocked(runtime.loadRuntime).mockResolvedValueOnce(null);

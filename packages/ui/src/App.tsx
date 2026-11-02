@@ -19,6 +19,7 @@ const routeModules = {
   projects: () => import("@/pages/projects"),
   proposal: () => import("@/pages/proposal"),
   recommend: () => import("@/pages/recommend"),
+  settings: () => import("@/pages/settings"),
 };
 
 const ExplorePage = lazy(() => routeModules.explore().then((module) => ({ default: module.ExplorePage })));
@@ -28,6 +29,7 @@ const InboxPage = lazy(() => routeModules.inbox().then((module) => ({ default: m
 const ProjectsPage = lazy(() => routeModules.projects().then((module) => ({ default: module.ProjectsPage })));
 const ProposalPage = lazy(() => routeModules.proposal().then((module) => ({ default: module.ProposalPage })));
 const RecommendPage = lazy(() => routeModules.recommend().then((module) => ({ default: module.RecommendPage })));
+const SettingsPage = lazy(() => routeModules.settings().then((module) => ({ default: module.SettingsPage })));
 
 /** Quiet placeholder shown only on a cold load of a route: a title bar and a few rows, no spinner jump. */
 function RouteSkeleton() {
@@ -120,6 +122,14 @@ const router = createBrowserRouter([
         element: (
           <Lazy>
             <RecommendPage />
+          </Lazy>
+        ),
+      },
+      {
+        path: "settings",
+        element: (
+          <Lazy>
+            <SettingsPage />
           </Lazy>
         ),
       },

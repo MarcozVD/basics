@@ -21,7 +21,7 @@ function isTypingTarget(target: EventTarget | null): boolean {
   return target.closest(".cm-editor") !== null;
 }
 
-/** `g` + key navigation, ignored while typing and with modifiers held. */
+/** `g` + key navigation, ignored while typing and with modifiers held, plus the settings chord. */
 export function useGlobalShortcuts() {
   const navigate = useNavigate();
 
@@ -29,6 +29,12 @@ export function useGlobalShortcuts() {
     let armedAt = 0;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.repeat) return;
+      // The platform's settings chord (Cmd+, / Ctrl+,) works even while a field has focus.
+      if ((event.metaKey || event.ctrlKey) && !event.altKey && event.key === ",") {
+        event.preventDefault();
+        navigate("/settings");
+        return;
+      }
       if (event.metaKey || event.ctrlKey || event.altKey) return;
       if (isTypingTarget(event.target)) return;
 

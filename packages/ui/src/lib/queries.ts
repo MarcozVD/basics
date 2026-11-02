@@ -4,6 +4,7 @@ import {
   getActivity,
   getAgents,
   getConfig,
+  getConnectStatus,
   getEmbeddings,
   getGraph,
   getHealth,
@@ -33,6 +34,7 @@ export const queryKeys = {
   stats: ["stats"] as const,
   graph: (broken: boolean) => ["graph", broken] as const,
   agents: ["agents"] as const,
+  connectStatus: ["connect-status"] as const,
 };
 
 export function useHealth() {
@@ -90,4 +92,9 @@ export function useGraph(broken = false) {
 
 export function useAgents() {
   return useQuery({ queryKey: queryKeys.agents, queryFn: getAgents });
+}
+
+/** Which coding clients exist here and whether each one points at this vault. */
+export function useConnectStatus() {
+  return useQuery({ queryKey: queryKeys.connectStatus, queryFn: getConnectStatus });
 }

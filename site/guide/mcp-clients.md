@@ -28,6 +28,9 @@ changes, result), backs each edited file up as `<file>.basics-backup` once, and 
 Code, OpenCode and Codex. Cursor and Claude Desktop get the server only. The desktop app calls the same code through
 `POST /api/connect`.
 
+The web UI's **Settings → Agents** page does the same for each client, one row per client, and shows the written change
+under **Show what changed**.
+
 To take Basics back out, `basics disconnect` removes the `basics` entry from each client's config and the Basics skill,
 and leaves every other entry in those files alone:
 

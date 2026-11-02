@@ -450,6 +450,16 @@ export function createApp(opts: { root: string; uiDir?: string; events?: EventHu
     }
   });
 
+  /**
+   * Equivalent of `basics embeddings disable`: back to keyword search. The downloaded
+   * runtime and model stay on disk, so enabling again is instant.
+   */
+  app.post("/api/embeddings/disable", (c) => {
+    const config = configSchema.parse({ ...loadConfig(), embeddings: false });
+    saveConfig(config);
+    return c.json({ enabled: false });
+  });
+
   app.get("/api/activity", (c) => {
     const parsed = Number(c.req.query("limit"));
     const limit = Number.isFinite(parsed) && parsed > 0 ? Math.min(Math.floor(parsed), 200) : undefined;

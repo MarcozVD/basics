@@ -160,6 +160,11 @@ export function enableEmbeddings(): Promise<EmbeddingsEnableResponse> {
   return request<EmbeddingsEnableResponse>("/api/embeddings/enable", { method: "POST" });
 }
 
+/** Same as `basics embeddings disable`: stop using the model, keep the downloaded files. */
+export function disableEmbeddings(): Promise<{ enabled: false }> {
+  return request<{ enabled: false }>("/api/embeddings/disable", { method: "POST", body: "{}" });
+}
+
 export function getContext(techIds: string[]): Promise<ContextResponse> {
   return request<ContextResponse>("/api/context", { method: "POST", body: JSON.stringify({ techIds }) });
 }
@@ -209,6 +214,71 @@ export function rejectAllProposals(body: ApproveAllRequest): Promise<RejectAllRe
 
 export function getConfig(): Promise<AppConfig> {
   return request<AppConfig>("/api/config");
+}
+
+/** Coding clients `basics connect` can register the MCP server with. */
+export type ConnectClientId = "claude-code" | "opencode" | "codex" | "cursor" | "claude-desktop";
+
+export interface ConnectSkillEntry {
+  path: string;
+  result: "copied" | "unchanged" | "dry-run" | "removed" | "absent" | "error";
+  message?: string;
+  diff?: string;
+}
+
+export interface ConnectEntry {
+  client: ConnectClientId;
+  detected: boolean;
+  /** Config file (or command) that was read or written. */
+  target: string;
+  change: string;
+  result: "registered" | "updated" | "unchanged" | "skipped" | "dry-run" | "manual" | "error" | "removed" | "absent";
+  message?: string;
+  diff?: string;
+  skill?: ConnectSkillEntry;
+}
+
+export interface ConnectResult {
+  vault: string;
+  transport: "stdio" | "http";
+  url?: string;
+  command: string[];
+  entries: ConnectEntry[];
+  skillError?: string;
+}
+
+/** What a client has today: installed on this machine, pointed at this vault, skill copied in. */
+export interface ConnectStatusEntry {
+  client: ConnectClientId;
+  detected: boolean;
+  connected: boolean;
+  transport?: "stdio" | "http";
+  /** `null` when the client has no skill support. */
+  skill: boolean | null;
+  configPath: string;
+}
+
+export interface ConnectStatus {
+  vault: string;
+  clients: ConnectStatusEntry[];
+}
+
+export interface DisconnectResult {
+  entries: ConnectEntry[];
+}
+
+export function getConnectStatus(): Promise<ConnectStatus> {
+  return request<ConnectStatus>("/api/connect/status");
+}
+
+/** Register the Basics MCP server with the given clients; `dryRun` returns the diff only. */
+export function connectClients(body: { clients: ConnectClientId[]; dryRun?: boolean }): Promise<ConnectResult> {
+  return request<ConnectResult>("/api/connect", { method: "POST", body: JSON.stringify(body) });
+}
+
+/** Remove the Basics MCP entry (and skill) from the given clients, keeping everything else. */
+export function disconnectClients(body: { clients: ConnectClientId[] }): Promise<DisconnectResult> {
+  return request<DisconnectResult>("/api/disconnect", { method: "POST", body: JSON.stringify(body) });
 }
 
 export function getStats(): Promise<VaultStats> {

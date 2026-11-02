@@ -1,4 +1,4 @@
-import { Command, FolderKanban, House, Inbox, LayoutList, Sparkles, Waypoints } from "lucide-react";
+import { Command, FolderKanban, House, Inbox, LayoutList, Settings, Sparkles, Waypoints } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { memo, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -117,6 +117,7 @@ export function Layout() {
   // native title bar, find bar and reload. `isDesktop()` never changes for a page.
   const desktop = useMemo(() => isDesktop(), []);
   const mac = useMemo(() => desktop && isMacos(), [desktop]);
+  const settingsKey = useMemo(() => (isMacos() ? "⌘," : "Ctrl+,"), []);
 
   useGlobalShortcuts();
   // No browser behaviour in the app: Ctrl+F searches here, reload/print/source/zoom/…
@@ -174,6 +175,28 @@ export function Layout() {
         </div>
 
         <div className={cn("flex shrink-0 items-center gap-2", desktop && "h-full self-stretch")}>
+          <Tooltip
+            side="bottom"
+            content={
+              <span className="flex items-center gap-2">
+                <span>{t("nav.settings")}</span>
+                <kbd className="rounded-full border border-border px-1.5 font-mono text-[10px] text-muted-foreground">{settingsKey}</kbd>
+              </span>
+            }
+          >
+            <Link
+              to="/settings"
+              aria-label={t("nav.settings")}
+              aria-current={location.pathname === "/settings" ? "page" : undefined}
+              className={cn(
+                "grid size-8 place-items-center rounded-full text-muted-foreground transition-colors",
+                "hover:bg-muted/60 hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring",
+                location.pathname === "/settings" && "text-foreground",
+              )}
+            >
+              <Settings className="size-4" aria-hidden="true" />
+            </Link>
+          </Tooltip>
           <fieldset className="m-0 min-w-0 border-0 p-0" aria-label={t("nav.language")}>
             <Tabs value={language} onValueChange={(value) => setLanguage(value as "en" | "es")} variant="segment">
               <TabsList>
