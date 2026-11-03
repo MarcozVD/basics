@@ -7,9 +7,11 @@ const ACTIVITY_FILE = ".basics/activity.jsonl";
 /** Watches the vault and broadcasts debounced changes to SSE subscribers. */
 export class EventHub {
   private watcher?: ReturnType<typeof watch>;
+  private readyPromise: Promise<void> = Promise.resolve();
   private timer?: NodeJS.Timeout;
   private readonly pending = new Set<string>();
   private readonly subscribers = new Set<(event: VaultEvent) => void>();
+  private readonly changeListeners = new Set<() => void>();
 
   constructor(private readonly root: string) {}
 
@@ -19,14 +21,31 @@ export class EventHub {
       ignoreInitial: true,
       ignored: (p) => p.endsWith(".tmp") || this.ignoredBasics(p),
     });
+    this.readyPromise = new Promise<void>((resolve) => {
+      this.watcher?.once("ready", () => resolve());
+    });
     for (const event of ["add", "change", "unlink"] as const) {
       this.watcher.on(event, (file: string) => this.collect(file));
     }
   }
 
+  /** Resolves once the watcher has scanned the vault: changes after this point are seen. */
+  ready(): Promise<void> {
+    return this.readyPromise;
+  }
+
   subscribe(fn: (event: VaultEvent) => void): () => void {
     this.subscribers.add(fn);
     return () => this.subscribers.delete(fn);
+  }
+
+  /**
+   * Called as soon as a note file changes, without the debounce the broadcast waits for: the vault
+   * cache must not serve the old notes to a request that arrives while the change is still settling.
+   */
+  onChange(fn: () => void): () => void {
+    this.changeListeners.add(fn);
+    return () => this.changeListeners.delete(fn);
   }
 
   /** Broadcast an event produced outside the file watcher, such as embedding progress. */
@@ -55,7 +74,11 @@ export class EventHub {
   }
 
   private collect(file: string): void {
-    this.pending.add(this.relative(file));
+    const rel = this.relative(file);
+    this.pending.add(rel);
+    // A note changed: tell the cache right away. The broadcast below is debounced, but a request
+    // that lands between the write and the flush must still see the new files.
+    if (rel !== ACTIVITY_FILE) for (const fn of this.changeListeners) fn();
     if (this.timer) clearTimeout(this.timer);
     this.timer = setTimeout(() => this.flush(), 150);
   }

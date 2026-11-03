@@ -42,7 +42,7 @@ import {
   toDetail,
   UnknownTechError,
   updatePack,
-  Vault,
+  VaultCache,
   VaultNotFoundError,
   vaultStats,
 } from "@marcozvd/basics-core";
@@ -186,9 +186,29 @@ async function loadEmbedderWithRetry(runtime: TransformersModule, model: string)
   }
 }
 
-export function createApp(opts: { root: string; uiDir?: string; events?: EventHub; agents?: AgentRunner }): Hono {
+export function createApp(opts: {
+  root: string;
+  uiDir?: string;
+  events?: EventHub;
+  agents?: AgentRunner;
+  /** Shared vault cache; the app's own watcher drives its invalidation. */
+  cache?: VaultCache;
+}): Hono {
   const app = new Hono();
-  const vault = () => Vault.load(opts.root);
+  // One vault per root, reused across requests: a full reload parses every note (~2.5 s on an
+  // 860-note vault). The EventHub watcher below sees external edits, and every write the server
+  // makes itself invalidates right away, so a stale vault is never served. Without a watcher
+  // (a caller that builds the app alone) each request re-checks the note files instead.
+  const cache = opts.cache ?? new VaultCache(opts.root, { verify: !opts.events });
+  const vault = () => cache.get();
+  const invalidate = () => cache.invalidate();
+  // The app's watcher drives the cache; a caller may pass a partial hub (tests do), so guard both
+  // hooks. `onChange` fires as soon as a file changes, `subscribe` carries the events the app
+  // publishes itself (embedding progress), which also means the vault is worth reloading.
+  opts.events?.onChange?.(() => invalidate());
+  opts.events?.subscribe?.((event) => {
+    if (event.type === "vault") invalidate();
+  });
   const mcpSessions = new Map<string, McpSession>();
   const agentRunner = opts.agents ?? new AgentRunner();
 
@@ -262,19 +282,21 @@ export function createApp(opts: { root: string; uiDir?: string; events?: EventHu
   });
 
   app.get("/api/layers", (c) => {
-    const v = vault();
-    const layers: LayerSummary[] = v.byType("layer").map((layer) => ({
-      id: layer.id,
-      title: title(layer),
-      techs: v.techInLayer(layer.id).map((tech) => tech.id),
-    }));
+    const layers = cache.memo("layers", (v) => {
+      const summaries: LayerSummary[] = v.byType("layer").map((layer) => ({
+        id: layer.id,
+        title: title(layer),
+        techs: v.techInLayer(layer.id).map((tech) => tech.id),
+      }));
+      return summaries;
+    });
     return c.json(layers);
   });
 
   app.get("/api/notes", (c) => {
     const type = c.req.query("type") as NoteType | undefined;
     const layer = c.req.query("layer");
-    return c.json(listNotes(vault(), { type, layer }));
+    return c.json(cache.memo(`notes:${type ?? ""}:${layer ?? ""}`, (v) => listNotes(v, { type, layer })));
   });
 
   app.get("/api/notes/:id", (c) => {
@@ -292,6 +314,7 @@ export function createApp(opts: { root: string; uiDir?: string; events?: EventHu
       return c.json({ error: "exists", message: `note "${body.id}" already exists` } satisfies ApiError, 409);
     }
     v.writeNote(body.id, body.data, body.body);
+    invalidate();
     const note = v.get(body.id);
     if (!note) throw new NotFoundError(body.id);
     return c.json(toDetail(v, note), 201);
@@ -302,6 +325,7 @@ export function createApp(opts: { root: string; uiDir?: string; events?: EventHu
     const body = await c.req.json<SaveNoteRequest>();
     const v = vault();
     v.writeNote(id, body.data, body.body, { expectedHash: body.expectedHash });
+    invalidate();
     const note = v.get(id);
     if (!note) throw new NotFoundError(id);
     return c.json(toDetail(v, note));
@@ -310,13 +334,15 @@ export function createApp(opts: { root: string; uiDir?: string; events?: EventHu
   app.delete("/api/notes/:id", (c) => {
     const v = vault();
     v.deleteNote(c.req.param("id"), { expectedHash: c.req.query("expectedHash") });
+    invalidate();
     return c.body(null, 204);
   });
 
   app.get("/api/search", (c) => {
     const type = c.req.query("type") as NoteType | undefined;
     const layer = c.req.query("layer");
-    return c.json(search(vault(), c.req.query("q") ?? "", { type, layer }));
+    const q = c.req.query("q") ?? "";
+    return c.json(cache.memo(`search:${q}:${type ?? ""}:${layer ?? ""}`, (v) => search(v, q, { type, layer })));
   });
 
   app.post("/api/recommend", async (c) => {
@@ -358,6 +384,7 @@ export function createApp(opts: { root: string; uiDir?: string; events?: EventHu
     const body = (await c.req.json().catch(() => ({}))) as ApproveRequest;
     const v = vault();
     v.approve(id, body);
+    invalidate();
     const note = v.get(id);
     if (!note) throw new NotFoundError(id);
     return c.json(toDetail(v, note));
@@ -365,12 +392,16 @@ export function createApp(opts: { root: string; uiDir?: string; events?: EventHu
 
   app.post("/api/inbox/:id/reject", (c) => {
     vault().reject(c.req.param("id"));
+    invalidate();
     return c.body(null, 204);
   });
 
-  app.get("/api/stats", (c) => c.json(vaultStats(vault())));
+  app.get("/api/stats", (c) => c.json(cache.memo("stats", (v) => vaultStats(v))));
 
-  app.get("/api/graph", (c) => c.json(buildGraph(vault(), { broken: c.req.query("broken") === "1" })));
+  app.get("/api/graph", (c) => {
+    const broken = c.req.query("broken") === "1";
+    return c.json(cache.memo(broken ? "graph:broken" : "graph", (v) => buildGraph(v, { broken })));
+  });
 
   app.get("/api/config", (c) => c.json({ language: loadConfig().language }));
 
@@ -526,29 +557,38 @@ export function createApp(opts: { root: string; uiDir?: string; events?: EventHu
       path: body.path,
       lang: body.lang,
     });
+    invalidate();
     return c.json(result);
   });
 
   app.post("/api/packs/:name/install", async (c) => {
     const body = packInstallRequestSchema.parse(await c.req.json().catch(() => ({})));
     const lang = body.lang ?? loadConfig().language;
-    return c.json(installPack(vault(), packsDir(), c.req.param("name"), { lang }));
+    const result = installPack(vault(), packsDir(), c.req.param("name"), { lang });
+    invalidate();
+    return c.json(result);
   });
 
   app.post("/api/packs/:name/update", (c) => {
-    return c.json(updatePack(vault(), packsDir(), c.req.param("name")));
+    const result = updatePack(vault(), packsDir(), c.req.param("name"));
+    invalidate();
+    return c.json(result);
   });
 
   app.post("/api/inbox/approve-all", async (c) => {
     const raw = await c.req.text();
     const body = approveAllRequestSchema.parse(raw.trim() ? JSON.parse(raw) : {});
-    return c.json(vault().approveMany(body) satisfies ApproveAllResponse);
+    const result = vault().approveMany(body);
+    invalidate();
+    return c.json(result satisfies ApproveAllResponse);
   });
 
   app.post("/api/inbox/reject-all", async (c) => {
     const raw = await c.req.text();
     const body = approveAllRequestSchema.parse(raw.trim() ? JSON.parse(raw) : {});
-    return c.json(vault().rejectMany(body) satisfies RejectAllResponse);
+    const result = vault().rejectMany(body);
+    invalidate();
+    return c.json(result satisfies RejectAllResponse);
   });
 
   if (opts.events) {
@@ -593,7 +633,7 @@ export function createApp(opts: { root: string; uiDir?: string; events?: EventHu
 
     makeRoomForMcpSession();
 
-    const server = createMcpServer(() => opts.root, { clientHint: c.req.header("user-agent") });
+    const server = createMcpServer(() => opts.root, { clientHint: c.req.header("user-agent"), cache });
     const transport: WebStandardStreamableHTTPServerTransport = new WebStandardStreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),
       enableJsonResponse: true,

@@ -16,5 +16,6 @@ export * from "./tar.js";
 export * from "./templates.js";
 export * from "./trust.js";
 export * from "./vault.js";
+export * from "./vault-cache.js";
 export * from "./vault-meta.js";
 export * from "./vector-index.js";

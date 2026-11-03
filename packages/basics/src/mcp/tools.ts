@@ -14,7 +14,8 @@ import {
   title,
   toId,
   UnknownTechError,
-  Vault,
+  type Vault,
+  VaultCache,
   VaultNotFoundError,
 } from "@marcozvd/basics-core";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -46,6 +47,8 @@ const withVault = async <T>(fn: () => T | Promise<T>) => {
 
 export interface McpServerOptions {
   clientHint?: string;
+  /** Shared vault cache (the UI server passes the one its watcher keeps fresh). */
+  cache?: VaultCache;
 }
 
 export interface McpToolDefinition {
@@ -58,6 +61,12 @@ interface ToolContext {
   vault: () => Vault;
   log: (tool: string, noteIds: string[], detail?: string) => void;
   clientName: () => string | undefined;
+  /** Check the note files before a tool reads the vault (async, cheap). */
+  refresh: () => Promise<void>;
+  /** Drop the cached vault after a tool writes to the vault or its inbox. */
+  invalidate: () => void;
+  /** A value derived from the vault, cached per vault generation. */
+  memo: <T>(key: string, build: (vault: Vault) => T) => T;
 }
 
 interface ToolSpec {
@@ -266,9 +275,14 @@ const TOOLS: ToolSpec[] = [
     },
     run: async ({ layers }, ctx) =>
       withVault(() => {
-        const overview = buildOverview(ctx.vault(), layers);
+        // The catalog is the most expensive response (a whole-vault walk on every call), so it is
+        // built once per vault generation.
+        const body = ctx.memo(`overview:${(layers ?? []).map(toId).sort().join(",")}`, (vault) => {
+          const overview = buildOverview(vault, layers);
+          return renderOverview(overview);
+        });
         ctx.log("get_vault_overview", []);
-        return text(renderOverview(overview));
+        return text(body);
       }),
   }),
   defineTool({
@@ -277,12 +291,13 @@ const TOOLS: ToolSpec[] = [
     inputSchema: {},
     run: async (_input, ctx) =>
       withVault(() => {
-        const v = ctx.vault();
-        const layers = v.byType("layer").map((l) => ({
-          id: l.id,
-          title: title(l),
-          techs: v.techInLayer(l.id).map((t) => t.id),
-        }));
+        const layers = ctx.memo("list_layers", (v) =>
+          v.byType("layer").map((l) => ({
+            id: l.id,
+            title: title(l),
+            techs: v.techInLayer(l.id).map((t) => t.id),
+          })),
+        );
         ctx.log("list_layers", []);
         return json(layers);
       }),
@@ -298,7 +313,9 @@ const TOOLS: ToolSpec[] = [
     },
     run: async ({ query, type, layer, limit }, ctx) =>
       withVault(() => {
-        const hits = search(ctx.vault(), query, { type, layer, limit });
+        const hits = ctx.memo(`search:${query}:${type ?? ""}:${layer ?? ""}:${limit ?? ""}`, (vault) =>
+          search(vault, query, { type, layer, limit }),
+        );
         ctx.log(
           "search_vault",
           hits.slice(0, 10).map((h) => h.id),
@@ -353,7 +370,9 @@ const TOOLS: ToolSpec[] = [
     inputSchema: { tech_ids: z.array(z.string()).min(1), versions: z.record(z.string(), z.string()).optional() },
     run: async ({ tech_ids, versions }, ctx) =>
       withVault(() => {
-        const markdown = renderContext(ctx.vault(), tech_ids, { versions });
+        const markdown = ctx.memo(`context:${tech_ids.join(",")}:${JSON.stringify(versions ?? {})}`, (vault) =>
+          renderContext(vault, tech_ids, { versions }),
+        );
         ctx.log("get_stack_context", tech_ids);
         return text(markdown);
       }),
@@ -366,9 +385,12 @@ const TOOLS: ToolSpec[] = [
     inputSchema: { stack: z.array(z.string()).min(1), versions: z.record(z.string(), z.string()).optional() },
     run: async ({ stack, versions }, ctx) =>
       withVault(() => {
-        const templates = stackTemplates(ctx.vault(), stack, { versions });
+        const body = ctx.memo(`templates:${stack.join(",")}:${JSON.stringify(versions ?? {})}`, (vault) => {
+          const templates = stackTemplates(vault, stack, { versions });
+          return `${JSON.stringify(templates, null, 2)}\n\n${TEMPLATES_NOTE}`;
+        });
         ctx.log("get_check_templates", stack);
-        return text(`${JSON.stringify(templates, null, 2)}\n\n${TEMPLATES_NOTE}`);
+        return text(body);
       }),
   }),
   defineTool({
@@ -408,6 +430,7 @@ const TOOLS: ToolSpec[] = [
       if (!parsed.success) return fail(`invalid frontmatter: ${parsed.error.message}`);
       return withVault(() => {
         const p = ctx.vault().propose(id, parsed.data, body, { proposed_by: agent, reason });
+        ctx.invalidate();
         ctx.log("propose_note", [id], reason);
         return json({ status: "pending_review", id: p.id, action: p.meta.action, path: p.path });
       });
@@ -441,6 +464,7 @@ const TOOLS: ToolSpec[] = [
       return withVault(() => {
         try {
           const ids = recordOutcome(ctx.vault(), input, agent);
+          ctx.invalidate();
           ctx.log("record_project_outcome", ids);
           return json({ status: "pending_review", proposals: ids });
         } catch (err) {
@@ -573,8 +597,18 @@ export function toolDefinitions(): McpToolDefinition[] {
 
 export function createMcpServer(resolveRoot: () => string, opts: McpServerOptions = {}): McpServer {
   const server = new McpServer({ name: "basics", version });
-  // Reload on every call so manual edits in the vault show up immediately.
-  const vault = () => Vault.load(resolveRoot());
+  // One vault per root, reused across tool calls: a full reload parses every note (~2.2 s on an
+  // 860-note vault). This process has no watcher, so each call re-checks the note files (count,
+  // size, newest mtime) and reloads only when they changed, which keeps manual edits visible.
+  let cache = opts.cache;
+  const cacheFor = (): VaultCache => {
+    cache ??= new VaultCache(resolveRoot(), { verify: true });
+    return cache;
+  };
+  const vault = () => cacheFor().get();
+  const refresh = () => cacheFor().ensureFresh();
+  const invalidate = () => cacheFor().invalidate();
+  const memo = <T>(key: string, build: (vault: Vault) => T): T => cacheFor().memo(key, build);
   const clientName = () => server.server.getClientVersion()?.name ?? opts.clientHint;
   const log = (tool: string, noteIds: string[], detail?: string) => {
     try {
@@ -588,12 +622,21 @@ export function createMcpServer(resolveRoot: () => string, opts: McpServerOption
       // Activity logging must never break a tool call.
     }
   };
-  const context: ToolContext = { vault, log, clientName };
+  const context: ToolContext = { vault, log, clientName, refresh, invalidate, memo };
 
   for (const tool of TOOLS) {
-    server.registerTool(tool.name, { description: tool.description, inputSchema: tool.inputSchema }, (input) =>
-      tool.run(input as Record<string, unknown>, context),
-    );
+    // Every tool starts by checking the vault files, so an edit made in an editor or by a
+    // `git pull` shows up in the next call, the same as when each call reloaded the vault.
+    server.registerTool(tool.name, { description: tool.description, inputSchema: tool.inputSchema }, async (input) => {
+      try {
+        await context.refresh();
+        return await tool.run(input as Record<string, unknown>, context);
+      } catch (err) {
+        // A missing vault is a tool error, exactly like the tools report it themselves.
+        if (err instanceof VaultNotFoundError) return fail(err.message);
+        throw err;
+      }
+    });
   }
 
   for (const prompt of PROMPTS) {

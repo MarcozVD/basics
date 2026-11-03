@@ -6,6 +6,10 @@ Basics exposes the same twelve tools over two transports:
 - **HTTP** — `http://127.0.0.1:4747/mcp` while `basics ui` is running. Streamable HTTP with `mcp-session-id`
   sessions; the server drops inactive ones.
 
+The server keeps the parsed vault in memory and reloads it only when a note file changes. Before each tool call it checks
+the vault for changes, so an edit made in an editor or by `git pull` is seen by the very next call. Inbox proposals are
+read from disk on every call.
+
 Pass the vault as an absolute path for stdio. If you omit it, `basics-mcp` resolves it like the CLI: `BASICS_DIR`,
 then the global config, then `~/basics-vault`.
 

@@ -7,7 +7,8 @@ basics ui --no-open          # do not open the browser
 ```
 
 The UI works on the same files as the CLI and watches the vault, so edits made outside the browser show up without a
-reload.
+reload. The server keeps the parsed vault in memory and reloads it only when a note file changes, so the next request
+sees the edit and requests stay fast on large vaults.
 
 ## Screens
 
