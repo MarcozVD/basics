@@ -212,7 +212,7 @@ Springs and easings live in `src/lib/ease.ts`.
 - `components/app/window-controls.tsx` — desktop caption buttons (Minimize, Maximize/Restore, Close); rendered only in the desktop app.
 - `lib/desktop.ts` — runtime desktop detection (`isDesktop()`, `isMacos()`) and window helpers; loads `@tauri-apps/api` lazily, so a browser never downloads it.
 - `components/diff-view.tsx` — side-by-side / unified proposal diff with collapsed context.
-- `components/graph/` — Cytoscape + fcose canvas, graph model, editor local graph.
+- `components/graph/` — Cytoscape + fcose canvas, graph model, editor local graph. The flat full graph runs fcose in a module worker (`graph-layout.worker.ts`, client `graph-layout.ts`; falls back to the main thread if the worker fails).
 - `components/note-form/` — frontmatter form per note type, wikilink CodeMirror extensions, markdown preview, hover note preview, type chip and dot.
 - `components/state.tsx` — `Loading`, `ErrorState`, `Empty`.
 
@@ -225,7 +225,7 @@ Springs and easings live in `src/lib/ease.ts`.
 | `/` | Home | Waiting proposals (approve/reject inline), agent activity, a compact vault-health stats strip and layer list, both with detail popovers. Main chunk. |
 | `/explore` | Explore | Search (⌘F), type pills, layer and sort selects, list or grid, arrow keys + Enter. |
 | `/notes/:id` | Editor | Breadcrumb bar (Save, more menu), title, type chip and provenance, properties form, edit/preview/split body, connections, local graph. ⌘S saves; conflicts show a banner. |
-| `/graph` | Graph | Full-bleed canvas, floating glass toolbar (types, layer, search, broken links, fit), node drawer. |
+| `/graph` | Graph | Full-bleed canvas, floating glass toolbar (types, layer, search, broken links, fit), node drawer. The canvas instance is kept across route changes, so returning shows the same picture and camera with no layout run (`components/graph/graph-cache.ts` for positions, `components/graph/graph-canvas.tsx`). Graphs over 300 nodes seed positions at once, settle off-thread, and cull labels below zoom 0.6 except the 80 best-connected nodes. |
 | `/inbox` | Inbox | Proposal cards, create/update filter; ↑/↓, Enter, A, R. |
 | `/inbox/:id` | Proposal | Reason, diff, floating action bar (R / E / A), edit-and-approve modal. |
 | `/settings` | Settings | Six sections in a section list (General, Startup, Agents, Search, Updates, About), `?section=` deep links. Opened from the header gear or `Ctrl`/`⌘+,`, not from the Dock. Changes apply on pick; no Save button. |

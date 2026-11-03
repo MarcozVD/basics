@@ -1,3 +1,5 @@
+import { type ChildProcess, spawn } from "node:child_process";
+import path from "node:path";
 import { expect, type Page, test } from "@playwright/test";
 
 interface CyBox {
@@ -13,6 +15,7 @@ interface CyNodeHandle {
   isChild: () => boolean;
   isParent: () => boolean;
   parent: () => { id: () => string; nonempty: () => boolean };
+  position: () => { x: number; y: number };
   boundingBox: (options: { includeLabels: boolean }) => CyBox;
   renderedBoundingBox: (options: { includeLabels: boolean }) => CyBox;
 }
@@ -92,6 +95,112 @@ test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
     (window as unknown as { __BASICS_E2E__: boolean }).__BASICS_E2E__ = true;
   });
+});
+
+interface GraphPerf {
+  mounts: number;
+  counters: Record<string, number>;
+  lastSource: string | null;
+  /** The last mount, as the graph page recorded it. */
+  last: {
+    nodes: number;
+    firstFrameAt: number | null;
+    settledAt: number | null;
+    source: string;
+  } | null;
+}
+
+/** The canvas's own timing record (published only for dev builds and the e2e probe). */
+async function readPerf(page: Page): Promise<GraphPerf | null> {
+  return page.evaluate(() => {
+    const perf = (
+      window as unknown as {
+        __basicsGraphPerf?: {
+          mounts: { nodes: number; firstFrameAt: number | null; settledAt: number | null; source: string }[];
+          counters: Record<string, number>;
+        };
+      }
+    ).__basicsGraphPerf;
+    if (!perf) return null;
+    const last = perf.mounts[perf.mounts.length - 1] ?? null;
+    return {
+      mounts: perf.mounts.length,
+      counters: perf.counters,
+      lastSource: last?.source ?? null,
+      last: last ? { nodes: last.nodes, firstFrameAt: last.firstFrameAt, settledAt: last.settledAt, source: last.source } : null,
+    };
+  });
+}
+
+/**
+ * Positions of the nodes that carry them. Compound boxes are left out: their geometry
+ * follows their members (and the label font, which may still be loading).
+ */
+async function readPositions(page: Page): Promise<Record<string, { x: number; y: number }> | null> {
+  return page.evaluate(() => {
+    const cy = (window as unknown as { __basicsCy?: CyHandle }).__basicsCy;
+    if (!cy) return null;
+    const seen = cy.nodes().filter((node) => !node.isParent());
+    return Object.fromEntries(seen.map((node) => [node.id(), { x: node.position().x, y: node.position().y }]));
+  });
+}
+
+/** Ids whose position moved more than half a pixel. */
+function moved(before: Record<string, { x: number; y: number }>, after: Record<string, { x: number; y: number }>): string[] {
+  return Object.keys(before).filter((id) => {
+    const a = before[id];
+    const b = after[id];
+    return !b || Math.abs(a.x - b.x) > 0.5 || Math.abs(a.y - b.y) > 0.5;
+  });
+}
+
+/** Opens the graph and waits for the grouped picture (the first visit pays for the layout). */
+async function openGraph(page: Page) {
+  await page.goto("/graph");
+  await expect(page.getByTestId("graph-canvas").locator("canvas").first()).toBeVisible();
+  await expect.poll(async () => (await readGraph(page))?.fastapiParent).toBe("backend");
+}
+
+test("coming back to the graph re-attaches the canvas with the same positions, no layout", async ({ page }) => {
+  await openGraph(page);
+  const before = await readPositions(page);
+  const perf = await readPerf(page);
+  expect(before).not.toBeNull();
+  expect(perf?.counters.layouts).toBeGreaterThan(0);
+
+  await page.getByRole("link", { name: "Explore" }).click();
+  await expect(page).toHaveURL(/\/explore$/);
+  await page.getByRole("link", { name: "Graph" }).click();
+  await expect(page.getByTestId("graph-canvas").locator("canvas").first()).toBeVisible();
+
+  // A second mount happened, and it did not lay the graph out again.
+  await expect.poll(async () => (await readPerf(page))?.mounts).toBe((perf?.mounts ?? 0) + 1);
+  await expect.poll(async () => (await readPerf(page))?.lastSource).toBe("cache");
+  const returned = await readPerf(page);
+  expect(returned?.counters.layouts).toBe(perf?.counters.layouts);
+  expect(returned?.counters.reuses).toBe(1);
+
+  const after = await readPositions(page);
+  expect(after).not.toBeNull();
+  expect(moved(before ?? {}, after ?? {})).toEqual([]);
+});
+
+test("reloading the graph restores the cached positions without running a layout", async ({ page }) => {
+  await openGraph(page);
+  const before = await readPositions(page);
+  await expect.poll(() => page.evaluate(() => sessionStorage.getItem("basics:graph-cache:v1") !== null)).toBe(true);
+
+  await page.reload();
+  await expect(page.getByTestId("graph-canvas").locator("canvas").first()).toBeVisible();
+  await expect.poll(async () => (await readPerf(page))?.lastSource).toBe("cache");
+
+  // The cached picture is placed as-is: no preset and no force layout on this load.
+  const perf = await readPerf(page);
+  expect(perf?.counters.layouts).toBe(0);
+  expect(perf?.counters.cacheHits).toBe(1);
+
+  const after = await readPositions(page);
+  expect(moved(before ?? {}, after ?? {})).toEqual([]);
 });
 
 test("graph renders, search + Enter selects a node and the drawer opens its note", async ({ page }) => {
@@ -226,4 +335,126 @@ test("grouped mode hides edges to a node's own layer box", async ({ page }) => {
     grouped.intra.map((edge) => edge.id),
   );
   expect(flatVisible).toBe(true);
+});
+
+/**
+ * The big-vault specs run against their own server: a generated vault where the flat
+ * force layout takes seconds, so "while the layout runs" is a real window to test in.
+ */
+const LARGE_PORT = 4813;
+const LARGE_STATE = ".vault-path-large";
+const HERE = import.meta.dirname;
+
+async function waitForHealth(port: number): Promise<void> {
+  const deadline = Date.now() + 60_000;
+  while (Date.now() < deadline) {
+    try {
+      const res = await fetch(`http://127.0.0.1:${port}/api/health`);
+      if (res.ok) return;
+    } catch {
+      // Server not listening yet.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  throw new Error(`graph e2e server on ${port} did not start`);
+}
+
+test.describe("large vault", () => {
+  test.use({ baseURL: `http://127.0.0.1:${LARGE_PORT}` });
+  // A cold page load of a 860-node vault plus a full layout takes a while.
+  test.setTimeout(240_000);
+
+  let server: ChildProcess | undefined;
+
+  test.beforeAll(async () => {
+    server = spawn(process.execPath, ["e2e/serve.mjs"], {
+      cwd: path.resolve(HERE, ".."),
+      env: {
+        ...process.env,
+        BASICS_E2E_GENERATED: "600",
+        BASICS_E2E_PORT: String(LARGE_PORT),
+        BASICS_E2E_STATE: LARGE_STATE,
+      },
+      stdio: "ignore",
+    });
+    await waitForHealth(LARGE_PORT);
+  });
+
+  test.afterAll(async () => {
+    const child = server;
+    if (!child || child.exitCode !== null) return;
+    await new Promise<void>((resolve) => {
+      child.once("exit", () => resolve());
+      child.kill();
+    });
+  });
+
+  test.beforeEach(async ({ page }) => {
+    // Flat: the force layout, the case the worker exists for.
+    await page.addInitScript(() => localStorage.setItem("basics:graph-group", "0"));
+  });
+
+  test("a node opens its panel while the cold layout is still running", async ({ page }) => {
+    await page.goto("/graph");
+    // A cold load of 860 nodes takes the app server-side work before the canvas exists.
+    await expect(page.getByTestId("graph-canvas").locator("canvas").first()).toBeVisible({ timeout: 120_000 });
+
+    // The seeded picture is painted while the simulation is still in the worker.
+    await expect.poll(async () => (await readPerf(page))?.last?.firstFrameAt ?? null, { timeout: 120_000 }).not.toBeNull();
+    const before = await readPerf(page);
+    expect(before?.last?.nodes).toBeGreaterThan(500);
+    expect(before?.last?.settledAt).toBeNull();
+
+    // tech-0 is the best connected node, so the spiral seeds put it in the middle.
+    const point = await page.evaluate(() => {
+      const cy = (window as unknown as { __basicsCy?: CyHandle }).__basicsCy;
+      if (!cy) return null;
+      const node = cy.getElementById("tech-0");
+      if (!node.nonempty()) return null;
+      const box = node.renderedBoundingBox({ includeLabels: false });
+      return { x: (box.x1 + box.x2) / 2, y: (box.y1 + box.y2) / 2 };
+    });
+    expect(point).not.toBeNull();
+    const origin = await page.getByTestId("graph-canvas").boundingBox();
+    if (!origin || !point) throw new Error("graph canvas has no geometry");
+    // The seeds are fitted, so the node must be on screen before the simulation moves it.
+    expect(point.x).toBeGreaterThan(0);
+    expect(point.y).toBeGreaterThan(0);
+    expect(point.x).toBeLessThan(origin.width);
+    expect(point.y).toBeLessThan(origin.height);
+
+    // A real mouse click on the canvas: it only lands if the main thread is free.
+    const clickedAt = Date.now();
+    await page.mouse.click(origin.x + point.x, origin.y + point.y);
+    const drawer = page.getByRole("dialog", { name: "Note details" });
+    await expect(drawer).toBeVisible({ timeout: 10_000 });
+    await expect(drawer.getByRole("heading", { name: "Tech 0" })).toBeVisible();
+    expect(Date.now() - clickedAt).toBeLessThan(10_000);
+
+    // The layout was still mid-flight when the drawer opened.
+    const during = await readPerf(page);
+    expect(during?.counters.workers).toBe(0);
+    expect(during?.counters.fallbacks).toBe(0);
+
+    // And it does settle afterwards, in the worker, moving nodes into place.
+    await expect.poll(async () => (await readPerf(page))?.last?.settledAt ?? null, { timeout: 180_000 }).not.toBeNull();
+    const after = await readPerf(page);
+    expect(after?.counters.workers).toBe(1);
+    expect(after?.counters.fallbacks).toBe(0);
+    // Normal motion glides into the settled picture.
+    expect(after?.counters.glides).toBeGreaterThan(0);
+  });
+
+  test("reduced motion jumps to the settled positions instead of gliding", async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.goto("/graph");
+    await expect(page.getByTestId("graph-canvas").locator("canvas").first()).toBeVisible({ timeout: 120_000 });
+    await expect.poll(async () => (await readPerf(page))?.last?.settledAt ?? null, { timeout: 180_000 }).not.toBeNull();
+
+    const perf = await readPerf(page);
+    expect(perf?.last?.source).toBe("layout");
+    expect(perf?.counters.workers).toBe(1);
+    // No intermediate picture and no glide: the nodes were put where they belong.
+    expect(perf?.counters.glides).toBe(0);
+  });
 });

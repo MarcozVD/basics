@@ -87,9 +87,21 @@ export function useActivity(filter: ActivityFilter = {}) {
   return useQuery({ queryKey: queryKeys.activity(filter), queryFn: () => getActivity(filter) });
 }
 
-/** Toggling broken links keeps the previous graph on screen while the other variant loads. */
+/**
+ * Toggling broken links keeps the previous graph on screen while the other variant loads.
+ *
+ * The graph is expensive to fetch for a big vault and the SSE vault events already
+ * invalidate it on every change, so a return to `/graph` paints the cached data first
+ * and only patches a background refetch.
+ */
 export function useGraph(broken = false) {
-  return useQuery({ queryKey: queryKeys.graph(broken), queryFn: () => getGraph(broken), placeholderData: keepPreviousData });
+  return useQuery({
+    queryKey: queryKeys.graph(broken),
+    queryFn: () => getGraph(broken),
+    placeholderData: keepPreviousData,
+    staleTime: 5 * 60_000,
+    gcTime: 30 * 60_000,
+  });
 }
 
 export function useAgents() {
