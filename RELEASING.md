@@ -80,13 +80,33 @@ separately by the [`.github/workflows/desktop.yml`](.github/workflows/desktop.ym
   git push origin desktop-v1.2.0   # push only this tag; never `git push --tags`
   ```
 
-  The workflow builds all three platforms and creates a **draft** GitHub Release (`Basics desktop <tag>`) with the
-  installers attached.
+  The workflow builds all three platforms, one job at a time (so the release takes longer), and creates a **draft**
+  GitHub Release (`Basics desktop <tag>`) with the installers, their `.sig` files and a merged `latest.json` attached.
+  The tag must match the version in `apps/desktop/src-tauri/tauri.conf.json`.
 
-- **Review and publish**: open the draft release, sanity-check the installers and the notes, then click **Publish
-  release**. The installers are unsigned — the release notes link to
-  [the desktop guide](https://marcozvd.github.io/basics/guide/desktop.html) for how to open them per OS (SmartScreen,
-  Gatekeeper, AppImage `chmod +x`).
+- **Signing**: tagged builds are signed for the in-app updater with the repository secrets
+  `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. A `desktop-v*` tag without both secrets fails
+  on purpose: an unsigned release would stop every installed app from updating. A manual **Desktop** run without
+  them still builds, with a warning, and that build cannot update itself. These are update signatures only; the
+  installers are not code-signed by the OS, so SmartScreen and Gatekeeper prompts still apply.
+- **Review and publish**: open the draft, check the installers, `latest.json` and the notes, then click **Publish
+  release**. Drafts do not trigger anything; only publishing does.
+- **Update manifest**: publishing a `desktop-v*` release runs
+  [`.github/workflows/desktop-updater.yml`](.github/workflows/desktop-updater.yml). It checks that the release's
+  `latest.json` exists and its version matches the tag, then copies it to the rolling **`desktop-updater`**
+  prerelease, the fixed URL the installed apps read. If the asset is missing or the version does not match, the job
+  fails and nothing is copied.
+  - The `desktop-updater` release must never be deleted or marked as latest. Deleting it breaks updates for every
+    installed app until it is recreated. The workflow keeps it a prerelease.
+  - Keep `bundle.createUpdaterArtifacts` set to `true` in `tauri.conf.json`; without it there are no `.sig` files and
+    no manifest.
+- **Signing key**: the private key and its password live in the `.tauri` folder of the maintainer's user profile
+  (`~/.tauri/`), and must be backed up outside the repository and CI. Losing the key or its password permanently
+  stops updates for every installed app. The public key is built into each app, so rotating the key needs a release
+  signed with the old key, or a manual reinstall of every app. Never put key material in the repository, a commit,
+  an issue or a log.
+- **Local builds**: `tauri build` in `apps/desktop` needs the signing variables above, or a config overlay that turns
+  off updater artifacts: `--config '{"bundle":{"createUpdaterArtifacts":false}}'`. `tauri dev` is unaffected.
 
 `apps/desktop` versioning (tauri.conf.json, Cargo.toml, bundle) is independent of the npm packages; bump it as part of
 the desktop work and keep it in sync with the `desktop-v*` tag.

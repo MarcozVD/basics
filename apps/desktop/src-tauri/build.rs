@@ -11,6 +11,9 @@ fn main() {
             "open_vault_folder",
             "get_desktop_settings",
             "set_desktop_settings",
+            "check_update",
+            "install_update",
+            "desktop_version",
         ])),
     )
     .expect("failed to run tauri-build");

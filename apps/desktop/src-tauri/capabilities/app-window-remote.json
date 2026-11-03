@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "app-window-remote",
-  "description": "The page the app loads is served by the Basics server on the loopback interface, so it is a remote origin to Tauri and needs its own capability. It gets exactly the window commands a title bar needs: start dragging, minimize, toggle maximize, close (which hides to the tray) and the maximize state plus resize events to pick the right icon. On top of that, Settings gets the four app commands it actually uses: read and write the desktop settings (start at login, start minimized, close behaviour), pick a vault folder through the native dialog, and open the configured vault folder in the file manager. None of them takes a path from the page: choose_vault only ever writes a folder the owner picked, and open_vault_folder opens the vault the running server reported. No shell, filesystem or opener permission is granted, so even a compromised localhost page cannot run processes, read arbitrary files or open URLs through the app.",
+  "description": "The page the app loads is served by the Basics server on the loopback interface, so it is a remote origin to Tauri and needs its own capability. It gets exactly the window commands a title bar needs: start dragging, minimize, toggle maximize, close (which hides to the tray) and the maximize state plus resize events to pick the right icon. On top of that, Settings gets the app commands it actually uses: read and write the desktop settings (start at login, start minimized, close behaviour, check for updates on start), pick a vault folder through the native dialog, open the configured vault folder in the file manager, and run the updater through two commands that take no URL (check_update, install_update) plus desktop_version for the installed version. None of them takes a path or URL from the page: choose_vault only ever writes a folder the owner picked, open_vault_folder opens the vault the running server reported, and the updater only reads the endpoint and signing key from the app config. No shell, filesystem, opener or updater permission is granted to the page, so even a compromised localhost page cannot run processes, read arbitrary files, open URLs or install an arbitrary package through the app.",
   "windows": ["main"],
   "local": false,
   "remote": {
@@ -19,6 +19,9 @@
     "allow-get-desktop-settings",
     "allow-set-desktop-settings",
     "allow-choose-vault",
-    "allow-open-vault-folder"
+    "allow-open-vault-folder",
+    "allow-check-update",
+    "allow-install-update",
+    "allow-desktop-version"
   ]
 }

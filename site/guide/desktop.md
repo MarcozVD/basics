@@ -10,7 +10,9 @@ Your vault, packs and notes are managed exactly as with the CLI and the web UI.
 
 ## Install
 
-Installers are unsigned and attached to each desktop release on GitHub (tags named `desktop-v<version>`, for example
+Installers are not code-signed by Windows or macOS, so the system warns when you open them (see the table below). Each
+installer is signed for the in-app updater, which only installs updates that match that signature. The installers are
+attached to each desktop release on GitHub (tags named `desktop-v<version>`, for example
 [desktop-v1.4.1](https://github.com/MarcozVD/basics/releases/tag/desktop-v1.4.1)); see
 [all desktop releases](https://github.com/MarcozVD/basics/releases?q=desktop-v&expanded=true). Download the one for
 your OS (`<version>` is the release number, such as `1.4.1`):
@@ -151,8 +153,8 @@ defaults, so the app still starts.
   `basics init`, the same as on first run, and the server restarts with it. Notes in the old folder are not moved.
   Cancel changes nothing.
 
-**Settings → Updates** shows the installed version and links to the GitHub Releases page. There is no automatic
-updater yet.
+**Settings → Updates** shows the installed version, the result of the last check, **Check now**, and the **Check for
+updates on start** switch. See [Updates](#updates).
 
 ## Config and vault location
 
@@ -164,8 +166,25 @@ The app uses the same configuration as the CLI:
 
 ## Updates
 
-There is **no automatic updater** yet. Check the GitHub Releases page for new versions and install the new installer
-over the old one; your vault and config are untouched.
+The desktop app can update itself. When it starts, it checks for a new version and, if there is one, shows a card in
+the top-right corner with the version, the release date, **What's new** (the release notes) and **Update and restart**.
+**Later** hides the card until the next start.
+
+**Update and restart** downloads the new version with a progress bar, closes the app, installs it and opens the new
+version. Your vault and config are untouched. If the download or install fails, the card says why in plain words and
+offers **Try again**.
+
+- **Check for updates on start** (Settings → Updates, on by default): turn it off and the app makes no update check when
+  it starts. **Check now** on the same page still checks on demand.
+- Offline starts are fine: the app opens normally and the check simply does not show anything. A manual check shows the
+  reason if it cannot reach the release server.
+- Only signed updates are installed. The app trusts the public key built into it, and nothing else.
+- The first version with the updater must be installed by hand, once, from the GitHub Releases page. Later versions
+  arrive through the card.
+- The Windows installer is the one tested end to end so far. The macOS and Linux builds include the same updater, but
+  updating them has not been tested yet; if an update fails there, install the new version from the Releases page.
+
+The card only appears in the desktop app; the browser UI has no updater.
 
 ## Uninstall
 

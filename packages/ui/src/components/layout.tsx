@@ -14,6 +14,7 @@ import {
 import { AppCommandPalette } from "@/components/app/command-palette";
 import { Logo } from "@/components/app/logo";
 import { NewNoteDialog } from "@/components/app/new-note-dialog";
+import { UpdateBanner } from "@/components/app/update-banner";
 import { WindowControls } from "@/components/app/window-controls";
 import { AnimatedNumber } from "@/components/motion/animated-number";
 import { AnimatedToastStack } from "@/components/motion/animated-toast-stack";
@@ -30,6 +31,7 @@ import { EASE_OUT } from "@/lib/ease";
 import { useHealth, useInbox } from "@/lib/queries";
 import { useGlobalShortcuts } from "@/lib/shortcuts";
 import { dismissToast, toast, useToasts } from "@/lib/toast";
+import { startUpdater } from "@/lib/updater";
 import { cn } from "@/lib/utils";
 
 interface DockLink {
@@ -124,6 +126,12 @@ export function Layout() {
   // No browser behaviour in the app: Ctrl+F searches here, reload/print/source/zoom/…
   // are swallowed, and the native context menu only survives in editable fields.
   useDesktopShell(desktop);
+
+  // One background update check per app session, after the page has settled: the server is
+  // already healthy by the time the UI loads, and a slow check never blocks anything.
+  useEffect(() => {
+    if (desktop) startUpdater();
+  }, [desktop]);
 
   // A run started from Recommend keeps going while the user is elsewhere: announce it when it
   // finishes (the panel already shows the answer when it is on screen) and offer to go back.
@@ -313,6 +321,7 @@ export function Layout() {
       </nav>
 
       <AnimatedToastStack toasts={toasts} onDismiss={dismissToast} position="bottom-right" fixed />
+      <UpdateBanner />
       <AppCommandPalette />
       <NewNoteDialog />
     </div>

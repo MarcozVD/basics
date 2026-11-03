@@ -16,7 +16,7 @@ use serde::Serialize;
 use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::webview::NewWindowResponse;
-use tauri::{AppHandle, Manager, RunEvent, Url, WebviewUrl, WebviewWindowBuilder, WindowEvent};
+use tauri::{AppHandle, Emitter, Manager, RunEvent, Url, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt as _};
 use tauri_plugin_clipboard_manager::ClipboardExt;
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
@@ -26,6 +26,7 @@ use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
 
 mod settings;
+mod update;
 
 use settings::{CloseBehavior, DesktopSettings};
 
@@ -105,6 +106,23 @@ struct Prefs(Mutex<DesktopSettings>);
 
 /// The tray's "Start at login" checkbox, so the page and the tray stay in sync.
 struct TrayMenu(Mutex<Option<CheckMenuItem<tauri::Wry>>>);
+
+/// True while an update is downloading or installing, so two clicks never race.
+#[derive(Default)]
+struct UpdateState(Mutex<bool>);
+
+/// The loopback port the app serves on. A debug build can pick another
+/// (`BASICS_DESKTOP_PORT`) so a local update test never attaches to the owner's app.
+fn preferred_port() -> u16 {
+    #[cfg(debug_assertions)]
+    if let Some(port) = std::env::var("BASICS_DESKTOP_PORT")
+        .ok()
+        .and_then(|value| value.parse::<u16>().ok())
+    {
+        return port;
+    }
+    DEFAULT_PORT
+}
 
 fn config_dir(app: &AppHandle) -> Result<PathBuf, String> {
     app.path()
@@ -370,6 +388,7 @@ fn log_pipe<R: std::io::Read + Send + 'static>(stream: R, app: AppHandle) -> std
 
 /// Attach to a running Basics server or spawn the sidecar, then wait for it.
 fn start(app: AppHandle) {
+    let preferred = preferred_port();
     {
         let state = app.state::<ServerState>();
         let mut server = state.0.lock().unwrap();
@@ -377,15 +396,15 @@ fn start(app: AppHandle) {
         server.status = Status::default();
     }
 
-    if let Some(health) = basics_health(DEFAULT_PORT) {
+    if let Some(health) = basics_health(preferred) {
         remember_vault(&app, &health);
-        let url = format!("http://127.0.0.1:{DEFAULT_PORT}");
+        let url = format!("http://127.0.0.1:{preferred}");
         set_status(&app, Phase::Ready, "attached to a running Basics server", Some(url.clone()));
         open_in_window(&app, &url);
         return;
     }
 
-    let port = if port_is_free(DEFAULT_PORT) { Some(DEFAULT_PORT) } else { any_free_port() };
+    let port = if port_is_free(preferred) { Some(preferred) } else { any_free_port() };
     let Some(port) = port else {
         set_status(&app, Phase::Error, "no free local port to start the server on", None);
         return;
@@ -469,6 +488,134 @@ fn set_desktop_settings(app: AppHandle, settings: DesktopSettings) -> Result<Des
     *app.state::<Prefs>().0.lock().unwrap() = saved.clone();
     set_tray_autostart(&app, saved.start_at_login);
     Ok(saved)
+}
+
+/// The version of the installed app. Updates compare against this; the server's
+/// `/api/health` version belongs to the npm package and can differ.
+#[tauri::command]
+fn desktop_version(app: AppHandle) -> String {
+    app.package_info().version.to_string()
+}
+
+/// Debug-only endpoint override for the local update test. Release builds only ever read
+/// `tauri.conf.json`, so neither the page nor an environment variable can redirect an update.
+#[cfg(debug_assertions)]
+fn debug_endpoint() -> Result<Option<Url>, String> {
+    let Some(value) = std::env::var("BASICS_UPDATER_ENDPOINT")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+    else {
+        return Ok(None);
+    };
+    let url =
+        Url::parse(value.trim()).map_err(|_| "BASICS_UPDATER_ENDPOINT is not a URL".to_string())?;
+    let loopback = matches!(url.host_str(), Some("127.0.0.1" | "localhost" | "::1"));
+    if !loopback || !matches!(url.scheme(), "http" | "https") {
+        return Err("BASICS_UPDATER_ENDPOINT must point at this computer (localhost).".into());
+    }
+    Ok(Some(url))
+}
+
+/// Builds the updater from the shipped config (plus the debug-only local override).
+fn updater_for(app: &AppHandle) -> Result<tauri_plugin_updater::Updater, String> {
+    use tauri_plugin_updater::UpdaterExt;
+
+    #[allow(unused_mut)]
+    let mut builder = app.updater_builder();
+    #[cfg(debug_assertions)]
+    if let Some(endpoint) = debug_endpoint()? {
+        builder = builder
+            .endpoints(vec![endpoint])
+            .map_err(|err| err.to_string())?;
+    }
+    #[cfg(windows)]
+    {
+        // The Windows installer path exits with `std::process::exit`, which skips
+        // `RunEvent::Exit`: stop the server and drop the tray icon before it starts.
+        let handle = app.clone();
+        builder = builder.on_before_exit(move || close_for_update(&handle));
+    }
+    builder.build().map_err(|err| update::plain_error(&err))
+}
+
+fn claim_update(app: &AppHandle) -> bool {
+    let state = app.state::<UpdateState>();
+    let mut running = state.0.lock().unwrap();
+    if *running {
+        false
+    } else {
+        *running = true;
+        true
+    }
+}
+
+/// Ask the update server once. `None` means this is the newest version; `Err` is a message
+/// a person can read. The page never gets a URL: the endpoint lives in the app config.
+#[tauri::command]
+async fn check_update(app: AppHandle) -> Result<Option<update::UpdateInfo>, String> {
+    let updater = updater_for(&app)?;
+    let found = updater
+        .check()
+        .await
+        .map_err(|err| update::plain_error(&err))?;
+    Ok(found.as_ref().map(update::UpdateInfo::from_update))
+}
+
+/// Download, verify and install the newest version, then hand over to the new build.
+/// Windows: the updater plugin launches the installer and exits the app itself.
+#[tauri::command]
+async fn install_update(app: AppHandle) -> Result<(), String> {
+    if !claim_update(&app) {
+        return Err("Basics is already downloading an update.".into());
+    }
+    let result = download_and_install(&app).await;
+    *app.state::<UpdateState>().0.lock().unwrap() = false;
+    result?;
+    #[cfg(windows)]
+    {
+        Ok(())
+    }
+    #[cfg(not(windows))]
+    {
+        // Elsewhere the plugin only replaces the bundle, so relaunch the new version.
+        app.restart();
+    }
+}
+
+async fn download_and_install(app: &AppHandle) -> Result<(), String> {
+    let updater = updater_for(app)?;
+    let Some(update) = updater
+        .check()
+        .await
+        .map_err(|err| update::plain_error(&err))?
+    else {
+        return Err("Basics is already up to date.".into());
+    };
+
+    let progress = app.clone();
+    let installing = app.clone();
+    let mut downloaded: u64 = 0;
+    update
+        .download_and_install(
+            move |chunk, total| {
+                downloaded += chunk as u64;
+                let _ = progress.emit(
+                    "basics:update-progress",
+                    update::UpdateProgress::Download { downloaded, total },
+                );
+            },
+            move || {
+                let _ = installing.emit("basics:update-progress", update::UpdateProgress::Install);
+            },
+        )
+        .await
+        .map_err(|err| update::plain_error(&err))
+}
+
+#[cfg(windows)]
+fn close_for_update(app: &AppHandle) {
+    stop_sidecar(app);
+    let _ = app.remove_tray_by_id("main");
 }
 
 /// Open the vault the running server uses in the system file manager. Deliberately takes
@@ -778,19 +925,24 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         // The login item always carries `--minimized`; whether that hides the window is
         // the `start_minimized` setting's decision, so it can change without re-registering.
         .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, Some(vec![settings::MINIMIZED_ARG])))
         .manage(ServerState(Mutex::new(Server::default())))
         .manage(Prefs(Mutex::new(DesktopSettings::default())))
         .manage(TrayMenu(Mutex::new(None)))
+        .manage(UpdateState::default())
         .invoke_handler(tauri::generate_handler![
             startup_status,
             retry_startup,
             choose_vault,
             open_vault_folder,
             get_desktop_settings,
-            set_desktop_settings
+            set_desktop_settings,
+            check_update,
+            install_update,
+            desktop_version
         ])
         .setup(|app| {
             let handle = app.handle().clone();

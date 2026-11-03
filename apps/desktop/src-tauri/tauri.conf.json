@@ -13,8 +13,18 @@
       "csp": null
     }
   },
+  "plugins": {
+    "updater": {
+      "endpoints": ["https://github.com/MarcozVD/basics/releases/download/desktop-updater/latest.json"],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDlCQjkxODkxQUFDQzlGQUIKUldTcm44eXFrUmk1bTdvaEFocUFHYi9lZVNUR2RycStBN0xjZER3aWsrYjQ5T0hBaVpqZ1UyRzIK",
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "targets": ["msi", "nsis", "dmg", "appimage", "deb", "rpm"],
     "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"],
     "externalBin": ["binaries/node"],

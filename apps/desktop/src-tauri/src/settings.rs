@@ -36,13 +36,27 @@ pub enum CloseBehavior {
     Quit,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct DesktopSettings {
     /// Mirror of the operating system's login item; the live value wins on read.
     pub start_at_login: bool,
     pub start_minimized: StartMinimized,
     pub close_behavior: CloseBehavior,
+    /// Check the update server once per launch. Missing in older settings files, which
+    /// means "on": an installed app should notice new versions without being told.
+    pub check_updates_on_start: bool,
+}
+
+impl Default for DesktopSettings {
+    fn default() -> Self {
+        Self {
+            start_at_login: false,
+            start_minimized: StartMinimized::default(),
+            close_behavior: CloseBehavior::default(),
+            check_updates_on_start: true,
+        }
+    }
 }
 
 pub fn path_in(dir: &Path) -> PathBuf {
@@ -103,6 +117,7 @@ mod tests {
         assert!(!settings.start_at_login);
         assert_eq!(settings.start_minimized, StartMinimized::Never);
         assert_eq!(settings.close_behavior, CloseBehavior::Tray);
+        assert!(settings.check_updates_on_start);
     }
 
     #[test]
@@ -111,11 +126,13 @@ mod tests {
             start_at_login: true,
             start_minimized: StartMinimized::Always,
             close_behavior: CloseBehavior::Quit,
+            check_updates_on_start: false,
         };
         let json = serde_json::to_string(&settings).unwrap();
         assert!(json.contains(r#""start_at_login":true"#));
         assert!(json.contains(r#""start_minimized":"always""#));
         assert!(json.contains(r#""close_behavior":"quit""#));
+        assert!(json.contains(r#""check_updates_on_start":false"#));
         assert_eq!(parse(&json).unwrap(), settings);
     }
 
@@ -137,7 +154,17 @@ mod tests {
         assert!(!settings.start_at_login);
         assert_eq!(settings.start_minimized, StartMinimized::Never);
         assert_eq!(settings.close_behavior, CloseBehavior::Quit);
+        assert!(settings.check_updates_on_start);
         assert_eq!(parse("{}").unwrap(), DesktopSettings::default());
+    }
+
+    #[test]
+    fn a_file_from_before_the_updates_setting_checks_on_start() {
+        // Settings written by 1.4.2 have no `check_updates_on_start` key at all.
+        let settings = parse(r#"{"start_at_login":true,"start_minimized":"login","close_behavior":"tray"}"#).unwrap();
+        assert!(settings.check_updates_on_start);
+        // An explicit "off" is kept.
+        assert!(!parse(r#"{"check_updates_on_start":false}"#).unwrap().check_updates_on_start);
     }
 
     #[test]
@@ -159,6 +186,7 @@ mod tests {
             start_at_login: true,
             start_minimized: StartMinimized::Login,
             close_behavior: CloseBehavior::Quit,
+            check_updates_on_start: false,
         };
         save(&dir, &settings).unwrap();
         assert!(path_in(&dir).exists());
