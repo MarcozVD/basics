@@ -11,6 +11,7 @@ import {
   type ApproveRequest,
   addCommunityPack,
   buildGraph,
+  buildSearchIndex,
   ConflictError,
   type ContextResponse,
   type CreateNoteRequest,
@@ -342,7 +343,10 @@ export function createApp(opts: {
     const type = c.req.query("type") as NoteType | undefined;
     const layer = c.req.query("layer");
     const q = c.req.query("q") ?? "";
-    return c.json(cache.memo(`search:${q}:${type ?? ""}:${layer ?? ""}`, (v) => search(v, q, { type, layer })));
+    // The tokenized vault is kept per generation: typing a new query no longer re-tokenizes every
+    // note, and the same query twice is served from the result memo below.
+    const index = cache.memo("search-index", (v) => buildSearchIndex(v));
+    return c.json(cache.memo(`search:${q}:${type ?? ""}:${layer ?? ""}`, (v) => search(v, q, { type, layer }, index)));
   });
 
   app.post("/api/recommend", async (c) => {

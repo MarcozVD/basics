@@ -38,14 +38,14 @@ Minimal call:
 
 ## `search_vault`
 
-Full-text search over the user's stack vault. Use before proposing new notes to avoid duplicates.
+Full-text search over the user's stack vault. Returns ranked hits (id, type, title, score) plus the total that matched, so a capped list says so. Use before proposing new notes to avoid duplicates.
 
 | Input | Type | Required | Description |
 | --- | --- | --- | --- |
 | `query` | `string` | yes | — |
 | `type` | `layer` \| `tech` \| `practice` \| `check` \| `profile` \| `project` | no | — |
 | `layer` | `string` | no | Restrict to tech notes in this layer |
-| `limit` | `integer` | no | — |
+| `limit` | `integer` | no | Maximum hits to return (default 10) |
 
 Minimal call:
 
@@ -79,7 +79,7 @@ Minimal call:
 
 ## `recommend_stack`
 
-Given a natural-language project description, return ranked technology candidates per layer and matching stack profiles from the user's vault. Treat as a shortlist: read the candidate notes, choose, and explain the choice to the user. Prefer the user's vault over general knowledge.
+Given a natural-language project description, return ranked technology candidates per layer and matching stack profiles from the user's vault. Each candidate carries the `use_when`/`performs_best`/`avoid_when` phrases that matched and the `score_breakdown` parts that scored (weighted keyword overlap scaled by word rarity, plus negation and language fit; `hybrid` when embeddings are on). `per_layer` is a maximum, not a minimum: a layer with nothing above zero is omitted. Treat it as a shortlist: read the candidate notes, choose, and explain the choice to the user. Prefer the user's vault over general knowledge.
 
 | Input | Type | Required | Description |
 | --- | --- | --- | --- |

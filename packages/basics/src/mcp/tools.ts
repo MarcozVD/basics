@@ -2,6 +2,8 @@ import fs from "node:fs";
 import { createRequire } from "node:module";
 import {
   appendActivity,
+  buildSearchIndex,
+  type Candidate,
   detectStack,
   NOTE_TYPES,
   type NoteData,
@@ -9,7 +11,7 @@ import {
   recordOutcome,
   renderContext,
   renderExport,
-  search,
+  searchAll,
   stackTemplates,
   title,
   toId,
@@ -30,7 +32,9 @@ interface ToolResult {
   isError?: boolean;
 }
 
-const json = (value: unknown): ToolResult => ({ content: [{ type: "text" as const, text: JSON.stringify(value, null, 2) }] });
+// Compact JSON: the payload goes to a model, which reads it the same either way. Two-space
+// indentation cost ~20-35% of the bytes on the JSON tools (measured), and those are tokens.
+const json = (value: unknown): ToolResult => ({ content: [{ type: "text" as const, text: JSON.stringify(value) }] });
 const text = (value: string): ToolResult => ({ content: [{ type: "text" as const, text: value }] });
 const fail = (message: string): ToolResult => ({ content: [{ type: "text" as const, text: message }], isError: true });
 const TEMPLATES_NOTE = "Write missing files into the project; never overwrite existing files.";
@@ -263,6 +267,27 @@ function renderOverview(overview: VaultOverview): string {
   return render();
 }
 
+/**
+ * A candidate with only the parts that carry information: no empty match lists, no zero parts in
+ * the breakdown. The keys that are left are exactly the documented ones for a candidate.
+ */
+function compactCandidate(candidate: Candidate): Record<string, unknown> {
+  const compact: Record<string, unknown> = { id: candidate.id, kind: candidate.kind, score: candidate.score };
+  if (candidate.hybrid !== undefined) compact.hybrid = candidate.hybrid;
+  for (const key of [
+    "matched_use_when",
+    "matched_performs_best",
+    "matched_avoid_when",
+    "negated_use_when",
+    "negated_avoid_when",
+  ] as const) {
+    if (candidate[key].length) compact[key] = candidate[key];
+  }
+  if (candidate.language_boost) compact.language_boost = candidate.language_boost;
+  compact.score_breakdown = Object.fromEntries(Object.entries(candidate.score_breakdown).filter(([, part]) => part));
+  return compact;
+}
+
 const TOOLS: ToolSpec[] = [
   defineTool({
     name: "get_vault_overview",
@@ -304,24 +329,31 @@ const TOOLS: ToolSpec[] = [
   }),
   defineTool({
     name: "search_vault",
-    description: "Full-text search over the user's stack vault. Use before proposing new notes to avoid duplicates.",
+    description:
+      "Full-text search over the user's stack vault. Returns ranked hits (id, type, title, score) plus the total that matched, so a capped list says so. Use before proposing new notes to avoid duplicates.",
     inputSchema: {
       query: z.string(),
       type: z.enum(NOTE_TYPES).optional(),
       layer: z.string().optional().describe("Restrict to tech notes in this layer"),
-      limit: z.number().int().positive().max(50).optional(),
+      limit: z.number().int().positive().max(50).optional().describe("Maximum hits to return (default 10)"),
     },
     run: async ({ query, type, layer, limit }, ctx) =>
       withVault(() => {
-        const hits = ctx.memo(`search:${query}:${type ?? ""}:${layer ?? ""}:${limit ?? ""}`, (vault) =>
-          search(vault, query, { type, layer, limit }),
+        const index = ctx.memo("search-index", (vault) => buildSearchIndex(vault));
+        const page = ctx.memo(`search:${query}:${type ?? ""}:${layer ?? ""}:${limit ?? ""}`, (vault) =>
+          searchAll(vault, query, { type, layer, limit }, index),
         );
         ctx.log(
           "search_vault",
-          hits.slice(0, 10).map((h) => h.id),
+          page.hits.slice(0, 10).map((h) => h.id),
           query,
         );
-        return json(hits);
+        // `total` is what matched before the cap: without it a truncated list reads like "that is all".
+        return json(
+          page.hits.length < page.total
+            ? { ...page, hint: `${page.total} notes matched; raise limit (max 50) or narrow with type/layer` }
+            : page,
+        );
       }),
   }),
   defineTool({
@@ -334,14 +366,17 @@ const TOOLS: ToolSpec[] = [
         const n = v.get(id);
         if (!n) return fail(`note "${id}" not found`);
         ctx.log("get_note", [id]);
-        return json({ id: n.id, data: n.data, body: n.body, links: n.links, backlinks: v.getBacklinks(n.id), hash: n.hash });
+        // No `hash`: it is the optimistic-concurrency token the app's editor uses, an agent never does.
+        return json({ id: n.id, data: n.data, body: n.body, links: n.links, backlinks: v.getBacklinks(n.id) });
       }),
   }),
   defineTool({
     name: "recommend_stack",
     description:
       "Given a natural-language project description, return ranked technology candidates per layer and matching stack profiles from the user's vault. " +
-      "Treat as a shortlist: read the candidate notes, choose, and explain the choice to the user. Prefer the user's vault over general knowledge.",
+      "Each candidate carries the `use_when`/`performs_best`/`avoid_when` phrases that matched and the `score_breakdown` parts that scored (weighted keyword overlap scaled by word rarity, plus negation and language fit; `hybrid` when embeddings are on). " +
+      "`per_layer` is a maximum, not a minimum: a layer with nothing above zero is omitted. " +
+      "Treat it as a shortlist: read the candidate notes, choose, and explain the choice to the user. Prefer the user's vault over general knowledge.",
     inputSchema: {
       description: z.string(),
       layers: z.array(z.string()).optional(),
@@ -357,9 +392,21 @@ const TOOLS: ToolSpec[] = [
           Object.values(rec.layers).flatMap((candidates) => (candidates[0] ? [candidates[0].id] : [])),
           description,
         );
-        // A layer with no matching candidate is omitted rather than returned as an empty list.
-        const ranked = Object.fromEntries(Object.entries(rec.layers).filter(([, candidates]) => candidates.length > 0));
-        return json({ ...rec, layers: ranked });
+        // A layer with no matching candidate is omitted rather than returned as an empty list, and
+        // every field that carries no information for this candidate is left out: the empty arrays
+        // and zero parts were a third of the payload.
+        const ranked = Object.fromEntries(
+          Object.entries(rec.layers)
+            .filter(([, candidates]) => candidates.length > 0)
+            .map(([layer, candidates]) => [layer, candidates.map(compactCandidate)]),
+        );
+        return json({
+          description: rec.description,
+          mode: rec.mode,
+          profiles: rec.profiles,
+          layers: ranked,
+          note: "Shortlist, not a decision: read the candidate notes before choosing; score_breakdown lists the parts that scored and per_layer is a maximum.",
+        });
       }),
   }),
   defineTool({
@@ -520,16 +567,17 @@ const PLAN_STACK_PROMPT = `Plan the stack for this project:
 
 Work from the user's vault, not from general knowledge:
 
-1. Call \`get_vault_overview\` to see every layer with its techs (\`use_when\`, \`avoid_when\`, \`performs_best\`), the stack profiles and the past projects. Pass \`layers\` only when the user already named the layers.
-2. Call \`recommend_stack\` with the project description above as a cross-check. Treat the ranking as a shortlist, not the decision.
-3. Read the deciding notes with \`get_note\` before committing to a tech, especially when two candidates are close or a profile looks like a match.
-4. Answer with a short **stack decision**: one tech per needed layer, each with one line of reason citing the vault note (\`[[id]]\`) and the \`use_when\` it matched. Add anything in \`avoid_when\` that ruled out an alternative. Prefer a matching profile when one fits, and prefer what past projects used successfully while respecting their lessons.
-5. Fill the gaps the decision exposes: if a technology the decision needs has no note in the vault, or a chosen note links to a missing \`[[id]]\`, check with \`search_vault\` and \`get_note\`, then \`propose_note\` the missing note before or right after giving the decision. Never propose more than the notes the decision actually uses.
-   - Each proposed note must be useful on its own: correct \`type\`, and for a tech the right \`kind\` and \`layer\` (an existing layer id) plus \`language\` when it applies; at least 2 \`use_when\`, at least 1 \`avoid_when\`, \`tags\` and \`related\`. Link \`[[id]]\` in the body and \`related\` only to notes that exist or that you propose in the same answer.
-   - Body of 3–6 lines, specific: what it is, when it beats the alternatives already in the vault, and one concrete pitfall or setup note. \`reason\` says which project decision needed it.
-6. List the proposals in the answer ("Propuestas al Inbox: rustls, reqwest") and repeat that nothing is applied until the user approves it in the Inbox.
-7. Ask ONE question before writing any file: "¿Usamos este stack? / Shall we use this stack?" in the user's language.
-8. After a yes, follow the skill's New project steps: \`get_stack_context\` for the chosen techs, \`get_check_templates\` for the files to create, then \`export_project\` (send existing agent file contents in \`existing\`) and write the returned files into the project root.`;
+1. \`get_vault_overview\` for every layer with its techs (\`use_when\`, \`avoid_when\`, \`performs_best\`), the profiles and the past projects. Pass \`layers\` only when the user already named them.
+2. \`recommend_stack\` with the same description as a cross-check. It is a shortlist, not the decision.
+3. \`get_note\` on the deciding notes before committing, especially when two candidates are close or a profile looks like a match.
+
+Answer with a short **stack decision**: one tech per needed layer, one line of reason each citing the vault note (\`[[id]]\`) and the \`use_when\` it matched; name any \`avoid_when\` that ruled out an alternative. Prefer a matching profile, and what past projects used successfully while respecting their lessons.
+
+Fill the gaps the decision exposes: when a tech it needs has no note, or a chosen note links a missing \`[[id]]\`, \`search_vault\` then \`propose_note\` — never more notes than the decision uses. Each proposal needs the right \`type\`; for a tech its \`kind\`, \`layer\` (an existing layer id) and \`language\` when it applies; at least 2 \`use_when\`, 1 \`avoid_when\`, \`tags\` and \`related\`; \`[[id]]\` links and \`related\` only to notes that exist or that you propose now; a 3–6 line body (what it is, when it beats the alternatives in the vault, one pitfall); and a \`reason\` naming the decision that needed it.
+
+List the proposals ("Propuestas al Inbox: rustls, reqwest") and repeat that nothing is applied until the user approves it in the Inbox. Then ask ONE question: "¿Usamos este stack? / Shall we use this stack?" in the user's language.
+
+After a yes, follow the skill's New project steps: \`get_stack_context\` for the chosen techs, \`get_check_templates\` for the files to create, then \`export_project\` (send the existing agent file contents in \`existing\`) and write the returned files into the project root.`;
 
 interface PromptSpec {
   name: string;

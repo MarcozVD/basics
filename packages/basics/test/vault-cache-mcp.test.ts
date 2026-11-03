@@ -75,6 +75,47 @@ test("a note added and deleted on disk shows up in the search results", async ()
   });
 });
 
+test("search_vault reports the total behind a capped list, and only then a hint", async () => {
+  const root = tempVault();
+
+  await withClient(root, async (client) => {
+    const capped = JSON.parse(text(await client.callTool({ name: "search_vault", arguments: { query: "api", limit: 1 } })));
+    assert.equal(capped.hits.length, 1);
+    assert.ok(capped.total > 1, "total counts the matches before the cap");
+    assert.match(capped.hint, /notes matched/);
+
+    const full = JSON.parse(text(await client.callTool({ name: "search_vault", arguments: { query: "api", limit: 50 } })));
+    assert.equal(full.hits.length, full.total);
+    assert.equal(full.hint, undefined, "no hint when the list is complete");
+  });
+});
+
+test("tool responses are compact JSON and leave out what an agent cannot use", async () => {
+  const root = tempVault();
+
+  await withClient(root, async (client) => {
+    const rawRecommend = text(
+      await client.callTool({ name: "recommend_stack", arguments: { description: "REST API for invoices with a React dashboard" } }),
+    );
+    assert.ok(!rawRecommend.includes("\n"), "compact JSON, no indentation");
+    const recommendation = JSON.parse(rawRecommend);
+    const candidates = Object.values(recommendation.layers).flat() as Record<string, unknown>[];
+    assert.ok(candidates.length > 0);
+    for (const candidate of candidates) {
+      for (const [key, value] of Object.entries(candidate)) {
+        if (Array.isArray(value)) assert.ok(value.length > 0, `${key} is never an empty list`);
+        if (key === "score_breakdown") assert.ok(Object.values(value as Record<string, number>).every((part) => part !== 0));
+      }
+      assert.ok(!("language_boost" in candidate) || candidate.language_boost !== 0);
+    }
+
+    // `hash` is the editor's concurrency token; an MCP client has nothing to compare it with.
+    const note = JSON.parse(text(await client.callTool({ name: "get_note", arguments: { id: "fastapi" } })));
+    assert.equal(note.id, "fastapi");
+    assert.equal(note.hash, undefined);
+  });
+});
+
 test("a repeated overview call is served from the cache and rebuilt after an edit", async () => {
   const root = tempVault();
 

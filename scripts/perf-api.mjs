@@ -27,6 +27,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { generateLargeVault } from "./perf-vault.mjs";
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
 const cli = path.join(repoRoot, "packages", "basics", "dist", "cli.js");
@@ -67,46 +68,7 @@ process.env.APPDATA = mcpAppData;
 const exampleVault = path.join(runDir, "vault-examples");
 const syntheticVault = path.join(runDir, "vault-synthetic");
 fs.cpSync(path.join(repoRoot, "examples", "vault"), exampleVault, { recursive: true });
-generateVault(syntheticVault);
-
-/** 600 techs + 240 practices + 12 layers + 8 profiles, cross-linked like a real stack vault. */
-function generateVault(dir) {
-  const write = (folder, id, frontmatter, body) => {
-    fs.mkdirSync(path.join(dir, folder), { recursive: true });
-    fs.writeFileSync(path.join(dir, folder, `${id}.md`), `---\n${frontmatter}\n---\n\n${body}\n`);
-  };
-  for (let i = 0; i < LAYERS; i++) {
-    write("layers", `layer-${i}`, `type: layer\ntitle: Layer ${i}\ndescription: Synthetic layer ${i}`, `# Layer ${i}`);
-  }
-  for (let i = 0; i < TECHS; i++) {
-    const related = [`tech-${(i + 1) % TECHS}`, `tech-${(i + 7) % TECHS}`];
-    write(
-      "tech",
-      `tech-${i}`,
-      [
-        "type: tech",
-        "kind: framework",
-        `title: Tech ${i}`,
-        `layer: layer-${i % LAYERS}`,
-        `related: [${related.join(", ")}]`,
-        `practices: [practice-${i % PRACTICES}]`,
-      ].join("\n"),
-      `# Tech ${i}\n\nSynthetic tech for the search and token harness.`,
-    );
-  }
-  for (let i = 0; i < PRACTICES; i++) {
-    write(
-      "practices",
-      `practice-${i}`,
-      `type: practice\ntitle: Practice ${i}\napplies_to: [tech-${(i * 5) % TECHS}]`,
-      `- Synthetic practice ${i}.`,
-    );
-  }
-  for (let i = 0; i < PROFILES; i++) {
-    const stack = Array.from({ length: LAYERS }, (_, layer) => `  layer-${layer}: [tech-${(layer + i) % TECHS}]`).join("\n");
-    write("profiles", `profile-${i}`, `type: profile\ntitle: Profile ${i}\nstack:\n${stack}`, `# Profile ${i}`);
-  }
-}
+generateLargeVault(syntheticVault, { techs: TECHS, practices: PRACTICES, layers: LAYERS, profiles: PROFILES });
 
 function freePort() {
   return new Promise((resolve, reject) => {
@@ -282,6 +244,80 @@ async function measureMcp(vault, calls) {
   return results;
 }
 
+/**
+ * Distinct queries one after another: the memo of the exact same query helps a repeated call only,
+ * so this is what the search box pays when the user keeps typing (the client debounces at 200 ms).
+ */
+async function measureDistinctSearch(vault, tag, queries) {
+  const httpSamples = [];
+  const mcpSamples = [];
+  const http = { firstMs: 0, p50: 0, p95: 0, bytes: 0 };
+  const port = await freePort();
+  const server = startServer(port, vault, `${tag}-distinct`);
+  try {
+    await waitListening(port);
+    for (const [index, query] of queries.entries()) {
+      const call = await timed(async () => {
+        const res = await fetch(`http://127.0.0.1:${port}/api/search?q=${encodeURIComponent(query)}`);
+        const body = await res.text();
+        if (!res.ok) throw new Error(`search -> ${res.status} ${body.slice(0, 200)}`);
+        return body;
+      });
+      if (index === 0) http.firstMs = round(call.ms);
+      httpSamples.push(call.ms);
+      http.bytes = call.value.length;
+    }
+    http.p50 = stats(httpSamples).p50;
+    http.p95 = stats(httpSamples).p95;
+  } finally {
+    stopServer(server);
+  }
+
+  const pair = await mcpPair(vault);
+  const mcp = { firstMs: 0, p50: 0, p95: 0, bytes: 0 };
+  try {
+    for (const [index, query] of queries.entries()) {
+      const call = await timed(() => pair.call("search_vault", { query }));
+      const result = call.value;
+      if (result.isError) throw new Error(`search_vault failed: ${(result.content?.[0]?.text ?? "").slice(0, 200)}`);
+      if (index === 0) mcp.firstMs = round(call.ms);
+      mcpSamples.push(call.ms);
+      mcp.bytes = (result.content?.[0]?.text ?? "").length;
+    }
+    mcp.p50 = stats(mcpSamples).p50;
+    mcp.p95 = stats(mcpSamples).p95;
+  } finally {
+    await pair.close();
+  }
+  return { http, mcp };
+}
+
+const DISTINCT_QUERIES = {
+  examples: [
+    "api",
+    "react",
+    "python",
+    "test",
+    "database",
+    "auth",
+    "cache",
+    "queue",
+    "search",
+    "graph",
+    "http",
+    "json",
+    "css",
+    "sql",
+    "docker",
+    "lint",
+    "deploy",
+    "monitor",
+    "log",
+    "mail",
+  ],
+  synthetic600: Array.from({ length: 20 }, (_, index) => `tech ${index}`),
+};
+
 const HTTP_REQUESTS = (searchQuery) => ({
   "GET /api/graph": "/api/graph",
   "GET /api/notes": "/api/notes",
@@ -317,7 +353,9 @@ try {
     const http = await measureHttp(dir, name, HTTP_REQUESTS(SEARCH_QUERIES[name]));
     process.stderr.write(`[perf] ${name}: mcp...\n`);
     const mcp = await measureMcp(dir, MCP_REQUESTS[name]);
-    results.vaults[name] = { http, mcp };
+    process.stderr.write(`[perf] ${name}: distinct search...\n`);
+    const distinctSearch = await measureDistinctSearch(dir, name, DISTINCT_QUERIES[name]);
+    results.vaults[name] = { http, mcp, distinctSearch };
   }
 
   const header = ["vault", "call", "cold ms", "warm p50", "warm p95", "bytes"];
@@ -331,6 +369,24 @@ try {
   const line = (cells) => cells.map((cell, index) => String(cell).padEnd(widths[index])).join("  ");
   console.log(`\n# api/mcp perf (${label}, warm over ${WARM} calls)\n`);
   console.log([line(header), line(widths.map((width) => "-".repeat(width))), ...rows.map(line)].join("\n"));
+  console.log("");
+
+  const distinctHeader = ["vault", "distinct queries", "first ms", "p50 ms", "p95 ms", "bytes"];
+  const distinctRows = [];
+  for (const [vault, { distinctSearch }] of Object.entries(results.vaults)) {
+    for (const [kind, entry] of Object.entries(distinctSearch)) {
+      distinctRows.push([vault, kind === "http" ? "GET /api/search" : "search_vault", entry.firstMs, entry.p50, entry.p95, entry.bytes]);
+    }
+  }
+  const distinctWidths = distinctHeader.map((cell, index) =>
+    Math.max(cell.length, ...distinctRows.map((row) => String(row[index]).length)),
+  );
+  const distinctLine = (cells) => cells.map((cell, index) => String(cell).padEnd(distinctWidths[index])).join("  ");
+  console.log(
+    [distinctLine(distinctHeader), distinctLine(distinctWidths.map((width) => "-".repeat(width))), ...distinctRows.map(distinctLine)].join(
+      "\n",
+    ),
+  );
   console.log("");
   if (outFile) {
     fs.writeFileSync(path.resolve(outFile), `${JSON.stringify(results, null, 2)}\n`);
