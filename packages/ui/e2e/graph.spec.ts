@@ -13,6 +13,7 @@ interface CyNodeHandle {
   isChild: () => boolean;
   isParent: () => boolean;
   parent: () => { id: () => string; nonempty: () => boolean };
+  position: () => { x: number; y: number };
   boundingBox: (options: { includeLabels: boolean }) => CyBox;
   renderedBoundingBox: (options: { includeLabels: boolean }) => CyBox;
 }
@@ -92,6 +93,100 @@ test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
     (window as unknown as { __BASICS_E2E__: boolean }).__BASICS_E2E__ = true;
   });
+});
+
+interface GraphPerf {
+  mounts: number;
+  counters: Record<string, number>;
+  lastSource: string | null;
+}
+
+/** The canvas's own timing record (published only for dev builds and the e2e probe). */
+async function readPerf(page: Page): Promise<GraphPerf | null> {
+  return page.evaluate(() => {
+    const perf = (
+      window as unknown as {
+        __basicsGraphPerf?: { mounts: { source: string }[]; counters: Record<string, number> };
+      }
+    ).__basicsGraphPerf;
+    if (!perf) return null;
+    return {
+      mounts: perf.mounts.length,
+      counters: perf.counters,
+      lastSource: perf.mounts[perf.mounts.length - 1]?.source ?? null,
+    };
+  });
+}
+
+/**
+ * Positions of the nodes that carry them. Compound boxes are left out: their geometry
+ * follows their members (and the label font, which may still be loading).
+ */
+async function readPositions(page: Page): Promise<Record<string, { x: number; y: number }> | null> {
+  return page.evaluate(() => {
+    const cy = (window as unknown as { __basicsCy?: CyHandle }).__basicsCy;
+    if (!cy) return null;
+    const seen = cy.nodes().filter((node) => !node.isParent());
+    return Object.fromEntries(seen.map((node) => [node.id(), { x: node.position().x, y: node.position().y }]));
+  });
+}
+
+/** Ids whose position moved more than half a pixel. */
+function moved(before: Record<string, { x: number; y: number }>, after: Record<string, { x: number; y: number }>): string[] {
+  return Object.keys(before).filter((id) => {
+    const a = before[id];
+    const b = after[id];
+    return !b || Math.abs(a.x - b.x) > 0.5 || Math.abs(a.y - b.y) > 0.5;
+  });
+}
+
+/** Opens the graph and waits for the grouped picture (the first visit pays for the layout). */
+async function openGraph(page: Page) {
+  await page.goto("/graph");
+  await expect(page.getByTestId("graph-canvas").locator("canvas").first()).toBeVisible();
+  await expect.poll(async () => (await readGraph(page))?.fastapiParent).toBe("backend");
+}
+
+test("coming back to the graph re-attaches the canvas with the same positions, no layout", async ({ page }) => {
+  await openGraph(page);
+  const before = await readPositions(page);
+  const perf = await readPerf(page);
+  expect(before).not.toBeNull();
+  expect(perf?.counters.layouts).toBeGreaterThan(0);
+
+  await page.getByRole("link", { name: "Explore" }).click();
+  await expect(page).toHaveURL(/\/explore$/);
+  await page.getByRole("link", { name: "Graph" }).click();
+  await expect(page.getByTestId("graph-canvas").locator("canvas").first()).toBeVisible();
+
+  // A second mount happened, and it did not lay the graph out again.
+  await expect.poll(async () => (await readPerf(page))?.mounts).toBe((perf?.mounts ?? 0) + 1);
+  await expect.poll(async () => (await readPerf(page))?.lastSource).toBe("cache");
+  const returned = await readPerf(page);
+  expect(returned?.counters.layouts).toBe(perf?.counters.layouts);
+  expect(returned?.counters.reuses).toBe(1);
+
+  const after = await readPositions(page);
+  expect(after).not.toBeNull();
+  expect(moved(before ?? {}, after ?? {})).toEqual([]);
+});
+
+test("reloading the graph restores the cached positions without running a layout", async ({ page }) => {
+  await openGraph(page);
+  const before = await readPositions(page);
+  await expect.poll(() => page.evaluate(() => sessionStorage.getItem("basics:graph-cache:v1") !== null)).toBe(true);
+
+  await page.reload();
+  await expect(page.getByTestId("graph-canvas").locator("canvas").first()).toBeVisible();
+  await expect.poll(async () => (await readPerf(page))?.lastSource).toBe("cache");
+
+  // The cached picture is placed as-is: no preset and no force layout on this load.
+  const perf = await readPerf(page);
+  expect(perf?.counters.layouts).toBe(0);
+  expect(perf?.counters.cacheHits).toBe(1);
+
+  const after = await readPositions(page);
+  expect(moved(before ?? {}, after ?? {})).toEqual([]);
 });
 
 test("graph renders, search + Enter selects a node and the drawer opens its note", async ({ page }) => {

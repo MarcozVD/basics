@@ -225,7 +225,7 @@ Springs and easings live in `src/lib/ease.ts`.
 | `/` | Home | Waiting proposals (approve/reject inline), agent activity, a compact vault-health stats strip and layer list, both with detail popovers. Main chunk. |
 | `/explore` | Explore | Search (⌘F), type pills, layer and sort selects, list or grid, arrow keys + Enter. |
 | `/notes/:id` | Editor | Breadcrumb bar (Save, more menu), title, type chip and provenance, properties form, edit/preview/split body, connections, local graph. ⌘S saves; conflicts show a banner. |
-| `/graph` | Graph | Full-bleed canvas, floating glass toolbar (types, layer, search, broken links, fit), node drawer. |
+| `/graph` | Graph | Full-bleed canvas, floating glass toolbar (types, layer, search, broken links, fit), node drawer. The canvas instance is kept across route changes, so returning shows the same picture and camera with no layout run (`components/graph/graph-cache.ts` for positions, `components/graph/graph-canvas.tsx`). |
 | `/inbox` | Inbox | Proposal cards, create/update filter; ↑/↓, Enter, A, R. |
 | `/inbox/:id` | Proposal | Reason, diff, floating action bar (R / E / A), edit-and-approve modal. |
 | `/settings` | Settings | Six sections in a section list (General, Startup, Agents, Search, Updates, About), `?section=` deep links. Opened from the header gear or `Ctrl`/`⌘+,`, not from the Dock. Changes apply on pick; no Save button. |

@@ -3,6 +3,7 @@ import { Crosshair, FilePlus2, Layers, Scan, Search, SquareArrowOutUpRight, Wayp
 import { motion, useReducedMotion } from "motion/react";
 import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
+import { type GraphCacheScope, type GraphLayoutMode, graphCacheKey } from "@/components/graph/graph-cache";
 import GraphCanvas, { type GraphCanvasHandle, type Insets } from "@/components/graph/graph-canvas";
 import { GRAPH_TYPES, layerSlice, matchNodes, neighborhood } from "@/components/graph/graph-model";
 import { DOCK_SPACE } from "@/components/layout";
@@ -17,7 +18,7 @@ import { TypeChip } from "@/components/note-form/note-preview";
 import { ErrorState, Loading } from "@/components/state";
 import { type TranslationKey, useT } from "@/i18n";
 import { EASE_OUT, SPRING_PRESS } from "@/lib/ease";
-import { useGraph, useLayers, useNote, useNotes } from "@/lib/queries";
+import { useGraph, useHealth, useLayers, useNote, useNotes } from "@/lib/queries";
 import { cn } from "@/lib/utils";
 
 /** Drawer width plus its right gap, kept clear when centering a node beside it. */
@@ -55,6 +56,7 @@ export function GraphPage() {
 
   const graph = useGraph(broken);
   const layers = useLayers();
+  const health = useHealth();
   const data = graph.data;
 
   useEffect(() => {
@@ -110,6 +112,16 @@ export function GraphPage() {
     const nodes = (data?.nodes ?? []).filter((node) => !visibleIds || visibleIds.has(node.id));
     return matchNodes(nodes, search);
   }, [data, visibleIds, search]);
+
+  // Where this picture was left, so coming back (or reloading) paints it at once.
+  // The camera only counts for an unfiltered view: a slice has its own framing.
+  const cacheScope = useMemo<GraphCacheScope | null>(() => {
+    const vault = health.data?.vault;
+    if (!data || !vault) return null;
+    const layout: GraphLayoutMode = grouped && !focusId ? "grouped" : "flat";
+    const camera = !focusId && layer === "all" && hiddenTypes.size === 0;
+    return { key: graphCacheKey(vault, layout, data), vault, layout, camera };
+  }, [data, grouped, focusId, layer, hiddenTypes, health.data?.vault]);
 
   // Focus and layer slices change what is on screen, so bring it into view.
   const fitKey = `${focusId ?? ""}|${layer}`;
@@ -192,7 +204,7 @@ export function GraphPage() {
     <div className="relative" style={{ height: "calc(100dvh - 3rem)", marginBottom: -DOCK_SPACE }}>
       <h1 className="sr-only">{t("page.graph.title")}</h1>
 
-      {graph.isPending ? (
+      {graph.isPending || (health.isPending && !health.data) ? (
         <div className="grid h-full place-items-center">
           <Loading />
         </div>
@@ -207,6 +219,7 @@ export function GraphPage() {
           ref={canvasRef}
           data={data}
           mode="full"
+          cacheScope={cacheScope}
           visibleIds={visibleIds}
           query={search}
           grouped={grouped && !focusId}
