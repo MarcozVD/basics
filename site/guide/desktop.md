@@ -10,7 +10,9 @@ Your vault, packs and notes are managed exactly as with the CLI and the web UI.
 
 ## Install
 
-Installers are unsigned and attached to each desktop release on GitHub (tags named `desktop-v<version>`, for example
+Installers are not code-signed by Windows or macOS, so the system warns when you open them (see the table below). Each
+installer is signed for the in-app updater, which only installs updates that match that signature. The installers are
+attached to each desktop release on GitHub (tags named `desktop-v<version>`, for example
 [desktop-v1.4.1](https://github.com/MarcozVD/basics/releases/tag/desktop-v1.4.1)); see
 [all desktop releases](https://github.com/MarcozVD/basics/releases?q=desktop-v&expanded=true). Download the one for
 your OS (`<version>` is the release number, such as `1.4.1`):

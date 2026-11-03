@@ -137,6 +137,16 @@ mod tests {
     }
 
     #[test]
+    fn the_bundle_creates_updater_artifacts() {
+        let config: serde_json::Value = serde_json::from_str(CONFIG).unwrap();
+        assert_eq!(
+            config.pointer("/bundle/createUpdaterArtifacts").and_then(|value| value.as_bool()),
+            Some(true),
+            "the release bundle must produce the .sig files the updater needs"
+        );
+    }
+
+    #[test]
     fn progress_events_have_the_shape_the_page_reads() {
         let download = serde_json::to_value(UpdateProgress::Download {
             downloaded: 512,

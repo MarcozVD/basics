@@ -1,0 +1,75 @@
+name: Desktop update manifest
+
+# The app checks
+# https://github.com/MarcozVD/basics/releases/download/desktop-updater/latest.json
+# and draft releases are invisible to users, so this runs only when a `desktop-v*` release
+# is published: it copies that release's `latest.json` (written by tauri-action, with one
+# platform entry per OS job) to the rolling `desktop-updater` prerelease, so the manifest
+# URL stays the same across versions. The npm releases keep owning "latest".
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: desktop-updater-manifest
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: startsWith(github.event.release.tag_name, 'desktop-v')
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ github.event.release.tag_name }}
+      ROLLING_TAG: desktop-updater
+    steps:
+      - name: Download the release's latest.json
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/manifest"
+          if ! gh release download "$TAG" --pattern latest.json --dir "$RUNNER_TEMP/manifest" --repo "$GITHUB_REPOSITORY"; then
+            echo "::error::release $TAG has no latest.json asset; was it built by the Desktop workflow with the signing secrets?" >&2
+            exit 1
+          fi
+
+      - name: Check that the manifest matches the tag
+        run: |
+          set -euo pipefail
+          manifest="$RUNNER_TEMP/manifest/latest.json"
+          version="$(jq -r .version "$manifest")"
+          expected="${TAG#desktop-v}"
+          if [ "$version" != "$expected" ]; then
+            echo "::error::latest.json says $version but the release tag is $TAG" >&2
+            exit 1
+          fi
+          platforms="$(jq -r '.platforms | keys | join(", ")' "$manifest")"
+          if [ -z "$platforms" ]; then
+            echo "::error::latest.json has no platform entries" >&2
+            exit 1
+          fi
+          echo "publishing Basics $version for: $platforms"
+          {
+            echo "### Desktop $version"
+            echo
+            echo "Platforms in latest.json: $platforms"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Create the rolling release if it is missing
+        run: |
+          set -euo pipefail
+          if ! gh release view "$ROLLING_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$ROLLING_TAG" --repo "$GITHUB_REPOSITORY" --prerelease \
+              --title "Basics desktop updates" \
+              --notes "Rolling updater manifest for the Basics desktop app. Installers are attached to their versioned releases; this release only holds latest.json."
+          fi
+          # A prerelease is never shown as "latest", which the npm releases own.
+          gh release edit "$ROLLING_TAG" --repo "$GITHUB_REPOSITORY" --prerelease
+
+      - name: Upload the manifest
+        run: |
+          set -euo pipefail
+          gh release upload "$ROLLING_TAG" "$RUNNER_TEMP/manifest/latest.json" --clobber --repo "$GITHUB_REPOSITORY"
+          echo "desktop-updater/latest.json now points at $TAG"
