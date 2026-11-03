@@ -145,23 +145,87 @@ export interface SearchHit {
   score: number;
 }
 
-export function search(vault: Vault, query: string, opts: { type?: string; layer?: string; limit?: number } = {}): SearchHit[] {
-  const q = new Set(tokens(query));
-  const layerIds = opts.layer ? new Set(vault.techInLayer(opts.layer).map((n) => n.id)) : undefined;
-  return [...vault.notes.values()]
-    .filter((n) => !opts.type || n.data.type === opts.type)
-    .filter((n) => !layerIds || layerIds.has(n.id))
-    .map((n) => {
-      const d = n.data as Record<string, unknown>;
+/** One note's search text, tokenized once per vault generation. */
+export interface SearchIndexEntry {
+  id: string;
+  type: NoteData["type"];
+  title: string;
+  name: string[];
+  meta: string[];
+  body: string[];
+}
+
+export interface SearchIndex {
+  entries: SearchIndexEntry[];
+}
+
+/**
+ * Tokenize every note once. Searching re-tokenizes the whole vault on each query otherwise, which
+ * is what the search box pays on every keystroke on a big vault; the index is cheap to build
+ * (`tokens` is the same work one query did) and the server keeps it per vault generation.
+ */
+export function buildSearchIndex(vault: Vault): SearchIndex {
+  return {
+    entries: [...vault.notes.values()].map((note) => {
+      const d = note.data as Record<string, unknown>;
       const meta = ["use_when", "performs_best", "tags", "description", "applies_to"]
         .flatMap((k) => (Array.isArray(d[k]) ? (d[k] as string[]) : typeof d[k] === "string" ? [d[k] as string] : []))
         .join(" ");
-      const score = overlap(q, `${n.id} ${title(n)}`) * 3 + overlap(q, meta) * 2 + overlap(q, n.body);
-      return { id: n.id, type: n.data.type, title: title(n), score };
-    })
-    .filter((h) => h.score > 0)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, opts.limit ?? 10);
+      return {
+        id: note.id,
+        type: note.data.type,
+        title: title(note),
+        name: tokens(`${note.id} ${title(note)}`),
+        meta: tokens(meta),
+        body: tokens(note.body),
+      };
+    }),
+  };
+}
+
+/** How many of `list` are in the query. Counts repeats, like a plain token overlap. */
+function overlapTokens(query: Set<string>, list: string[]): number {
+  let count = 0;
+  for (const token of list) if (query.has(token)) count += 1;
+  return count;
+}
+
+export interface SearchPage {
+  hits: SearchHit[];
+  /** Notes that matched, before `limit`: the caller can tell the model there is more. */
+  total: number;
+}
+
+/** `search` plus the number of matching notes, for callers that cap the list. */
+export function searchAll(
+  vault: Vault,
+  query: string,
+  opts: { type?: string; layer?: string; limit?: number } = {},
+  index: SearchIndex = buildSearchIndex(vault),
+): SearchPage {
+  const q = new Set(tokens(query));
+  const layerIds = opts.layer ? new Set(vault.techInLayer(opts.layer).map((n) => n.id)) : undefined;
+  const hits = index.entries
+    .filter((entry) => !opts.type || entry.type === opts.type)
+    .filter((entry) => !layerIds || layerIds.has(entry.id))
+    .map((entry) => ({
+      id: entry.id,
+      type: entry.type,
+      title: entry.title,
+      score: overlapTokens(q, entry.name) * 3 + overlapTokens(q, entry.meta) * 2 + overlapTokens(q, entry.body),
+    }))
+    .filter((hit) => hit.score > 0)
+    .sort((a, b) => b.score - a.score);
+  return { hits: hits.slice(0, opts.limit ?? 10), total: hits.length };
+}
+
+export function search(
+  vault: Vault,
+  query: string,
+  opts: { type?: string; layer?: string; limit?: number } = {},
+  index: SearchIndex = buildSearchIndex(vault),
+): SearchHit[] {
+  return searchAll(vault, query, opts, index).hits;
 }
 
 export function title(n: Note): string {

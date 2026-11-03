@@ -15,6 +15,9 @@ export async function startServer(opts: {
 
   const events = new EventHub(opts.root);
   events.start();
+  // Wait for the first scan: the vault cache relies on the watcher for external edits, so a change
+  // made after the server answers must be seen.
+  await events.ready();
   const app = createApp({ root: opts.root, uiDir, events });
   const server = serve({ fetch: app.fetch, port, hostname: host });
 
