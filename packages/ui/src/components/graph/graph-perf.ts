@@ -42,6 +42,12 @@ export interface GraphPerfCounters {
   cachePartials: number;
   /** Camera restored from the cache instead of fitted. */
   cameraRestores: number;
+  /** Animated moves into settled positions (none with reduced motion). */
+  glides: number;
+  /** Layouts settled by the worker instead of the main thread. */
+  workers: number;
+  /** Worker runs that failed and fell back to a synchronous layout. */
+  fallbacks: number;
 }
 
 interface GraphPerfState {
@@ -53,7 +59,19 @@ const enabled = import.meta.env.DEV || (window as { __BASICS_E2E__?: boolean }).
 
 const state: GraphPerfState = {
   mounts: [],
-  counters: { mounts: 0, reuses: 0, layouts: 0, presets: 0, fcose: 0, cacheHits: 0, cachePartials: 0, cameraRestores: 0 },
+  counters: {
+    mounts: 0,
+    reuses: 0,
+    layouts: 0,
+    presets: 0,
+    fcose: 0,
+    cacheHits: 0,
+    cachePartials: 0,
+    cameraRestores: 0,
+    glides: 0,
+    workers: 0,
+    fallbacks: 0,
+  },
 };
 
 function publish(): void {

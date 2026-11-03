@@ -7,6 +7,7 @@ import { type TranslationKey, useT } from "@/i18n";
 import { EASE_OUT } from "@/lib/ease";
 import { cn } from "@/lib/utils";
 import { type GraphCacheScope, type GraphPosition, recallGraph, rememberCamera, rememberGraph } from "./graph-cache";
+import { type GraphLayoutPosition, type GraphLayoutRun, type GraphLayoutStageOptions, startGraphLayout } from "./graph-layout";
 import {
   computeGroupedLayout,
   GRAPH_TYPES,
@@ -95,7 +96,28 @@ const LAYOUT_MS = 400;
 const CAMERA_MS = 280;
 /** Above this many nodes panning draws a cached texture and skips edges. */
 const LARGE_GRAPH = 300;
+/** Zoomed out past this, a big graph draws only the labels of its best-connected nodes. */
+const CULL_ZOOM = 0.6;
+/** How many labels survive that culling. */
+const CULL_KEEP = 80;
+/** Labels wrap at this width in flat mode, so the layout sees no wider node than this. */
+const LABEL_MAX_WIDTH = 140;
 const NO_INSETS: Insets = { top: 16, right: 16, bottom: 16, left: 16 };
+
+/** Force settings the worker runs; the same numbers the synchronous fallback uses. */
+function stageOptions(stage: "coarse" | "final", nodes: number, randomize: boolean): GraphLayoutStageOptions {
+  return {
+    stage,
+    // "proof" is the nicer layout but costs ~2x; big vaults trade it for a faster settle.
+    // Incremental runs (randomize false) require "proof".
+    quality: stage === "coarse" ? "draft" : randomize && nodes > LARGE_GRAPH ? "default" : "proof",
+    numIter: stage === "coarse" ? 300 : 2500,
+    nodeRepulsion: 6500,
+    idealEdgeLength: 85,
+    nodeSeparation: 90,
+    gravity: 0.3,
+  };
+}
 
 const edgeId = (source: string, target: string) => `edge:${source}|${target}`;
 
@@ -257,6 +279,17 @@ function buildStyle(palette: Palette, reduce: boolean): StylesheetJson {
     {
       // Zoomed in far enough that the grid has room: practice/check titles appear.
       selector: 'node[grouped = 1].zoomed[type = "practice"], node[grouped = 1].zoomed[type = "check"]',
+      style: { "text-opacity": 1 },
+    },
+    {
+      // Zoomed out far, most labels are a smear of pixels: only the hubs keep theirs, so
+      // panning a big graph does not rasterise a thousand text runs.
+      selector: "node.cull",
+      style: { "text-opacity": 0 },
+    },
+    {
+      // Hover, hit and selection still name the node, culled or not.
+      selector: "node.cull.lit, node.cull.picked, node.cull.hit",
       style: { "text-opacity": 1 },
     },
     {
@@ -510,6 +543,7 @@ function fitTo(cy: Core, eles: cytoscape.Collection, insets: Insets, animate: bo
   else cy.viewport({ zoom, pan });
   scaleLabelsToFit(cy, zoom);
   toggleDetailLabels(cy);
+  toggleLabelCulling(cy);
 }
 
 /**
@@ -547,14 +581,56 @@ function scaleLabelsToFit(cy: Core, zoom: number): void {
   });
 }
 
+/** Practice and check labels follow the same threshold; rewriting them on every pan is wasteful. */
+const detailLabelsShown = new WeakMap<Core, boolean>();
+
 /**
  * Practice and check titles are noise at the fit zoom: they join the tech labels only
  * once the reader zooms past `DETAIL_LABEL_ZOOM` (hover and selection still show them).
  */
 function toggleDetailLabels(cy: Core): void {
   const show = cy.zoom() >= DETAIL_LABEL_ZOOM;
+  if (detailLabelsShown.get(cy) === show) return;
+  detailLabelsShown.set(cy, show);
   cy.batch(() => {
     cy.nodes('[type = "practice"], [type = "check"]').toggleClass("zoomed", show);
+  });
+}
+
+/** Labels that survive zooming out: the best-connected nodes, computed once per picture. */
+const keptLabels = new WeakMap<Core, Set<string>>();
+/** Whether the instance is currently drawing only those labels. */
+const cullingLabels = new WeakMap<Core, boolean>();
+
+function labelKeepSet(cy: Core): Set<string> {
+  const cached = keptLabels.get(cy);
+  if (cached) return cached;
+  const ranked = cy
+    .nodes()
+    .not(":parent, [bandLabel], [spacer]")
+    .toArray()
+    .sort((a, b) => (b.data("degree") as number) - (a.data("degree") as number) || a.id().localeCompare(b.id()));
+  const keep = new Set(ranked.slice(0, CULL_KEEP).map((node) => node.id()));
+  keptLabels.set(cy, keep);
+  return keep;
+}
+
+/**
+ * Zoomed out, most labels are illegible dots of ink: only the hubs keep theirs. Below
+ * `LARGE_GRAPH` nodes every label fits, so a normal vault keeps its picture untouched.
+ * The class is only rewritten when the threshold is crossed, so panning costs nothing.
+ */
+function toggleLabelCulling(cy: Core): void {
+  const cull = cy.zoom() < CULL_ZOOM && cy.nodes().length > LARGE_GRAPH;
+  if (cullingLabels.get(cy) === cull) return;
+  cullingLabels.set(cy, cull);
+  const keep = cull ? labelKeepSet(cy) : null;
+  cy.batch(() => {
+    cy.nodes()
+      .not(":parent, [bandLabel], [spacer]")
+      .forEach((node) => {
+        node.toggleClass("cull", keep !== null && !keep.has(node.id()));
+      });
   });
 }
 
@@ -580,19 +656,128 @@ function runPresetLayout(cy: Core, layout: GroupedLayout): void {
 }
 
 /**
+ * Moves every node to its settled position. Without animation the picture jumps straight
+ * there (reduced motion); with it the nodes glide from where they are, and a fit issued
+ * meanwhile aims at where they are heading.
+ */
+function settleTo(cy: Core, targets: Map<string, Position>, opts: { animate: boolean; fit?: () => void; onSettled?: () => void }): void {
+  const nodes = cy.nodes();
+  if (nodes.empty()) {
+    opts.fit?.();
+    opts.onSettled?.();
+    return;
+  }
+  if (!opts.animate) {
+    cy.batch(() => {
+      for (const node of nodes) {
+        const target = targets.get(node.id());
+        if (target) node.position(target);
+      }
+    });
+    opts.fit?.();
+    opts.onSettled?.();
+    return;
+  }
+  perfCount("glides");
+  const box = nodes.boundingBox({});
+  const middle = { x: box.x1 + box.w / 2, y: box.y1 + box.h / 2 };
+  const before = new Map<string, Position>(nodes.map((node) => [node.id(), { ...node.position() }]));
+  gliding.set(cy, targets);
+  // A fit issued now aims at the settled picture (`settledBox` reads the glide targets).
+  opts.fit?.();
+  const glide = cy.layout({
+    name: "preset",
+    positions: (node: NodeSingular) => targets.get(node.id()) ?? middle,
+    animate: true,
+    animationDuration: LAYOUT_MS,
+    animationEasing: "ease-out-cubic",
+    fit: false,
+  } as cytoscape.LayoutOptions);
+  let done = false;
+  const finish = () => {
+    if (done) return;
+    done = true;
+    // A newer picture may have taken over while this one was animating.
+    if (gliding.get(cy) !== targets) return;
+    gliding.delete(cy);
+    if (!cy.destroyed()) {
+      cy.batch(() => {
+        for (const node of nodes) {
+          const target = targets.get(node.id());
+          if (target) node.position(target);
+        }
+      });
+    }
+    opts.onSettled?.();
+  };
+  glide.one("layoutstop", finish);
+  // A canvas that was detached and re-attached stops running animations, and a fit can stop
+  // them too: the picture has to land anyway, so the glide gets a deadline.
+  setTimeout(finish, LAYOUT_MS + 200);
+  cy.batch(() => {
+    for (const node of nodes) node.position(before.get(node.id()) ?? middle);
+  });
+  glide.run();
+}
+
+/** Where a node starts before the force simulation has run: a spiral, hubs in the middle. */
+function seedPositions(cy: Core): Map<string, Position> {
+  const nodes = cy
+    .nodes()
+    .not(":parent, [bandLabel], [spacer]")
+    .toArray()
+    .sort((a, b) => (b.data("degree") as number) - (a.data("degree") as number) || a.id().localeCompare(b.id()));
+  const golden = Math.PI * (3 - Math.sqrt(5));
+  const step = 34;
+  const seeds = new Map<string, Position>();
+  nodes.forEach((node, index) => {
+    const radius = step * Math.sqrt(index + 0.5);
+    const angle = index * golden;
+    seeds.set(node.id(), { x: Math.cos(angle) * radius, y: Math.sin(angle) * radius });
+  });
+  return seeds;
+}
+
+/** Where the nodes are now: an incremental run starts from the picture already on screen. */
+function currentPositions(cy: Core): Map<string, Position> {
+  const seeds = new Map<string, Position>();
+  cy.nodes()
+    .not(":parent, [bandLabel], [spacer]")
+    .forEach((node) => {
+      const position = node.position();
+      seeds.set(node.id(), { x: position.x, y: position.y });
+    });
+  return seeds;
+}
+
+let measureContext: CanvasRenderingContext2D | null = null;
+
+/** What the simulation sees of a node: the dot, or its label when that is wider. */
+function nodeBox(node: NodeSingular): { width: number; height: number } {
+  const size = node.data("size") as number;
+  const label = String(node.data("label") ?? "");
+  if (!measureContext) measureContext = document.createElement("canvas").getContext("2d");
+  if (measureContext) measureContext.font = `500 ${LABEL_SIZE}px ${FONT}`;
+  const text = measureContext ? measureContext.measureText(label).width : 0;
+  return {
+    width: Math.min(Math.max(size, text), LABEL_MAX_WIDTH),
+    // The label sits under the dot with a 4px gap.
+    height: size + 4 + LABEL_SIZE * 1.2,
+  };
+}
+
+/**
  * Runs fcose synchronously, optionally fits the camera to the final positions, then
- * glides nodes from where they were (or from the middle, on the first run).
+ * settles. The main thread is blocked for the whole run, so this is the fallback path
+ * (and the one local graphs use, where it costs a few milliseconds).
  */
 function runLayout(cy: Core, opts: { randomize: boolean; animate: boolean; compact?: boolean; fit?: () => void; onSettled?: () => void }) {
   const nodes = cy.nodes();
   if (nodes.empty()) return;
   perfCount("layouts");
   perfCount("fcose");
-  const before = new Map<string, Position>(nodes.map((node) => [node.id(), { ...node.position() }]));
   const options = {
     name: "fcose",
-    // "proof" is the nicer layout but costs ~2x; big vaults trade it for a faster first paint.
-    // Incremental runs (randomize false) require "proof".
     quality: opts.randomize && nodes.length > LARGE_GRAPH ? "default" : "proof",
     randomize: opts.randomize,
     animate: false,
@@ -614,29 +799,7 @@ function runLayout(cy: Core, opts: { randomize: boolean; animate: boolean; compa
   }
   const after = new Map<string, Position>(nodes.map((node) => [node.id(), { ...node.position() }]));
   opts.fit?.();
-  if (!opts.animate) {
-    opts.onSettled?.();
-    return;
-  }
-  const box = nodes.boundingBox({});
-  const middle = { x: box.x1 + box.w / 2, y: box.y1 + box.h / 2 };
-  cy.batch(() => {
-    for (const node of nodes) node.position(opts.randomize ? middle : (before.get(node.id()) ?? middle));
-  });
-  gliding.set(cy, after);
-  const glide = cy.layout({
-    name: "preset",
-    positions: (node: NodeSingular) => after.get(node.id()) ?? middle,
-    animate: true,
-    animationDuration: LAYOUT_MS,
-    animationEasing: "ease-out-cubic",
-    fit: false,
-  } as cytoscape.LayoutOptions);
-  glide.one("layoutstop", () => {
-    if (gliding.get(cy) === after) gliding.delete(cy);
-    opts.onSettled?.();
-  });
-  glide.run();
+  settleTo(cy, after, { animate: opts.animate, onSettled: opts.onSettled });
 }
 
 /**
@@ -730,6 +893,10 @@ function syncElements(cy: Core, data: GraphData, layout: GroupedLayout | null): 
       });
     }
   });
+  // The keep set and the class state belong to the node set that is now gone.
+  keptLabels.delete(cy);
+  cullingLabels.delete(cy);
+  detailLabelsShown.delete(cy);
   return changed;
 }
 
@@ -757,6 +924,8 @@ export default function GraphCanvas({
   const bridgeRef = useRef<CanvasBridge | null>(null);
   /** Per-mount timing record; null outside dev and the Playwright probe. */
   const perfRecord = useRef<GraphPerfMount | null>(null);
+  /** The off-thread layout still in flight, if any. */
+  const layoutRun = useRef<GraphLayoutRun | null>(null);
   const [hover, setHover] = useState<Hover | null>(null);
   const [palette, setPalette] = useState<Palette | null>(null);
 
@@ -788,6 +957,79 @@ export default function GraphCanvas({
     const cy = cyRef.current;
     if (!cy) return;
     fitTo(cy, cy.elements(":visible"), bridge.insets, animate && !bridge.reduce);
+  };
+
+  /**
+   * Flat graph: the seeds are already on screen, so fcose runs in a worker and settles in two
+   * steps (a quick coarse pass, then the full one) while clicks and hovers keep working.
+   * Without a worker the synchronous layout takes over, so the graph always settles.
+   */
+  const settleFlatGraph = (cy: Core, seeds: Map<string, Position>, randomize: boolean, refit: boolean) => {
+    const scope = bridge.cache;
+    const animate = !reduce;
+    const nodes = cy.nodes().not(":parent, [bandLabel], [spacer]").toArray() as NodeSingular[];
+    // Where the camera was left, so a fit on the final picture only happens while the reader
+    // has not moved it (a zoom during the simulation must not be thrown away).
+    const camera = { zoom: cy.zoom(), pan: { ...cy.pan() } };
+    const untouched = () =>
+      Math.abs(cy.zoom() - camera.zoom) < 0.001 && Math.abs(cy.pan().x - camera.pan.x) < 0.5 && Math.abs(cy.pan().y - camera.pan.y) < 0.5;
+    let counted = false;
+    const run = startGraphLayout(
+      {
+        nodes: nodes.map((node) => {
+          const box = nodeBox(node);
+          return { id: node.id(), width: box.width, height: box.height };
+        }),
+        edges: cy.edges().map((edge) => ({ source: edge.source().id(), target: edge.target().id() })),
+        positions: Object.fromEntries(seeds) as Record<string, GraphLayoutPosition>,
+        randomize,
+        // Only a cold run shows an intermediate picture: an incremental one starts from the
+        // picture on screen and must not jump to a draft on the way. Reduced motion keeps the
+        // single jump to the settled positions.
+        coarse: animate && randomize ? stageOptions("coarse", nodes.length, randomize) : null,
+        final: stageOptions("final", nodes.length, randomize),
+      },
+      (stage) => {
+        // The instance may outlive the mount (the full graph keeps it), so a detached but
+        // alive canvas still takes the positions: the next visit shows the settled picture.
+        if (cy.destroyed()) return;
+        if (!counted) {
+          counted = true;
+          perfCount("layouts");
+        }
+        if (stage.stage === "final") perfCount("fcose");
+        perfPhase(perfRecord.current, stage.stage, stage.ms);
+        const settled = stage.stage === "final";
+        settleTo(cy, new Map(Object.entries(stage.positions)), {
+          animate,
+          fit: settled && refit && untouched() ? () => fitVisible(true) : undefined,
+          onSettled: () => {
+            if (!settled) return;
+            if (scope) rememberGraphState(cy, scope);
+            perfSettled(perfRecord.current, "layout");
+          },
+        });
+      },
+    );
+    layoutRun.current = run;
+    void run.done.then((outcome) => {
+      if (layoutRun.current === run) layoutRun.current = null;
+      if (outcome === "worker") {
+        perfCount("workers");
+        return;
+      }
+      if (outcome !== "unavailable" || cy.destroyed()) return;
+      // Leaving the graph on its seeds is not an option: block the main thread and finish it.
+      perfCount("fallbacks");
+      runLayout(cy, {
+        randomize,
+        animate,
+        onSettled: () => {
+          if (scope) rememberGraphState(cy, scope);
+          perfSettled(perfRecord.current, "layout");
+        },
+      });
+    });
   };
 
   useImperativeHandle(ref, () => ({
@@ -901,6 +1143,7 @@ export default function GraphCanvas({
       });
       cy.on("viewport", () => {
         toggleDetailLabels(cy);
+        toggleLabelCulling(cy);
         const scope = bridge.cache;
         if (scope) rememberCamera(scope, { zoom: cy.zoom(), pan: { ...cy.pan() } });
         if (!bridge.container) return;
@@ -937,15 +1180,20 @@ export default function GraphCanvas({
     return () => {
       observer.disconnect();
       resize.disconnect();
-      // Leaving the page keeps the picture for the next visit.
-      rememberGraphState(cy, bridge.cache);
       bridge.container = null;
       cyRef.current = null;
       if (persistent?.cy === cy) {
-        // Detach, do not destroy: the next visit re-attaches this host with the canvas intact.
+        // Leaving the page keeps the picture for the next visit. A layout still running is
+        // left alone: it belongs to this picture, so the return shows it settled. Its seeds
+        // are not worth storing, only the camera.
+        if (layoutRun.current && bridge.cache) rememberCamera(bridge.cache, { zoom: cy.zoom(), pan: { ...cy.pan() } });
+        else rememberGraphState(cy, bridge.cache);
         persistent.host.remove();
         return;
       }
+      // Going away for good: stop the simulation instead of paying for a picture no one sees.
+      layoutRun.current?.cancel();
+      layoutRun.current = null;
       cy.destroy();
     };
   }, []);
@@ -979,7 +1227,7 @@ export default function GraphCanvas({
     if (unchanged) {
       perfPhase(perfRecord.current, "reuse", performance.now() - effectStart);
       perfFirstFrame(perfRecord.current);
-      perfSettled(perfRecord.current, "cache");
+      if (!layoutRun.current) perfSettled(perfRecord.current, "cache");
       return;
     }
     // Grouped mode gets a computed preset; flat and local graphs keep fcose.
@@ -1003,10 +1251,10 @@ export default function GraphCanvas({
     lastBoxed.current = boxed;
     if (!first && changed === 0 && !boxedChanged && !freshInstance) {
       perfFirstFrame(perfRecord.current);
-      perfSettled(perfRecord.current, "cache");
+      // A layout still running for this very picture settles it, not this effect run.
+      if (!layoutRun.current) perfSettled(perfRecord.current, "cache");
       return;
     }
-    const animate = !reduce;
     const placeStart = performance.now();
     const scope = bridge.cache;
     // First look at this data: reuse the last visit's positions so a return is instant.
@@ -1037,6 +1285,7 @@ export default function GraphCanvas({
         }
         scaleLabelsToFit(cy, cy.zoom());
         toggleDetailLabels(cy);
+        toggleLabelCulling(cy);
         rememberGraphState(cy, scope);
         perfPhase(perfRecord.current, "place", performance.now() - placeStart);
         perfFirstFrame(perfRecord.current);
@@ -1058,15 +1307,15 @@ export default function GraphCanvas({
         return;
       }
       cy.nodes().removeStyle("font-size");
-      runLayout(cy, {
-        randomize: false,
-        animate,
-        fit: () => fitVisible(false),
-        onSettled: () => rememberGraphState(cy, scope),
+      const seeds = new Map<string, Position>();
+      cy.nodes().forEach((node) => {
+        const position = cached.positions.get(node.id());
+        if (position) seeds.set(node.id(), position);
       });
+      fitVisible(false);
       perfPhase(perfRecord.current, "place", performance.now() - placeStart);
       perfFirstFrame(perfRecord.current);
-      perfSettled(perfRecord.current, "cache-partial");
+      settleFlatGraph(cy, seeds, false, true);
       return;
     }
     if (mode === "local") {
@@ -1089,15 +1338,15 @@ export default function GraphCanvas({
       return;
     }
     cy.nodes().removeStyle("font-size");
-    runLayout(cy, {
-      randomize: freshInstance,
-      animate,
-      fit: first || boxedChanged || freshInstance ? () => fitVisible(false) : undefined,
-      onSettled: () => rememberGraphState(cy, scope),
-    });
+    // A first look starts from a spiral (hubs in the middle); a refresh keeps the picture on
+    // screen and lets the incremental layout nudge it.
+    const seeds = freshInstance ? seedPositions(cy) : currentPositions(cy);
+    settleTo(cy, seeds, { animate: false });
+    const refit = first || boxedChanged || freshInstance;
+    if (refit) fitVisible(false);
     perfPhase(perfRecord.current, "place", performance.now() - placeStart);
     perfFirstFrame(perfRecord.current);
-    perfSettled(perfRecord.current, "layout");
+    settleFlatGraph(cy, seeds, freshInstance, refit);
   }, [elements, mode, reduce, boxed, t]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: re-apply after the elements sync
