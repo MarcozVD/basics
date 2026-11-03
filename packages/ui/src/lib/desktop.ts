@@ -115,12 +115,15 @@ export interface DesktopSettings {
   startAtLogin: boolean;
   startMinimized: StartMinimized;
   closeBehavior: CloseBehavior;
+  /** Check the update server once per launch; missing in older settings files means on. */
+  checkUpdatesOnStart: boolean;
 }
 
 interface WireDesktopSettings {
   start_at_login: boolean;
   start_minimized: StartMinimized;
   close_behavior: CloseBehavior;
+  check_updates_on_start: boolean;
 }
 
 function fromWire(settings: WireDesktopSettings): DesktopSettings {
@@ -128,6 +131,7 @@ function fromWire(settings: WireDesktopSettings): DesktopSettings {
     startAtLogin: settings.start_at_login,
     startMinimized: settings.start_minimized,
     closeBehavior: settings.close_behavior,
+    checkUpdatesOnStart: settings.check_updates_on_start,
   };
 }
 
@@ -136,6 +140,7 @@ function toWire(settings: DesktopSettings): WireDesktopSettings {
     start_at_login: settings.startAtLogin,
     start_minimized: settings.startMinimized,
     close_behavior: settings.closeBehavior,
+    check_updates_on_start: settings.checkUpdatesOnStart,
   };
 }
 

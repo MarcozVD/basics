@@ -27,6 +27,7 @@ import { useEmbeddingsProgress } from "@/lib/events";
 import { queryKeys, useConnectStatus, useEmbeddings, useHealth } from "@/lib/queries";
 import { type Theme, useTheme } from "@/lib/theme";
 import { toast } from "@/lib/toast";
+import { checkForUpdates, installUpdate, useUpdateState } from "@/lib/updater";
 import { cn } from "@/lib/utils";
 
 const SECTIONS = ["general", "startup", "agents", "search", "updates", "about"] as const;
@@ -564,25 +565,114 @@ function StartupSection() {
   );
 }
 
-/** Settings → Updates, desktop only, until V15-T7 adds the in-app updater. */
+/**
+ * Settings → Updates, desktop only. The version comes from the app (`desktop_version`, not
+ * the server's health payload), the check runs through the two Rust commands, and the
+ * "on start" switch lives in the same `desktop-settings.json` as the Startup section.
+ */
 function UpdatesSection() {
   const t = useT();
   const desktop = useMemo(() => isDesktop(), []);
   const health = useHealth();
+  const update = useUpdateState();
+  const [settings, setSettings] = useState<DesktopSettings | null>(null);
+  const [settingsError, setSettingsError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saved, flashSaved] = useSavedFlash();
+
+  useEffect(() => {
+    if (!desktop) return;
+    let live = true;
+    readDesktopSettings()
+      .then((loaded) => {
+        if (live) setSettings(loaded);
+      })
+      .catch((cause: unknown) => {
+        if (live) setSettingsError(errorText(cause));
+      });
+    return () => {
+      live = false;
+    };
+  }, [desktop]);
 
   if (!desktop) {
     return <DesktopOnlySection id="updates" description={t("settings.updates.description")} body={t("settings.updates.desktop")} />;
   }
 
+  const saveCheckOnStart = async (next: boolean) => {
+    if (!settings || saving) return;
+    const before = settings;
+    setSettings({ ...settings, checkUpdatesOnStart: next });
+    setSettingsError(null);
+    setSaving(true);
+    try {
+      setSettings(await writeDesktopSettings({ ...before, checkUpdatesOnStart: next }));
+      flashSaved();
+    } catch (cause) {
+      setSettings(before);
+      setSettingsError(errorText(cause));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const busy = update.phase === "checking" || update.phase === "downloading" || update.phase === "installing";
+  const available = update.update;
+  const status =
+    update.phase === "checking"
+      ? t("settings.updates.checking")
+      : update.phase === "current"
+        ? t("settings.updates.upToDate")
+        : update.phase === "available"
+          ? t("settings.updates.available", { version: available?.version ?? "" })
+          : update.phase === "downloading"
+            ? t("settings.updates.downloading")
+            : update.phase === "installing"
+              ? t("settings.updates.installing")
+              : update.phase === "error"
+                ? null
+                : t("settings.updates.idle");
+
   return (
     <Section id="updates" title={t("settings.updates.title")} description={t("settings.updates.description")}>
       <Rows>
         <Row title={t("settings.updates.version")}>
-          <span className="font-mono text-[11px] text-muted-foreground">{health.data?.version ?? "—"}</span>
+          <span className="font-mono text-[11px] text-muted-foreground">{update.version ?? health.data?.version ?? "—"}</span>
         </Row>
-        <Row title={t("settings.updates.check")} description={t("settings.updates.check.description")}>
-          {/* V15-T7: replace this link with the updater's check, download and
-              "Update and restart". Only the anchor below changes. */}
+        <Row title={t("settings.updates.check")} description={t("settings.updates.check.description")} vertical>
+          <div className="flex w-full flex-wrap items-center justify-between gap-2">
+            <p role="status" className="text-xs text-muted-foreground">
+              {status ?? t("settings.updates.failedShort")}
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              {available && update.phase === "available" ? (
+                <Button size="sm" onClick={() => void installUpdate()}>
+                  {t("settings.updates.update")}
+                </Button>
+              ) : null}
+              <Button variant="secondary" size="sm" disabled={busy} onClick={() => void checkForUpdates()}>
+                {update.phase === "checking" ? t("settings.updates.checking") : t("settings.updates.checkNow")}
+              </Button>
+            </div>
+          </div>
+        </Row>
+        <Row
+          title={t("settings.updates.onStart.title")}
+          description={t("settings.updates.onStart.description")}
+          status={<SavedHint visible={saved} />}
+        >
+          {settings ? (
+            <Switch
+              checked={settings.checkUpdatesOnStart}
+              disabled={saving}
+              ariaLabel={t("settings.updates.onStart.title")}
+              onCheckedChange={(next) => void saveCheckOnStart(next)}
+            />
+          ) : (
+            <Loading />
+          )}
+        </Row>
+        <Row title={t("settings.updates.releases")} description={t("settings.updates.releases.description")}>
           <a
             href={LINKS.releases}
             target="_blank"
@@ -594,6 +684,22 @@ function UpdatesSection() {
           </a>
         </Row>
       </Rows>
+
+      {update.phase === "error" && update.error ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <p role="alert" className="text-xs text-destructive">
+            {t("settings.updates.failed", { message: update.error })}
+          </p>
+          <Button variant="secondary" size="sm" onClick={() => void checkForUpdates()}>
+            {t("updates.retry")}
+          </Button>
+        </div>
+      ) : null}
+      {settingsError ? (
+        <p role="alert" className="text-xs text-destructive">
+          {t("settings.updates.onStart.failed", { message: settingsError })}
+        </p>
+      ) : null}
     </Section>
   );
 }
