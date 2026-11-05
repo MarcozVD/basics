@@ -505,6 +505,7 @@ export function RecommendPage() {
               </Button>
             )}
           </div>
+          <p className="max-w-[68ch] text-sm text-muted-foreground">{t("recommend.intro")}</p>
           {recommendation?.mode === "keywords" ? (
             <div className="flex flex-col gap-1 text-xs text-muted-foreground">
               {embeddings.data ? (

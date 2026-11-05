@@ -9,6 +9,7 @@ import { CARD_TARGET_CLASS, Card, CardContent, CardFooter, CardHeader } from "@/
 import { Input } from "@/components/motion/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/motion/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/motion/tabs";
+import { Tooltip } from "@/components/motion/tooltip";
 import { TypeChip } from "@/components/note-form/note-preview";
 import { PAGE_SECTIONS, Page } from "@/components/page";
 import { ErrorState, Loading } from "@/components/state";
@@ -388,6 +389,8 @@ export function ExplorePage() {
           </div>
         </div>
 
+        <p className="mt-1 max-w-[68ch] text-sm text-muted-foreground">{t("explore.intro")}</p>
+
         <fieldset aria-label={t("explore.filters")} className="m-0 mt-3 min-w-0 border-0 p-0 flex flex-wrap items-center gap-2">
           <Tabs
             value={type ?? "all"}
@@ -401,15 +404,17 @@ export function ExplorePage() {
                 <span className="font-mono text-[11px]">{allInLayer.data?.length ?? 0}</span>
               </TabsTrigger>
               {TYPE_ORDER.map((item) => (
-                <TabsTrigger key={item} value={item} className="gap-1.5 px-3 py-1 text-[12px]">
-                  <span
-                    aria-hidden="true"
-                    className="size-1.5 shrink-0 rounded-full ring-1 ring-black/10 dark:ring-white/20"
-                    style={{ backgroundColor: typeColor(item) }}
-                  />
-                  {typeLabel(item)}
-                  <span className="font-mono text-[11px]">{counts.get(item) ?? 0}</span>
-                </TabsTrigger>
+                <Tooltip key={item} content={t(`type.${item}.hint` as TranslationKey)} side="bottom">
+                  <TabsTrigger value={item} className="gap-1.5 px-3 py-1 text-[12px]">
+                    <span
+                      aria-hidden="true"
+                      className="size-1.5 shrink-0 rounded-full ring-1 ring-black/10 dark:ring-white/20"
+                      style={{ backgroundColor: typeColor(item) }}
+                    />
+                    {typeLabel(item)}
+                    <span className="font-mono text-[11px]">{counts.get(item) ?? 0}</span>
+                  </TabsTrigger>
+                </Tooltip>
               ))}
             </TabsList>
           </Tabs>

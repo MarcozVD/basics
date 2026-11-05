@@ -540,32 +540,35 @@ export function InboxPage() {
   return (
     <Page className={`${PAGE_SECTIONS} min-h-0`}>
       <span className="sr-only">{t("inbox.shortcuts")}</span>
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-baseline gap-2">
-          <h1 className="text-xl font-semibold tracking-tight">{t("page.inbox.title")}</h1>
-          <span className="inline-flex items-baseline gap-1.5 text-xs text-muted-foreground">
-            <AnimatedNumber
-              value={packFiltered.length}
-              startOnView={false}
-              duration={0.5}
-              className="text-sm font-medium text-foreground"
-            />
-            {t("inbox.pending")}
-            {packFilter ? (
-              <button
-                type="button"
-                onClick={() => {
-                  const params = new URLSearchParams(searchParams);
-                  params.delete("pack");
-                  setSearchParams(params, { replace: true });
-                  setSelected(0);
-                }}
-                className="ml-2 rounded-sm text-xs text-muted-foreground underline decoration-border underline-offset-2 transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-              >
-                {t("inbox.clearPackFilter", { pack: packFilter })}
-              </button>
-            ) : null}
-          </span>
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-baseline gap-2">
+            <h1 className="text-xl font-semibold tracking-tight">{t("page.inbox.title")}</h1>
+            <span className="inline-flex items-baseline gap-1.5 text-xs text-muted-foreground">
+              <AnimatedNumber
+                value={packFiltered.length}
+                startOnView={false}
+                duration={0.5}
+                className="text-sm font-medium text-foreground"
+              />
+              {t("inbox.pending")}
+              {packFilter ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const params = new URLSearchParams(searchParams);
+                    params.delete("pack");
+                    setSearchParams(params, { replace: true });
+                    setSelected(0);
+                  }}
+                  className="ml-2 rounded-sm text-xs text-muted-foreground underline decoration-border underline-offset-2 transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                >
+                  {t("inbox.clearPackFilter", { pack: packFilter })}
+                </button>
+              ) : null}
+            </span>
+          </div>
+          <p className="mt-1 max-w-[68ch] text-sm text-muted-foreground">{t("inbox.intro")}</p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">

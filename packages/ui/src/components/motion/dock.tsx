@@ -31,10 +31,13 @@ export function Dock({ children, size = 44, className }: DockProps) {
     <DockContext.Provider value={ctx}>
       <div
         className={cn(
-          // Basics: seven routes plus the palette now share the Dock, so items step down to
-          // 36px on a phone and return to 44px from `sm` up. `size` stays the fallback.
-          "inline-flex h-auto items-end gap-1 rounded-2xl border border-border bg-card/80 px-2 py-1 shadow-2xl backdrop-blur-xl sm:gap-1.5",
-          "[--dock-item-size:36px] sm:[--dock-item-size:44px]",
+          // Basics: seven routes plus the palette share the Dock, each with a short label
+          // under its icon. Captions are 9px from 480px and 10px from `sm` up, with the
+          // item widened to match; below 480px the space does not fit a readable caption,
+          // so items fall back to icons (40×44, easing down to fit a 320px screen) and the
+          // tooltip carries the name. `size` stays the fallback.
+          "inline-flex h-auto items-end gap-0.5 rounded-2xl border border-border bg-card/80 px-1 py-1 shadow-2xl backdrop-blur-xl sm:gap-1 sm:px-2",
+          "[--dock-item-width:min(40px,calc((100vw-2rem)/8))] [--dock-item-height:44px] min-[480px]:[--dock-item-width:min(55px,calc((100vw-2rem)/8))] sm:[--dock-item-width:64px] sm:[--dock-item-height:48px]",
           className,
         )}
       >
@@ -72,7 +75,7 @@ export function DockItem({
       className="absolute inset-0.5 -z-10 rounded-xl bg-muted/60"
     />
   ) : null;
-  const sharedStyle = { width: `var(--dock-item-size, ${size}px)`, height: `var(--dock-item-size, ${size}px)` };
+  const sharedStyle = { width: `var(--dock-item-width, ${size}px)`, height: `var(--dock-item-height, ${size}px)` };
   const sharedClass = cn(
     "relative flex shrink-0 items-center justify-center rounded-full text-foreground",
     className,
@@ -111,7 +114,7 @@ export function DockSeparator({ className }: { className?: string }) {
   return (
     <span
       aria-hidden
-      className={cn("mx-1 h-6 w-px self-center bg-border", className)}
+      className={cn("mx-0.5 h-6 w-px self-center bg-border sm:mx-1", className)}
     />
   );
 }

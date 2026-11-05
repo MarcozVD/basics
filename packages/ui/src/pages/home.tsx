@@ -13,6 +13,7 @@ import { Loader } from "@/components/motion/loader";
 import { MorphPopover, MorphPopoverContent, MorphPopoverTrigger } from "@/components/motion/popover-morph";
 import { Tabs, TabsList, TabsTrigger } from "@/components/motion/tabs";
 import { TextReveal } from "@/components/motion/text-reveal";
+import { Tooltip } from "@/components/motion/tooltip";
 import { PAGE_SECTIONS, Page } from "@/components/page";
 import { ErrorState, Loading } from "@/components/state";
 import { type TranslationKey, useI18n } from "@/i18n";
@@ -243,6 +244,8 @@ interface StatItemProps {
   dot?: string;
   /** Destructive emphasis; only ever set when the value is above zero. */
   alert?: boolean;
+  /** One-line explanation shown on hover and keyboard focus. */
+  hint?: string;
   onClick?: () => void;
   /** Popover details; a function receives `close` for actions that leave the popover. */
   children?: ReactNode | ((close: () => void) => ReactNode);
@@ -252,7 +255,7 @@ interface StatItemProps {
  * Compact `label number` stat for Home's health strip: no card chrome, one line,
  * wrapping gracefully; a popover trigger when it has details and a value.
  */
-function StatItem({ label, value, stat, dot, alert, onClick, children }: StatItemProps) {
+function StatItem({ label, value, stat, dot, alert, hint, onClick, children }: StatItemProps) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const body = (
@@ -271,35 +274,50 @@ function StatItem({ label, value, stat, dot, alert, onClick, children }: StatIte
   const className =
     "inline-flex max-w-full min-w-0 items-baseline rounded-md px-1 py-0.5 transition-colors hover:bg-muted/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring";
 
+  let content: ReactNode;
   if (children === undefined || value === 0) {
-    return onClick ? (
+    content = onClick ? (
       <button type="button" data-stat={stat} data-alert={alert ? "true" : undefined} onClick={onClick} className={className}>
         {body}
       </button>
     ) : (
-      <div data-stat={stat} data-alert={alert ? "true" : undefined} className={className}>
+      <div
+        // A definition with no actions still needs a keyboard stop so the hint is reachable.
+        tabIndex={hint ? 0 : undefined}
+        role={hint ? "note" : undefined}
+        data-stat={stat}
+        data-alert={alert ? "true" : undefined}
+        className={className}
+      >
         {body}
       </div>
     );
+  } else {
+    content = (
+      <MorphPopover open={open} onOpenChange={setOpen}>
+        <MorphPopoverTrigger>
+          <button
+            type="button"
+            data-stat={stat}
+            data-alert={alert ? "true" : undefined}
+            aria-label={`${label}: ${value} — ${t("home.showDetails")}`}
+            className={className}
+          >
+            {body}
+          </button>
+        </MorphPopoverTrigger>
+        <MorphPopoverContent side="top" align="start" className="w-80 p-2">
+          {typeof children === "function" ? children(() => setOpen(false)) : children}
+        </MorphPopoverContent>
+      </MorphPopover>
+    );
   }
 
+  if (!hint) return content;
   return (
-    <MorphPopover open={open} onOpenChange={setOpen}>
-      <MorphPopoverTrigger>
-        <button
-          type="button"
-          data-stat={stat}
-          data-alert={alert ? "true" : undefined}
-          aria-label={`${label}: ${value} — ${t("home.showDetails")}`}
-          className={className}
-        >
-          {body}
-        </button>
-      </MorphPopoverTrigger>
-      <MorphPopoverContent side="top" align="start" className="w-80 p-2">
-        {typeof children === "function" ? children(() => setOpen(false)) : children}
-      </MorphPopoverContent>
-    </MorphPopover>
+    <Tooltip content={hint} side="top" disabled={open}>
+      {content}
+    </Tooltip>
   );
 }
 
@@ -1087,6 +1105,7 @@ export function HomePage() {
         ) : (
           <h1 className="text-xl font-semibold tracking-tight">{t("home.title")}</h1>
         )}
+        <p className="mt-1 max-w-[68ch] text-sm text-muted-foreground">{t("home.intro")}</p>
         <p className="mt-1 font-mono text-[11px] text-muted-foreground">
           {t("home.summary", { total, inbox: pending, agents: agentsToday })}
         </p>
@@ -1254,6 +1273,7 @@ export function HomePage() {
                     <StatItem
                       stat="broken"
                       label={t("home.brokenLinks")}
+                      hint={t("home.brokenLinks.hint")}
                       value={stats.data?.brokenLinks.length ?? 0}
                       alert={(stats.data?.brokenLinks.length ?? 0) > 0}
                     >
@@ -1292,6 +1312,7 @@ export function HomePage() {
                     <StatItem
                       stat="orphans"
                       label={t("home.orphans")}
+                      hint={t("home.orphans.hint")}
                       value={stats.data?.orphans.length ?? 0}
                       alert={(stats.data?.orphans.length ?? 0) > 0}
                     >

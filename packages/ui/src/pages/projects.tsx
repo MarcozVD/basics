@@ -1031,9 +1031,12 @@ export function ProjectsPage() {
     return (
       <Page className={`min-h-0 ${PAGE_SECTIONS}`}>
         <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
-          <div className="flex items-baseline gap-2">
-            <h1 className="text-xl font-semibold tracking-tight">{t("page.projects.title")}</h1>
-            <span className="text-xs text-muted-foreground">{t("projects.total", { count: 0 })}</span>
+          <div className="min-w-0">
+            <div className="flex items-baseline gap-2">
+              <h1 className="text-xl font-semibold tracking-tight">{t("page.projects.title")}</h1>
+              <span className="text-xs text-muted-foreground">{t("projects.total", { count: 0 })}</span>
+            </div>
+            <p className="mt-1 max-w-[68ch] text-sm text-muted-foreground">{t("projects.intro")}</p>
           </div>
           <NewProjectButton />
         </header>
@@ -1060,9 +1063,12 @@ export function ProjectsPage() {
   return (
     <Page className={`min-h-0 ${PAGE_SECTIONS}`}>
       <header className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
-        <div className="flex items-baseline gap-2">
-          <h1 className="text-xl font-semibold tracking-tight">{t("page.projects.title")}</h1>
-          <span className="text-xs text-muted-foreground">{t("projects.total", { count: rows.length })}</span>
+        <div className="min-w-0">
+          <div className="flex items-baseline gap-2">
+            <h1 className="text-xl font-semibold tracking-tight">{t("page.projects.title")}</h1>
+            <span className="text-xs text-muted-foreground">{t("projects.total", { count: rows.length })}</span>
+          </div>
+          <p className="mt-1 max-w-[68ch] text-sm text-muted-foreground">{t("projects.intro")}</p>
         </div>
 
         <div className="flex min-w-0 flex-wrap items-center gap-2 max-[640px]:w-full">

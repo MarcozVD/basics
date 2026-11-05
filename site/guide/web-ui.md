@@ -12,8 +12,9 @@ sees the edit and requests stay fast on large vaults.
 
 ## Screens
 
-Navigation is a floating dock at the bottom: Home, Explore, Projects, Graph, Inbox (with the pending count), Recommend and Skills. There
-are no sidebars; secondary panels are overlays closed with `Esc`. **Settings** is not in the dock: open it with the gear
+Navigation is a floating dock at the bottom: Home, Explore, Projects, Graph, Inbox (with the pending count), Recommend and Skills. Each
+item shows a short caption under its icon on tablets and desktops; on phones (below 480px) the dock is icons only, so hover or
+focus an item to see its name, shortcut and purpose. There are no sidebars; secondary panels are overlays closed with `Esc`. **Settings** is not in the dock: open it with the gear
 in the header or with `Ctrl`/`⌘+,`.
 
 | Screen | What it does |

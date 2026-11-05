@@ -1,7 +1,7 @@
 import type { GraphData, GraphNode, GraphNodeType, NoteType } from "@marcozvd/basics-core";
 import { Crosshair, FilePlus2, Layers, Scan, Search, SquareArrowOutUpRight, Waypoints, X } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
-import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
+import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { type GraphCacheScope, type GraphLayoutMode, graphCacheKey } from "@/components/graph/graph-cache";
 import GraphCanvas, { type GraphCanvasHandle, type Insets } from "@/components/graph/graph-canvas";
@@ -43,6 +43,7 @@ export function GraphPage() {
   const reduce = useReducedMotion() ?? false;
   const canvasRef = useRef<GraphCanvasHandle>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
+  const headerRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
   const [broken, setBroken] = useState(false);
@@ -53,6 +54,7 @@ export function GraphPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [focusId, setFocusId] = useState<string | null>(null);
   const [toolbarHeight, setToolbarHeight] = useState(48);
+  const [headerHeight, setHeaderHeight] = useState(0);
 
   const graph = useGraph(broken);
   const layers = useLayers();
@@ -67,6 +69,19 @@ export function GraphPage() {
     return () => observer.disconnect();
   }, []);
 
+  // The page intro floats above the toolbar; the canvas starts below both.
+  useLayoutEffect(() => {
+    const header = headerRef.current;
+    if (!header) return;
+    const measure = () => setHeaderHeight(header.offsetHeight);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(header);
+    return () => observer.disconnect();
+  }, []);
+
+  const toolbarTop = TOOLBAR_OFFSET + headerHeight + 8;
+
   // ⌘F / Ctrl+F jumps to the node search, like Explore.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -80,8 +95,8 @@ export function GraphPage() {
   }, []);
 
   const insets: Insets = useMemo(
-    () => ({ top: TOOLBAR_OFFSET + toolbarHeight + 20, right: 32, bottom: DOCK_SPACE + 12, left: 32 }),
-    [toolbarHeight],
+    () => ({ top: toolbarTop + toolbarHeight + 20, right: 32, bottom: DOCK_SPACE + 12, left: 32 }),
+    [toolbarTop, toolbarHeight],
   );
 
   const byId = useMemo(() => new Map((data?.nodes ?? []).map((node) => [node.id, node])), [data]);
@@ -202,7 +217,13 @@ export function GraphPage() {
 
   return (
     <div className="relative" style={{ height: "calc(100dvh - 3rem)", marginBottom: -DOCK_SPACE }}>
-      <h1 className="sr-only">{t("page.graph.title")}</h1>
+      <div
+        ref={headerRef}
+        className="pointer-events-none absolute top-3 left-3 z-10 max-w-[min(calc(100%_-_24px),30rem)] rounded-2xl border border-border bg-background/75 px-3 py-2 shadow-[0_8px_30px_rgba(0,0,0,0.18)] backdrop-blur-xl dark:shadow-[0_8px_30px_rgba(0,0,0,0.35)]"
+      >
+        <h1 className="text-base font-semibold tracking-tight">{t("page.graph.title")}</h1>
+        <p className="mt-0.5 text-xs leading-4 text-muted-foreground">{t("graph.intro")}</p>
+      </div>
 
       {graph.isPending || (health.isPending && !health.data) ? (
         <div className="grid h-full place-items-center">
@@ -240,38 +261,39 @@ export function GraphPage() {
           "absolute left-3 z-10 flex max-w-[calc(100%-24px)] flex-wrap items-center gap-1 rounded-[22px] border border-border p-1.5",
           "bg-background/75 shadow-[0_8px_30px_rgba(0,0,0,0.18)] backdrop-blur-xl dark:shadow-[0_8px_30px_rgba(0,0,0,0.35)]",
         )}
-        style={{ top: TOOLBAR_OFFSET }}
+        style={{ top: toolbarTop }}
       >
         <fieldset aria-label={t("graph.types")} className="m-0 flex min-w-0 flex-wrap items-center gap-0.5 border-0 p-0">
           {types.map((type) => {
             const shown = !hiddenTypes.has(type);
             return (
-              <motion.button
-                key={type}
-                type="button"
-                aria-pressed={shown}
-                data-testid={`graph-type-${type}`}
-                onClick={() => toggleType(type)}
-                whileTap={reduce ? undefined : { scale: 0.97 }}
-                transition={SPRING_PRESS}
-                className={cn(
-                  "inline-flex h-8 items-center gap-1.5 rounded-full px-2.5 text-[12px] font-medium transition-colors",
-                  "focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring",
-                  shown ? "text-foreground hover:bg-muted/70" : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
-                )}
-              >
-                <span
-                  aria-hidden="true"
+              <Tooltip key={type} content={t(`type.${type}.hint` as TranslationKey)} side="bottom">
+                <motion.button
+                  type="button"
+                  aria-pressed={shown}
+                  data-testid={`graph-type-${type}`}
+                  onClick={() => toggleType(type)}
+                  whileTap={reduce ? undefined : { scale: 0.97 }}
+                  transition={SPRING_PRESS}
                   className={cn(
-                    "size-2 shrink-0 rounded-full transition-opacity",
-                    type === "missing" && "border border-dashed border-destructive bg-transparent!",
-                    !shown && "opacity-30",
+                    "inline-flex h-8 items-center gap-1.5 rounded-full px-2.5 text-[12px] font-medium transition-colors",
+                    "focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring",
+                    shown ? "text-foreground hover:bg-muted/70" : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
                   )}
-                  style={{ backgroundColor: typeColor(type) }}
-                />
-                <span className={cn(!shown && "line-through decoration-muted-foreground/50")}>{t(`type.${type}` as TranslationKey)}</span>
-                <span className="font-mono text-[10.5px]">{counts.get(type) ?? 0}</span>
-              </motion.button>
+                >
+                  <span
+                    aria-hidden="true"
+                    className={cn(
+                      "size-2 shrink-0 rounded-full transition-opacity",
+                      type === "missing" && "border border-dashed border-destructive bg-transparent!",
+                      !shown && "opacity-30",
+                    )}
+                    style={{ backgroundColor: typeColor(type) }}
+                  />
+                  <span className={cn(!shown && "line-through decoration-muted-foreground/50")}>{t(`type.${type}` as TranslationKey)}</span>
+                  <span className="font-mono text-[10.5px]">{counts.get(type) ?? 0}</span>
+                </motion.button>
+              </Tooltip>
             );
           })}
         </fieldset>

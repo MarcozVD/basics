@@ -37,22 +37,33 @@ import { cn } from "@/lib/utils";
 interface DockLink {
   to: string;
   labelKey: TranslationKey;
+  /** One line under the label: what the page is for. */
+  purposeKey: TranslationKey;
   icon: typeof House;
   shortcut: string;
 }
 
 const dockLinks: DockLink[] = [
-  { to: "/", labelKey: "nav.home", icon: House, shortcut: "H" },
-  { to: "/explore", labelKey: "nav.explore", icon: LayoutList, shortcut: "E" },
-  { to: "/projects", labelKey: "nav.projects", icon: FolderKanban, shortcut: "P" },
-  { to: "/graph", labelKey: "nav.graph", icon: Waypoints, shortcut: "G" },
-  { to: "/inbox", labelKey: "nav.inbox", icon: Inbox, shortcut: "I" },
-  { to: "/recommend", labelKey: "nav.recommend", icon: Sparkles, shortcut: "R" },
-  { to: "/skills", labelKey: "nav.skills", icon: Puzzle, shortcut: "K" },
+  { to: "/", labelKey: "nav.home", purposeKey: "nav.home.purpose", icon: House, shortcut: "H" },
+  { to: "/explore", labelKey: "nav.explore", purposeKey: "nav.explore.purpose", icon: LayoutList, shortcut: "E" },
+  { to: "/projects", labelKey: "nav.projects", purposeKey: "nav.projects.purpose", icon: FolderKanban, shortcut: "P" },
+  { to: "/graph", labelKey: "nav.graph", purposeKey: "nav.graph.purpose", icon: Waypoints, shortcut: "G" },
+  { to: "/inbox", labelKey: "nav.inbox", purposeKey: "nav.inbox.purpose", icon: Inbox, shortcut: "I" },
+  { to: "/recommend", labelKey: "nav.recommend", purposeKey: "nav.recommend.purpose", icon: Sparkles, shortcut: "R" },
+  { to: "/skills", labelKey: "nav.skills", purposeKey: "nav.skills.purpose", icon: Puzzle, shortcut: "K" },
 ];
 
-/** Height of the floating Dock itself. */
-export const DOCK_HEIGHT = 54;
+/**
+ * Caption under a Dock icon. Readable sizes only: 10px from `sm`, 9px from 480px,
+ * and hidden below that — the icon alone plus its tooltip beats a 7px label.
+ * Labels stay whole (a long one is a couple of px wider than its item and centres
+ * over the gap) because an ellipsis on the only word that names the page reads worse.
+ */
+const dockLabelClass =
+  "hidden shrink-0 text-center whitespace-nowrap text-[9px] leading-none font-medium tracking-tight min-[480px]:inline sm:text-[10px]";
+
+/** Height of the floating Dock itself: item height plus its padding and border. */
+export const DOCK_HEIGHT = 58;
 /** The Dock floats this far off the bottom edge (`bottom-4`). */
 export const DOCK_OFFSET = 16;
 /**
@@ -259,11 +270,14 @@ export function Layout() {
                   side="top"
                   sideOffset={10}
                   content={
-                    <span className="flex items-center gap-2">
-                      <span>{t(item.labelKey)}</span>
-                      <kbd className="rounded-full border border-border px-1.5 font-mono text-[10px] text-muted-foreground">
-                        {t("shortcuts.sequence", { key: item.shortcut })}
-                      </kbd>
+                    <span className="flex flex-col gap-1">
+                      <span className="flex items-center gap-2">
+                        <span>{t(item.labelKey)}</span>
+                        <kbd className="rounded-full border border-border px-1.5 font-mono text-[10px] text-muted-foreground">
+                          {t("shortcuts.sequence", { key: item.shortcut })}
+                        </kbd>
+                      </span>
+                      <span className="max-w-56 text-[11px] leading-4 font-normal text-muted-foreground">{t(item.purposeKey)}</span>
                     </span>
                   }
                 >
@@ -272,21 +286,24 @@ export function Layout() {
                     aria-label={t(item.labelKey)}
                     aria-current={active ? "page" : undefined}
                     className={cn(
-                      "relative grid size-full place-items-center rounded-full text-muted-foreground transition-colors",
+                      "relative flex size-full flex-col items-center justify-center gap-0.5 rounded-full px-0.5 text-muted-foreground transition-colors",
                       "hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
                       active && "text-foreground",
                     )}
                   >
-                    <Icon className="size-5" aria-hidden="true" />
+                    <Icon className="size-[18px] shrink-0 sm:size-5" aria-hidden="true" />
+                    <span aria-hidden="true" className={cn(dockLabelClass, active ? "text-foreground" : "text-muted-foreground")}>
+                      {t(item.labelKey)}
+                    </span>
                     {item.to === "/inbox" && pending > 0 && (
-                      <span className="absolute -top-0.5 -right-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground">
+                      <span className="absolute top-0 right-1 grid h-4 min-w-4 place-items-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground">
                         <AnimatedNumber value={pending} startOnView={false} duration={0.5} />
                       </span>
                     )}
                     {item.to === "/recommend" && agentRunning && !onRecommend && (
                       <span
                         aria-hidden="true"
-                        className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-primary motion-safe:animate-pulse"
+                        className="absolute top-0 right-1 size-2 rounded-full bg-primary motion-safe:animate-pulse"
                       />
                     )}
                   </Link>
@@ -301,9 +318,14 @@ export function Layout() {
               side="top"
               sideOffset={10}
               content={
-                <span className="flex items-center gap-2">
-                  <span>{t("nav.palette")}</span>
-                  <kbd className="rounded-full border border-border px-1.5 font-mono text-[10px] text-muted-foreground">⌘K</kbd>
+                <span className="flex flex-col gap-1">
+                  <span className="flex items-center gap-2">
+                    <span>{t("nav.palette")}</span>
+                    <kbd className="rounded-full border border-border px-1.5 font-mono text-[10px] text-muted-foreground">
+                      {t("shortcuts.palette")}
+                    </kbd>
+                  </span>
+                  <span className="max-w-56 text-[11px] leading-4 font-normal text-muted-foreground">{t("nav.palette.purpose")}</span>
                 </span>
               }
             >
@@ -311,9 +333,12 @@ export function Layout() {
                 type="button"
                 aria-label={t("nav.palette")}
                 onClick={() => window.dispatchEvent(new Event(PALETTE_SEARCH_EVENT))}
-                className="grid size-full place-items-center rounded-full text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                className="relative flex size-full flex-col items-center justify-center gap-0.5 rounded-full px-0.5 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
               >
-                <Command className="size-4" aria-hidden="true" />
+                <Command className="size-[17px] shrink-0 sm:size-[18px]" aria-hidden="true" />
+                <span aria-hidden="true" className={dockLabelClass}>
+                  {t("nav.paletteShort")}
+                </span>
               </button>
             </Tooltip>
           </DockItem>
