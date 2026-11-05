@@ -16,6 +16,7 @@ import {
   type HTMLAttributes,
   type KeyboardEvent,
   type ReactNode,
+  type Ref,
 } from "react";
 import { EASE_OUT, SPRING_SWAP } from "@/lib/ease";
 import { cn } from "@/lib/utils";
@@ -487,12 +488,15 @@ export function TabsTrigger({
   className,
   indicatorClassName,
   onClick,
+  ref,
   ...props
 }: {
   value: string;
   /** An icon before the label, such as a Lucide icon element. */
   icon?: ReactNode;
   indicatorClassName?: string;
+  /** Forwarded to the underlying button, e.g. so a tooltip can anchor to it. */
+  ref?: Ref<HTMLButtonElement>;
 } & Omit<ButtonHTMLAttributes<HTMLButtonElement>, "value">) {
   const {
     value: current,
@@ -537,6 +541,7 @@ export function TabsTrigger({
         // Consumer ids and wiring win, e.g. several tabs sharing one panel.
         {...a11y}
         {...props}
+        ref={ref}
         type="button"
         role="tab"
         aria-selected={active}
@@ -601,6 +606,7 @@ export function TabsTrigger({
         // Consumer ids and wiring win, e.g. several tabs sharing one panel.
         {...a11y}
         {...props}
+        ref={ref}
         type="button"
         role="tab"
         aria-selected={active}

@@ -433,12 +433,17 @@ interface CanvasBridge {
 /**
  * The full graph keeps its cytoscape instance between visits to `/graph`. Building one and
  * painting a large vault costs 150–300 ms of native canvas work before the first frame, so
- * the host div is detached on unmount and re-attached on the next mount: the browser keeps
+ * a stable shell is detached on unmount and re-attached on the next mount: the browser keeps
  * the canvas, and coming back shows the same picture without a layout.
+ *
+ * The shell must be the cytoscape container's parent and the container itself must never be
+ * removed: cytoscape watches its container's parent and destroys its renderer when the
+ * container leaves the DOM, leaving a live core that never paints again.
  */
 interface PersistentCanvas {
   cy: Core;
-  host: HTMLDivElement;
+  /** Stable parent of the cytoscape container: detaching this never detaches `cy`'s own container. */
+  shell: HTMLDivElement;
   bridge: CanvasBridge;
   /** Stylesheet already applied, so a return does not rebuild one that still matches. */
   style: { palette: Palette; reduce: boolean };
@@ -1067,14 +1072,25 @@ export default function GraphCanvas({
     let cy: Core;
     if (kept) {
       cy = kept.cy;
-      container.appendChild(kept.host);
+      container.appendChild(kept.shell);
       // The instance still holds the picture and the camera it was left with.
       firstRun.current = false;
       perfCount("reuses");
+      // Its container was detached for a while: make sure the canvas matches the page again
+      // before the kept picture is shown (a stale 0×0 size would paint nothing).
+      requestAnimationFrame(() => {
+        if (!cy.destroyed()) cy.resize();
+      });
     } else {
+      // Two nested divs: `shell` is what the page attaches and detaches, `host` is the
+      // cytoscape container inside it. Moving the shell never removes `host` from its parent,
+      // so cytoscape keeps its renderer alive between visits.
+      const shell = document.createElement("div");
+      shell.className = "h-full w-full";
       const host = document.createElement("div");
       host.className = "h-full w-full";
-      container.appendChild(host);
+      shell.appendChild(host);
+      container.appendChild(shell);
       cy = cytoscape({
         container: host,
         style: buildStyle(initialPalette, reduce),
@@ -1089,7 +1105,7 @@ export default function GraphCanvas({
       if (mode === "full")
         persistent = {
           cy,
-          host,
+          shell,
           bridge,
           style: { palette: initialPalette, reduce },
           dataRef: null,
@@ -1188,7 +1204,7 @@ export default function GraphCanvas({
         // are not worth storing, only the camera.
         if (layoutRun.current && bridge.cache) rememberCamera(bridge.cache, { zoom: cy.zoom(), pan: { ...cy.pan() } });
         else rememberGraphState(cy, bridge.cache);
-        persistent.host.remove();
+        persistent.shell.remove();
         return;
       }
       // Going away for good: stop the simulation instead of paying for a picture no one sees.

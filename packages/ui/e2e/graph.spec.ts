@@ -43,6 +43,8 @@ interface CyHandle {
   nodes: (selector?: string) => CyCollection;
   edges: (selector?: string) => CyEdgeCollection;
   zoom: () => number;
+  pan: () => { x: number; y: number };
+  viewport: (viewport: { zoom: number; pan: { x: number; y: number } }) => void;
 }
 
 interface GraphState {
@@ -154,6 +156,45 @@ function moved(before: Record<string, { x: number; y: number }>, after: Record<s
   });
 }
 
+/** Most non-transparent pixels any canvas layer paints. */
+async function paintedPixels(page: Page): Promise<number> {
+  return page.evaluate(async () => {
+    const canvases = Array.from(document.querySelectorAll('[data-testid="graph-canvas"] canvas')) as HTMLCanvasElement[];
+    let best = 0;
+    for (const canvas of canvases) {
+      const image = new Image();
+      image.src = canvas.toDataURL();
+      await image.decode();
+      const copy = document.createElement("canvas");
+      copy.width = image.width;
+      copy.height = image.height;
+      const context = copy.getContext("2d");
+      if (!context) continue;
+      context.drawImage(image, 0, 0);
+      const data = context.getImageData(0, 0, copy.width, copy.height).data;
+      let painted = 0;
+      for (let i = 3; i < data.length; i += 4) if (data[i] > 0) painted += 1;
+      if (painted > best) best = painted;
+    }
+    return best;
+  });
+}
+
+/** Cheap fingerprint of what the canvas layers currently paint. */
+async function canvasSignature(page: Page): Promise<string> {
+  return page.evaluate(() => {
+    const canvases = Array.from(document.querySelectorAll('[data-testid="graph-canvas"] canvas')) as HTMLCanvasElement[];
+    return canvases
+      .map((canvas) => {
+        const url = canvas.toDataURL();
+        let hash = 0;
+        for (let i = 0; i < url.length; i++) hash = (Math.imul(hash, 31) + url.charCodeAt(i)) | 0;
+        return `${canvas.width}x${canvas.height}:${hash}`;
+      })
+      .join("|");
+  });
+}
+
 /** Opens the graph and waits for the grouped picture (the first visit pays for the layout). */
 async function openGraph(page: Page) {
   await page.goto("/graph");
@@ -183,6 +224,17 @@ test("coming back to the graph re-attaches the canvas with the same positions, n
   const after = await readPositions(page);
   expect(after).not.toBeNull();
   expect(moved(before ?? {}, after ?? {})).toEqual([]);
+
+  // The kept canvas must still be alive. Detaching the cytoscape container used to destroy
+  // its renderer, so the picture froze: a zoom or a resize never painted again.
+  expect(await paintedPixels(page)).toBeGreaterThan(0);
+  const paintedBefore = await canvasSignature(page);
+  await page.evaluate(() => {
+    const cy = (window as unknown as { __basicsCy?: CyHandle }).__basicsCy;
+    if (cy) cy.viewport({ zoom: cy.zoom() * 1.8, pan: cy.pan() });
+  });
+  await expect.poll(() => canvasSignature(page), { timeout: 10_000 }).not.toBe(paintedBefore);
+  expect(await paintedPixels(page)).toBeGreaterThan(0);
 });
 
 test("reloading the graph restores the cached positions without running a layout", async ({ page }) => {

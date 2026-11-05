@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Inbox as InboxIcon, Package } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { useMatch, useNavigate, useSearchParams } from "react-router";
+import { Link, useMatch, useNavigate, useSearchParams } from "react-router";
 import { ApprovalCard } from "@/components/agents/approval-card";
 import { AnimatedNumber } from "@/components/motion/animated-number";
 import { Button } from "@/components/motion/button/base";
@@ -12,12 +12,13 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/motion/tabs";
 import { PAGE_SECTIONS, Page } from "@/components/page";
 import { issuesToErrors, ProposalDetail, ProposalEditModal } from "@/components/proposal-detail";
 import { ErrorState, Loading } from "@/components/state";
+import { Button as LinkButton } from "@/components/ui/button";
 import { type TranslationKey, useI18n } from "@/i18n";
 import { agentColor, agentInitial } from "@/lib/agent-color";
 import { ApiRequestError, approveAllProposals, approveProposal, rejectAllProposals, rejectProposal } from "@/lib/api";
 import { EASE_OUT, SPRING_LAYOUT } from "@/lib/ease";
 import { groupPackProposals, packProposer } from "@/lib/packs";
-import { useInbox, useProposal } from "@/lib/queries";
+import { useInbox, useProposal, useStats } from "@/lib/queries";
 import { formatRelativeTime } from "@/lib/relative-time";
 import { useReturnFocus } from "@/lib/return-focus";
 import { toast } from "@/lib/toast";
@@ -66,6 +67,8 @@ export function InboxPage() {
   const reduce = useReducedMotion() ?? false;
   const queryClient = useQueryClient();
   const inbox = useInbox();
+  const stats = useStats();
+  const vaultEmpty = stats.data?.total === 0;
   const [filter, setFilter] = useState<Filter>("all");
   const [selected, setSelected] = useState(0);
   const [armed, setArmed] = useState<string | null>(null);
@@ -521,8 +524,10 @@ export function InboxPage() {
         <InboxIcon className="size-5" aria-hidden="true" />
       </span>
       <p className="text-sm font-medium">{t("inbox.emptyZero")}</p>
+      <p className="max-w-md text-sm leading-5 text-muted-foreground">{t(vaultEmpty ? "inbox.emptyVaultLead" : "inbox.emptyLead")}</p>
       <p className="max-w-md text-xs leading-5 text-muted-foreground">
-        {t("inbox.emptyHint")}{" "}
+        {t("inbox.emptyHint")} <code className="font-mono text-[12px] text-foreground">propose_note</code>
+        {t("inbox.emptyHintEnd")}{" "}
         <a
           href={README_PROPOSE}
           target="_blank"
@@ -532,6 +537,11 @@ export function InboxPage() {
           {t("inbox.readme")}
         </a>
       </p>
+      <LinkButton asChild size="sm" className="mt-2">
+        <Link to={vaultEmpty ? "/?packs=1" : "/settings?section=agents"}>
+          {t(vaultEmpty ? "inbox.emptyAction.packs" : "inbox.emptyAction.agent")}
+        </Link>
+      </LinkButton>
     </div>
   );
 
@@ -540,32 +550,35 @@ export function InboxPage() {
   return (
     <Page className={`${PAGE_SECTIONS} min-h-0`}>
       <span className="sr-only">{t("inbox.shortcuts")}</span>
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-baseline gap-2">
-          <h1 className="text-xl font-semibold tracking-tight">{t("page.inbox.title")}</h1>
-          <span className="inline-flex items-baseline gap-1.5 text-xs text-muted-foreground">
-            <AnimatedNumber
-              value={packFiltered.length}
-              startOnView={false}
-              duration={0.5}
-              className="text-sm font-medium text-foreground"
-            />
-            {t("inbox.pending")}
-            {packFilter ? (
-              <button
-                type="button"
-                onClick={() => {
-                  const params = new URLSearchParams(searchParams);
-                  params.delete("pack");
-                  setSearchParams(params, { replace: true });
-                  setSelected(0);
-                }}
-                className="ml-2 rounded-sm text-xs text-muted-foreground underline decoration-border underline-offset-2 transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-              >
-                {t("inbox.clearPackFilter", { pack: packFilter })}
-              </button>
-            ) : null}
-          </span>
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-baseline gap-2">
+            <h1 className="text-xl font-semibold tracking-tight">{t("page.inbox.title")}</h1>
+            <span className="inline-flex items-baseline gap-1.5 text-xs text-muted-foreground">
+              <AnimatedNumber
+                value={packFiltered.length}
+                startOnView={false}
+                duration={0.5}
+                className="text-sm font-medium text-foreground"
+              />
+              {t("inbox.pending")}
+              {packFilter ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const params = new URLSearchParams(searchParams);
+                    params.delete("pack");
+                    setSearchParams(params, { replace: true });
+                    setSelected(0);
+                  }}
+                  className="ml-2 rounded-sm text-xs text-muted-foreground underline decoration-border underline-offset-2 transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                >
+                  {t("inbox.clearPackFilter", { pack: packFilter })}
+                </button>
+              ) : null}
+            </span>
+          </div>
+          <p className="mt-1 max-w-[68ch] text-sm text-muted-foreground">{t("inbox.intro")}</p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">

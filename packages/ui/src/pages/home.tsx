@@ -13,6 +13,7 @@ import { Loader } from "@/components/motion/loader";
 import { MorphPopover, MorphPopoverContent, MorphPopoverTrigger } from "@/components/motion/popover-morph";
 import { Tabs, TabsList, TabsTrigger } from "@/components/motion/tabs";
 import { TextReveal } from "@/components/motion/text-reveal";
+import { Tooltip } from "@/components/motion/tooltip";
 import { PAGE_SECTIONS, Page } from "@/components/page";
 import { ErrorState, Loading } from "@/components/state";
 import { type TranslationKey, useI18n } from "@/i18n";
@@ -20,7 +21,7 @@ import { agentColor, agentInitial } from "@/lib/agent-color";
 import { ApiRequestError, addPack, approveProposal, installPack, type Language, rejectProposal } from "@/lib/api";
 import { SPRING_LAYOUT } from "@/lib/ease";
 import { packProposer } from "@/lib/packs";
-import { useActivity, useInbox, useLayers, useNotes, usePacks, useStats } from "@/lib/queries";
+import { useActivity, useConnectStatus, useInbox, useLayers, useNotes, usePacks, useStats } from "@/lib/queries";
 import { formatCompactRelativeTime, formatFullDateTime, formatRelativeTime } from "@/lib/relative-time";
 import { toast } from "@/lib/toast";
 import { tintStyle, typeColor } from "@/lib/type-color";
@@ -243,6 +244,8 @@ interface StatItemProps {
   dot?: string;
   /** Destructive emphasis; only ever set when the value is above zero. */
   alert?: boolean;
+  /** One-line explanation shown on hover and keyboard focus. */
+  hint?: string;
   onClick?: () => void;
   /** Popover details; a function receives `close` for actions that leave the popover. */
   children?: ReactNode | ((close: () => void) => ReactNode);
@@ -252,7 +255,7 @@ interface StatItemProps {
  * Compact `label number` stat for Home's health strip: no card chrome, one line,
  * wrapping gracefully; a popover trigger when it has details and a value.
  */
-function StatItem({ label, value, stat, dot, alert, onClick, children }: StatItemProps) {
+function StatItem({ label, value, stat, dot, alert, hint, onClick, children }: StatItemProps) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const body = (
@@ -271,35 +274,50 @@ function StatItem({ label, value, stat, dot, alert, onClick, children }: StatIte
   const className =
     "inline-flex max-w-full min-w-0 items-baseline rounded-md px-1 py-0.5 transition-colors hover:bg-muted/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring";
 
+  let content: ReactNode;
   if (children === undefined || value === 0) {
-    return onClick ? (
+    content = onClick ? (
       <button type="button" data-stat={stat} data-alert={alert ? "true" : undefined} onClick={onClick} className={className}>
         {body}
       </button>
     ) : (
-      <div data-stat={stat} data-alert={alert ? "true" : undefined} className={className}>
+      <div
+        // A definition with no actions still needs a keyboard stop so the hint is reachable.
+        tabIndex={hint ? 0 : undefined}
+        role={hint ? "note" : undefined}
+        data-stat={stat}
+        data-alert={alert ? "true" : undefined}
+        className={className}
+      >
         {body}
       </div>
     );
+  } else {
+    content = (
+      <MorphPopover open={open} onOpenChange={setOpen}>
+        <MorphPopoverTrigger>
+          <button
+            type="button"
+            data-stat={stat}
+            data-alert={alert ? "true" : undefined}
+            aria-label={`${label}: ${value} — ${t("home.showDetails")}`}
+            className={className}
+          >
+            {body}
+          </button>
+        </MorphPopoverTrigger>
+        <MorphPopoverContent side="top" align="start" className="w-80 p-2">
+          {typeof children === "function" ? children(() => setOpen(false)) : children}
+        </MorphPopoverContent>
+      </MorphPopover>
+    );
   }
 
+  if (!hint) return content;
   return (
-    <MorphPopover open={open} onOpenChange={setOpen}>
-      <MorphPopoverTrigger>
-        <button
-          type="button"
-          data-stat={stat}
-          data-alert={alert ? "true" : undefined}
-          aria-label={`${label}: ${value} — ${t("home.showDetails")}`}
-          className={className}
-        >
-          {body}
-        </button>
-      </MorphPopoverTrigger>
-      <MorphPopoverContent side="top" align="start" className="w-80 p-2">
-        {typeof children === "function" ? children(() => setOpen(false)) : children}
-      </MorphPopoverContent>
-    </MorphPopover>
+    <Tooltip content={hint} side="top" disabled={open}>
+      {content}
+    </Tooltip>
   );
 }
 
@@ -627,17 +645,22 @@ function StarterPacks({
       <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
         {canInstall ? (
           <>
-            <fieldset className="m-0 min-w-0 border-0 p-0" aria-label={t("home.packs.language")}>
-              <Tabs value={packLanguage} onValueChange={(value) => onLanguageChange(value as Language)} variant="segment">
-                <TabsList>
-                  {(["en", "es"] as const).map((option) => (
-                    <TabsTrigger key={option} value={option} className="px-2.5 py-1 text-[11px] font-medium uppercase">
-                      {option}
-                    </TabsTrigger>
-                  ))}
-                </TabsList>
-              </Tabs>
-            </fieldset>
+            <div className="flex items-center gap-2">
+              <span id="pack-language-label" className="text-xs text-muted-foreground">
+                {t("home.packs.language")}
+              </span>
+              <fieldset className="m-0 min-w-0 border-0 p-0" aria-labelledby="pack-language-label">
+                <Tabs value={packLanguage} onValueChange={(value) => onLanguageChange(value as Language)} variant="segment">
+                  <TabsList>
+                    {(["en", "es"] as const).map((option) => (
+                      <TabsTrigger key={option} value={option} className="px-2.5 py-1 text-[11px] font-medium uppercase">
+                        {option}
+                      </TabsTrigger>
+                    ))}
+                  </TabsList>
+                </Tabs>
+              </fieldset>
+            </div>
             <Button
               size="sm"
               pressScale={0.97}
@@ -670,6 +693,82 @@ function StarterPacks({
           </Link>
         ) : null}
       </div>
+    </section>
+  );
+}
+
+interface GettingStartedProps {
+  notes: number;
+  projects: number;
+  /** The packs grid is on screen, so step 1 already has its way in right below. */
+  packsVisible: boolean;
+}
+
+/**
+ * Compact first-run checklist: three real signals, each with its own way in.
+ * It leaves the page on its own once all three read as done; no dismiss, no tour.
+ */
+function GettingStarted({ notes, projects, packsVisible }: GettingStartedProps) {
+  const { t } = useI18n();
+  const connect = useConnectStatus();
+  const connected = connect.data?.clients.some((client) => client.connected) ?? false;
+
+  const steps = [
+    {
+      key: "notes",
+      done: notes > 0,
+      label: t("home.steps.notes"),
+      action: packsVisible ? null : { to: "/?packs=1", label: t("home.steps.notes.action") },
+    },
+    {
+      key: "agent",
+      done: connected,
+      label: t("home.steps.agent"),
+      action: { to: "/settings?section=agents", label: t("home.steps.agent.action") },
+    },
+    {
+      key: "project",
+      done: projects > 0,
+      label: t("home.steps.project"),
+      action: { to: "/recommend", label: t("home.steps.project.action") },
+    },
+  ];
+  const done = steps.filter((step) => step.done).length;
+  if (done === steps.length) return null;
+
+  return (
+    <section
+      data-testid="home-getting-started"
+      aria-label={t("home.steps.progress", { done })}
+      className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-border/60 bg-card/40 px-3 py-2"
+    >
+      <h2 className="shrink-0 text-xs font-semibold">{t("home.steps.title")}</h2>
+      <ol className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
+        {steps.map((step, index) => (
+          <li key={step.key} className="flex min-w-0 items-center gap-1.5">
+            <span
+              aria-hidden="true"
+              className={cn(
+                "grid size-5 shrink-0 place-items-center rounded-full border text-[10px] font-semibold tabular-nums",
+                step.done ? "border-primary/40 bg-primary/10 text-primary" : "border-border text-muted-foreground",
+              )}
+            >
+              {step.done ? <Check className="size-3" /> : index + 1}
+            </span>
+            <span className={cn("truncate text-xs", step.done ? "text-muted-foreground" : "font-medium")}>{step.label}</span>
+            <span className="sr-only">{step.done ? t("home.steps.done") : t("home.steps.todo")}</span>
+            {step.done || !step.action ? null : (
+              <Link
+                to={step.action.to}
+                className="inline-flex shrink-0 items-center gap-0.5 rounded-sm text-[11px] text-muted-foreground underline decoration-border underline-offset-2 transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              >
+                {step.action.label}
+                <ArrowRight className="size-3" aria-hidden="true" />
+              </Link>
+            )}
+          </li>
+        ))}
+      </ol>
     </section>
   );
 }
@@ -828,10 +927,16 @@ export function HomePage() {
   const layers = useLayers();
   const timeline = useActivity({ limit: 20 });
   const dayActivity = useActivity({ limit: 200 });
+  const connectStatus = useConnectStatus();
   const [searchParams] = useSearchParams();
   const forcePacks = searchParams.get("packs") === "1";
   const showPacks = forcePacks || stats.data?.total === 0;
   const packs = usePacks(showPacks);
+
+  const notesTotal = stats.data?.total ?? 0;
+  const projectsTotal = stats.data?.counts.project ?? 0;
+  const stepsComplete = notesTotal > 0 && projectsTotal > 0 && (connectStatus.data?.clients.some((client) => client.connected) ?? false);
+  const showSteps = Boolean(stats.data) && !stepsComplete;
 
   const [selectedPacks, setSelectedPacks] = useState<Set<string>>(new Set());
   const [packLanguage, setPackLanguage] = useState<Language>(language);
@@ -884,7 +989,7 @@ export function HomePage() {
   // only while it still fits above the Dock; below 1024 and from 1440 up it always shows.
   const [showRecent, setShowRecent] = useState(true);
   const [activityFade, setActivityFade] = useState<EdgeFade>({ top: false, bottom: false });
-  const layoutSize = useHomeLayoutSize(gridRef, activityRef, groups.length + (showPacks ? 1000 : 0));
+  const layoutSize = useHomeLayoutSize(gridRef, activityRef, groups.length + (showPacks ? 1000 : 0) + (showSteps ? 2000 : 0));
   // biome-ignore lint/correctness/useExhaustiveDependencies: re-attach whenever the list renders — ResizeObserver then covers size changes.
   useEffect(() => {
     const el = activityRef.current;
@@ -1087,10 +1192,13 @@ export function HomePage() {
         ) : (
           <h1 className="text-xl font-semibold tracking-tight">{t("home.title")}</h1>
         )}
+        <p className="mt-1 max-w-[68ch] text-sm text-muted-foreground">{t("home.intro")}</p>
         <p className="mt-1 font-mono text-[11px] text-muted-foreground">
           {t("home.summary", { total, inbox: pending, agents: agentsToday })}
         </p>
       </header>
+
+      {showSteps ? <GettingStarted notes={notesTotal} projects={projectsTotal} packsVisible={showPacks} /> : null}
 
       {showPacks ? (
         <StarterPacks
@@ -1254,6 +1362,7 @@ export function HomePage() {
                     <StatItem
                       stat="broken"
                       label={t("home.brokenLinks")}
+                      hint={t("home.brokenLinks.hint")}
                       value={stats.data?.brokenLinks.length ?? 0}
                       alert={(stats.data?.brokenLinks.length ?? 0) > 0}
                     >
@@ -1292,6 +1401,7 @@ export function HomePage() {
                     <StatItem
                       stat="orphans"
                       label={t("home.orphans")}
+                      hint={t("home.orphans.hint")}
                       value={stats.data?.orphans.length ?? 0}
                       alert={(stats.data?.orphans.length ?? 0) > 0}
                     >

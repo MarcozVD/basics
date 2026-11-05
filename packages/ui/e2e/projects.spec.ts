@@ -129,7 +129,7 @@ test("lists projects, filters by status and selects with ↓ showing stack and c
 test("creates a project from Projects and selects its row", async ({ page }) => {
   await page.goto("/projects");
 
-  // Empty state keeps the primary create action in the page header.
+  // The empty state owns the primary create action, below the explanation.
   await expect(page.getByRole("heading", { name: "No projects yet", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "New project", exact: true }).click();
 

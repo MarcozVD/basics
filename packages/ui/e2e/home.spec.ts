@@ -52,6 +52,31 @@ test("home shows the agent loop and approves from the queue", async ({ page }) =
   await expect(page.getByTestId("inbox-strip")).toContainText("Inbox is clear");
 });
 
+test("the get-set-up checklist leaves once notes, an agent and a project are in place", async ({ page, request }) => {
+  const file = path.join(vaultPath(), "projects", "e2e-setup-project.md");
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, ["---", "type: project", "title: E2E Setup", "status: active", "---", "", "# E2E Setup", ""].join("\n"));
+
+  expect((await request.post("/api/connect", { data: { clients: ["cursor"] } })).ok()).toBe(true);
+  try {
+    // Preconditions on the fixture: the temp vault has notes, and now a project and a connected agent too.
+    await expect.poll(async () => (await (await request.get("/api/stats")).json()).counts.project).toBeGreaterThan(0);
+    await expect
+      .poll(async () =>
+        (await (await request.get("/api/connect/status")).json()).clients.some((client: { connected: boolean }) => client.connected),
+      )
+      .toBe(true);
+
+    await page.goto("/");
+    // Home rendered with stats before we check the checklist took itself off the page.
+    await expect(page.locator('[data-stat="tech"]')).toBeVisible();
+    await expect(page.getByTestId("home-getting-started")).toHaveCount(0);
+  } finally {
+    fs.rmSync(file, { force: true });
+    await request.post("/api/disconnect", { data: { clients: ["cursor"] } });
+  }
+});
+
 test("vault health shows every layer and opens its techs", async ({ page, request }) => {
   const layers = (await (await request.get("/api/layers")).json()) as { id: string; title: string; techs: string[] }[];
   const backend = layers.find((layer) => layer.id === "backend");

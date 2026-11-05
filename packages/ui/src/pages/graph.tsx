@@ -1,8 +1,8 @@
 import type { GraphData, GraphNode, GraphNodeType, NoteType } from "@marcozvd/basics-core";
 import { Crosshair, FilePlus2, Layers, Scan, Search, SquareArrowOutUpRight, Waypoints, X } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
-import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router";
+import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Link, useNavigate } from "react-router";
 import { type GraphCacheScope, type GraphLayoutMode, graphCacheKey } from "@/components/graph/graph-cache";
 import GraphCanvas, { type GraphCanvasHandle, type Insets } from "@/components/graph/graph-canvas";
 import { GRAPH_TYPES, layerSlice, matchNodes, neighborhood } from "@/components/graph/graph-model";
@@ -16,9 +16,11 @@ import { Switch } from "@/components/motion/switch";
 import { Tooltip } from "@/components/motion/tooltip";
 import { TypeChip } from "@/components/note-form/note-preview";
 import { ErrorState, Loading } from "@/components/state";
+import { Button as LinkButton } from "@/components/ui/button";
 import { type TranslationKey, useT } from "@/i18n";
+import { modChord } from "@/lib/desktop";
 import { EASE_OUT, SPRING_PRESS } from "@/lib/ease";
-import { useGraph, useHealth, useLayers, useNote, useNotes } from "@/lib/queries";
+import { useGraph, useHealth, useLayers, useNote, useNotes, useStats } from "@/lib/queries";
 import { cn } from "@/lib/utils";
 
 /** Drawer width plus its right gap, kept clear when centering a node beside it. */
@@ -43,6 +45,7 @@ export function GraphPage() {
   const reduce = useReducedMotion() ?? false;
   const canvasRef = useRef<GraphCanvasHandle>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
+  const headerRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
   const [broken, setBroken] = useState(false);
@@ -53,10 +56,13 @@ export function GraphPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [focusId, setFocusId] = useState<string | null>(null);
   const [toolbarHeight, setToolbarHeight] = useState(48);
+  const [headerHeight, setHeaderHeight] = useState(0);
 
   const graph = useGraph(broken);
   const layers = useLayers();
   const health = useHealth();
+  const stats = useStats();
+  const vaultEmpty = stats.data?.total === 0;
   const data = graph.data;
 
   useEffect(() => {
@@ -66,6 +72,19 @@ export function GraphPage() {
     observer.observe(toolbar);
     return () => observer.disconnect();
   }, []);
+
+  // The page intro floats above the toolbar; the canvas starts below both.
+  useLayoutEffect(() => {
+    const header = headerRef.current;
+    if (!header) return;
+    const measure = () => setHeaderHeight(header.offsetHeight);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(header);
+    return () => observer.disconnect();
+  }, []);
+
+  const toolbarTop = TOOLBAR_OFFSET + headerHeight + 8;
 
   // ⌘F / Ctrl+F jumps to the node search, like Explore.
   useEffect(() => {
@@ -80,8 +99,8 @@ export function GraphPage() {
   }, []);
 
   const insets: Insets = useMemo(
-    () => ({ top: TOOLBAR_OFFSET + toolbarHeight + 20, right: 32, bottom: DOCK_SPACE + 12, left: 32 }),
-    [toolbarHeight],
+    () => ({ top: toolbarTop + toolbarHeight + 20, right: 32, bottom: DOCK_SPACE + 12, left: 32 }),
+    [toolbarTop, toolbarHeight],
   );
 
   const byId = useMemo(() => new Map((data?.nodes ?? []).map((node) => [node.id, node])), [data]);
@@ -202,7 +221,13 @@ export function GraphPage() {
 
   return (
     <div className="relative" style={{ height: "calc(100dvh - 3rem)", marginBottom: -DOCK_SPACE }}>
-      <h1 className="sr-only">{t("page.graph.title")}</h1>
+      <div
+        ref={headerRef}
+        className="pointer-events-none absolute top-3 left-3 z-10 max-w-[min(calc(100%_-_24px),30rem)] rounded-2xl border border-border bg-background/75 px-3 py-2 shadow-[0_8px_30px_rgba(0,0,0,0.18)] backdrop-blur-xl dark:shadow-[0_8px_30px_rgba(0,0,0,0.35)]"
+      >
+        <h1 className="text-base font-semibold tracking-tight">{t("page.graph.title")}</h1>
+        <p className="mt-0.5 text-xs leading-4 text-muted-foreground">{t("graph.intro")}</p>
+      </div>
 
       {graph.isPending || (health.isPending && !health.data) ? (
         <div className="grid h-full place-items-center">
@@ -213,7 +238,7 @@ export function GraphPage() {
           <ErrorState error={graph.error} />
         </div>
       ) : data && data.nodes.length === 0 ? (
-        <EmptyGraph />
+        <EmptyGraph vaultEmpty={vaultEmpty} />
       ) : data ? (
         <GraphCanvas
           ref={canvasRef}
@@ -231,170 +256,175 @@ export function GraphPage() {
         />
       ) : null}
 
-      <div
-        ref={toolbarRef}
-        role="toolbar"
-        aria-label={t("graph.toolbar")}
-        data-testid="graph-toolbar"
-        className={cn(
-          "absolute left-3 z-10 flex max-w-[calc(100%-24px)] flex-wrap items-center gap-1 rounded-[22px] border border-border p-1.5",
-          "bg-background/75 shadow-[0_8px_30px_rgba(0,0,0,0.18)] backdrop-blur-xl dark:shadow-[0_8px_30px_rgba(0,0,0,0.35)]",
-        )}
-        style={{ top: TOOLBAR_OFFSET }}
-      >
-        <fieldset aria-label={t("graph.types")} className="m-0 flex min-w-0 flex-wrap items-center gap-0.5 border-0 p-0">
-          {types.map((type) => {
-            const shown = !hiddenTypes.has(type);
-            return (
-              <motion.button
-                key={type}
-                type="button"
-                aria-pressed={shown}
-                data-testid={`graph-type-${type}`}
-                onClick={() => toggleType(type)}
-                whileTap={reduce ? undefined : { scale: 0.97 }}
-                transition={SPRING_PRESS}
-                className={cn(
-                  "inline-flex h-8 items-center gap-1.5 rounded-full px-2.5 text-[12px] font-medium transition-colors",
-                  "focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring",
-                  shown ? "text-foreground hover:bg-muted/70" : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
-                )}
-              >
+      {(data?.nodes.length ?? 0) > 0 ? (
+        <div
+          ref={toolbarRef}
+          role="toolbar"
+          aria-label={t("graph.toolbar")}
+          data-testid="graph-toolbar"
+          className={cn(
+            "absolute left-3 z-10 flex max-w-[calc(100%-24px)] flex-wrap items-center gap-1 rounded-[22px] border border-border p-1.5",
+            "bg-background/75 shadow-[0_8px_30px_rgba(0,0,0,0.18)] backdrop-blur-xl dark:shadow-[0_8px_30px_rgba(0,0,0,0.35)]",
+          )}
+          style={{ top: toolbarTop }}
+        >
+          <fieldset aria-label={t("graph.types")} className="m-0 flex min-w-0 flex-wrap items-center gap-0.5 border-0 p-0">
+            {types.map((type) => {
+              const shown = !hiddenTypes.has(type);
+              return (
+                <Tooltip key={type} content={t(`type.${type}.hint` as TranslationKey)} side="bottom">
+                  <motion.button
+                    type="button"
+                    aria-pressed={shown}
+                    data-testid={`graph-type-${type}`}
+                    onClick={() => toggleType(type)}
+                    whileTap={reduce ? undefined : { scale: 0.97 }}
+                    transition={SPRING_PRESS}
+                    className={cn(
+                      "inline-flex h-8 items-center gap-1.5 rounded-full px-2.5 text-[12px] font-medium transition-colors",
+                      "focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring",
+                      shown ? "text-foreground hover:bg-muted/70" : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+                    )}
+                  >
+                    <span
+                      aria-hidden="true"
+                      className={cn(
+                        "size-2 shrink-0 rounded-full transition-opacity",
+                        type === "missing" && "border border-dashed border-destructive bg-transparent!",
+                        !shown && "opacity-30",
+                      )}
+                      style={{ backgroundColor: typeColor(type) }}
+                    />
+                    <span className={cn(!shown && "line-through decoration-muted-foreground/50")}>
+                      {t(`type.${type}` as TranslationKey)}
+                    </span>
+                    <span className="font-mono text-[10.5px]">{counts.get(type) ?? 0}</span>
+                  </motion.button>
+                </Tooltip>
+              );
+            })}
+          </fieldset>
+
+          <ToolbarDivider />
+
+          <div data-testid="graph-layer">
+            <Select value={layer} onValueChange={setLayer} className="w-40">
+              <SelectTrigger className="h-8 rounded-full border-border bg-card px-3 py-0 text-[12px]">
+                <span className="flex min-w-0 items-center gap-2">
+                  <Layers className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+                  <SelectValue className="truncate" />
+                </span>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{t("graph.allLayers")}</SelectItem>
+                {(layers.data ?? []).map((item) => (
+                  <SelectItem key={item.id} value={item.id}>
+                    {item.title || item.id}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <Input
+            ref={searchRef}
+            type="search"
+            value={search}
+            onChange={setSearch}
+            onKeyDown={onSearchKeyDown}
+            placeholder={t("graph.searchPlaceholder")}
+            aria-label={t("graph.searchPlaceholder")}
+            title={t("graph.searchHint")}
+            aria-keyshortcuts="Meta+F Control+F"
+            data-testid="graph-search"
+            leftIcon={<Search />}
+            rightIcon={
+              search ? (
                 <span
-                  aria-hidden="true"
-                  className={cn(
-                    "size-2 shrink-0 rounded-full transition-opacity",
-                    type === "missing" && "border border-dashed border-destructive bg-transparent!",
-                    !shown && "opacity-30",
-                  )}
-                  style={{ backgroundColor: typeColor(type) }}
-                />
-                <span className={cn(!shown && "line-through decoration-muted-foreground/50")}>{t(`type.${type}` as TranslationKey)}</span>
-                <span className="font-mono text-[10.5px]">{counts.get(type) ?? 0}</span>
-              </motion.button>
-            );
-          })}
-        </fieldset>
+                  title={t("graph.matches", { count: matches.length })}
+                  className={cn("mr-2.5 font-mono text-[10.5px]", matches.length ? "text-muted-foreground" : "text-destructive-text")}
+                >
+                  {matches.length}
+                </span>
+              ) : (
+                <kbd className="mr-2.5 rounded-full border border-border px-1.5 font-mono text-[10px] leading-4 text-muted-foreground">
+                  {modChord("F")}
+                </kbd>
+              )
+            }
+            className="w-48"
+            classNames={{
+              field: "h-8 rounded-full bg-card",
+              input: "text-[12px] [&::-webkit-search-cancel-button]:hidden",
+              leftIcon: "left-2.5",
+            }}
+          />
 
-        <ToolbarDivider />
+          <ToolbarDivider />
 
-        <div data-testid="graph-layer">
-          <Select value={layer} onValueChange={setLayer} className="w-40">
-            <SelectTrigger className="h-8 rounded-full border-border bg-card px-3 py-0 text-[12px]">
-              <span className="flex min-w-0 items-center gap-2">
-                <Layers className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-                <SelectValue className="truncate" />
-              </span>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{t("graph.allLayers")}</SelectItem>
-              {(layers.data ?? []).map((item) => (
-                <SelectItem key={item.id} value={item.id}>
-                  {item.title || item.id}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+          <ToolbarDivider />
 
-        <Input
-          ref={searchRef}
-          type="search"
-          value={search}
-          onChange={setSearch}
-          onKeyDown={onSearchKeyDown}
-          placeholder={t("graph.searchPlaceholder")}
-          aria-label={t("graph.searchPlaceholder")}
-          title={t("graph.searchHint")}
-          aria-keyshortcuts="Meta+F Control+F"
-          data-testid="graph-search"
-          leftIcon={<Search />}
-          rightIcon={
-            search ? (
-              <span
-                title={t("graph.matches", { count: matches.length })}
-                className={cn("mr-2.5 font-mono text-[10.5px]", matches.length ? "text-muted-foreground" : "text-destructive-text")}
-              >
-                {matches.length}
-              </span>
-            ) : (
-              <kbd className="mr-2.5 rounded-full border border-border px-1.5 font-mono text-[10px] leading-4 text-muted-foreground">
-                ⌘F
-              </kbd>
-            )
-          }
-          className="w-48"
-          classNames={{
-            field: "h-8 rounded-full bg-card",
-            input: "text-[12px] [&::-webkit-search-cancel-button]:hidden",
-            leftIcon: "left-2.5",
-          }}
-        />
-
-        <ToolbarDivider />
-
-        <ToolbarDivider />
-
-        <span data-testid="graph-group" className="inline-flex h-8 items-center gap-2 pr-1 pl-1.5">
-          <Switch checked={grouped} onCheckedChange={toggleGrouped} ariaLabel={t("graph.groupByLayer")} />
-          <button
-            type="button"
-            tabIndex={-1}
-            onClick={() => toggleGrouped(!grouped)}
-            className="text-[12px] font-medium whitespace-nowrap text-muted-foreground hover:text-foreground"
-          >
-            {t("graph.groupByLayer")}
-          </button>
-        </span>
-
-        <span data-testid="graph-broken" className="inline-flex h-8 items-center gap-2 pr-1 pl-1.5">
-          <Switch checked={broken} onCheckedChange={toggleBroken} ariaLabel={t("graph.showBroken")} />
-          <button
-            type="button"
-            tabIndex={-1}
-            onClick={() => toggleBroken(!broken)}
-            className="text-[12px] font-medium whitespace-nowrap text-muted-foreground hover:text-foreground"
-          >
-            {t("graph.showBroken")}
-          </button>
-        </span>
-
-        <Tooltip content={t("graph.fit")} side="bottom">
-          <motion.button
-            type="button"
-            aria-label={t("graph.fit")}
-            data-testid="graph-fit"
-            onClick={() => canvasRef.current?.fit()}
-            whileTap={reduce ? undefined : { scale: 0.97 }}
-            transition={SPRING_PRESS}
-            className="grid size-8 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
-          >
-            <Scan className="size-4" aria-hidden="true" />
-          </motion.button>
-        </Tooltip>
-
-        {focusId && (
-          <motion.span
-            initial={{ opacity: 0, x: reduce ? 0 : -4 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.16, ease: EASE_OUT }}
-            className="inline-flex h-8 items-center gap-1 rounded-full bg-primary/12 pr-1 pl-3 text-[12px] font-medium text-primary-text"
-          >
-            <Crosshair className="size-3.5" aria-hidden="true" />
-            <span className="max-w-40 truncate">
-              {t("graph.focusing")}: {focused?.title ?? focusId}
-            </span>
+          <span data-testid="graph-group" className="inline-flex h-8 items-center gap-2 pr-1 pl-1.5">
+            <Switch checked={grouped} onCheckedChange={toggleGrouped} ariaLabel={t("graph.groupByLayer")} />
             <button
               type="button"
-              data-testid="graph-show-all"
-              onClick={() => setFocusId(null)}
-              className="ml-1 inline-flex h-6 items-center gap-1 rounded-full bg-primary px-2.5 text-[11.5px] text-primary-foreground transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
+              tabIndex={-1}
+              onClick={() => toggleGrouped(!grouped)}
+              className="text-[12px] font-medium whitespace-nowrap text-muted-foreground hover:text-foreground"
             >
-              {t("graph.showAll")}
+              {t("graph.groupByLayer")}
             </button>
-          </motion.span>
-        )}
-      </div>
+          </span>
+
+          <span data-testid="graph-broken" className="inline-flex h-8 items-center gap-2 pr-1 pl-1.5">
+            <Switch checked={broken} onCheckedChange={toggleBroken} ariaLabel={t("graph.showBroken")} />
+            <button
+              type="button"
+              tabIndex={-1}
+              onClick={() => toggleBroken(!broken)}
+              className="text-[12px] font-medium whitespace-nowrap text-muted-foreground hover:text-foreground"
+            >
+              {t("graph.showBroken")}
+            </button>
+          </span>
+
+          <Tooltip content={t("graph.fit")} side="bottom">
+            <motion.button
+              type="button"
+              aria-label={t("graph.fit")}
+              data-testid="graph-fit"
+              onClick={() => canvasRef.current?.fit()}
+              whileTap={reduce ? undefined : { scale: 0.97 }}
+              transition={SPRING_PRESS}
+              className="grid size-8 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
+            >
+              <Scan className="size-4" aria-hidden="true" />
+            </motion.button>
+          </Tooltip>
+
+          {focusId && (
+            <motion.span
+              initial={{ opacity: 0, x: reduce ? 0 : -4 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.16, ease: EASE_OUT }}
+              className="inline-flex h-8 items-center gap-1 rounded-full bg-primary/12 pr-1 pl-3 text-[12px] font-medium text-primary-text"
+            >
+              <Crosshair className="size-3.5" aria-hidden="true" />
+              <span className="max-w-40 truncate">
+                {t("graph.focusing")}: {focused?.title ?? focusId}
+              </span>
+              <button
+                type="button"
+                data-testid="graph-show-all"
+                onClick={() => setFocusId(null)}
+                className="ml-1 inline-flex h-6 items-center gap-1 rounded-full bg-primary px-2.5 text-[11.5px] text-primary-foreground transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
+              >
+                {t("graph.showAll")}
+              </button>
+            </motion.span>
+          )}
+        </div>
+      ) : null}
 
       <Drawer
         open={Boolean(selected)}
@@ -421,14 +451,17 @@ function ToolbarDivider() {
   return <span aria-hidden="true" className="mx-1 hidden h-5 w-px bg-border sm:block" />;
 }
 
-function EmptyGraph() {
+function EmptyGraph({ vaultEmpty }: { vaultEmpty: boolean }) {
   const t = useT();
   return (
     <div className="grid h-full place-items-center px-6">
-      <div className="flex max-w-sm flex-col items-center gap-1 text-center">
+      <div className="flex max-w-md flex-col items-center gap-2 text-center">
         <Waypoints className="mb-1 size-5 text-muted-foreground" aria-hidden="true" />
-        <p className="text-sm font-medium">{t("graph.empty")}</p>
-        <p className="text-sm text-muted-foreground">{t("graph.emptyDescription")}</p>
+        <p className="text-sm font-medium">{t(vaultEmpty ? "graph.emptyVault.title" : "graph.empty")}</p>
+        <p className="text-sm text-muted-foreground">{t(vaultEmpty ? "graph.emptyVault.description" : "graph.emptyDescription")}</p>
+        <LinkButton asChild size="sm" className="mt-2">
+          <Link to={vaultEmpty ? "/?packs=1" : "/explore"}>{t(vaultEmpty ? "graph.emptyVault.action" : "graph.emptyAction")}</Link>
+        </LinkButton>
       </div>
     </div>
   );

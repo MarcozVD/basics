@@ -173,18 +173,21 @@ function FilterChip({
   children,
   onClick,
   disabled,
+  hint,
 }: {
   selected: boolean;
   count: number;
   children: ReactNode;
   onClick: () => void;
   disabled?: boolean;
+  hint?: string;
 }) {
   return (
     <motion.button
       type="button"
       aria-pressed={selected}
       disabled={disabled}
+      title={hint}
       onClick={onClick}
       whileTap={disabled ? undefined : { scale: 0.97 }}
       className={cn(
@@ -221,6 +224,7 @@ function AreaControl({
       <Select value={skill.area} onValueChange={(value) => onChange(skill.key, value as SkillArea)} disabled={busy}>
         <SelectTrigger
           aria-label={t("skills.changeArea", { name: skill.name })}
+          title={t("skills.changeArea", { name: skill.name })}
           className="h-6 rounded-full border-border bg-card px-2 py-0 text-[11px]"
         >
           <SelectValue />
@@ -614,6 +618,7 @@ export function SkillsPage() {
                   selected={agent === id}
                   count={counts[id]}
                   disabled={counts[id] === 0 && agent !== id}
+                  hint={id === "shared" ? t("skills.agent.shared.hint") : undefined}
                   onClick={() => setAgent(id)}
                 >
                   {t(AGENT_LABEL[id])}

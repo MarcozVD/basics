@@ -12,21 +12,22 @@ sees the edit and requests stay fast on large vaults.
 
 ## Screens
 
-Navigation is a floating dock at the bottom: Home, Explore, Projects, Graph, Inbox (with the pending count), Recommend and Skills. There
-are no sidebars; secondary panels are overlays closed with `Esc`. **Settings** is not in the dock: open it with the gear
+Navigation is a floating dock at the bottom: Home, Explore, Projects, Graph, Inbox (with the pending count), Recommend and Skills. Each
+item shows a short caption under its icon on tablets and desktops; on phones (below 480px) the dock is icons only, so hover or
+focus an item to see its name, shortcut and purpose. There are no sidebars; secondary panels are overlays closed with `Esc`. **Settings** is not in the dock: open it with the gear
 in the header or with `Ctrl`/`⌘+,`.
 
 | Screen | What it does |
 | --- | --- |
-| **Home** | Pending proposals you can approve inline, the agent activity timeline, and vault health (notes per type, broken links, orphans, recent notes). Each broken link can open the note that holds it or create the missing note. An empty vault shows the starter-pack onboarding. |
-| **Explore** | Filters by layer and type with counts, search, list or grid, keyboard navigation, and the new-note dialog. |
-| **Projects** | Project notes, filtered by status with counts. The status chip on each row is a menu: Active, Paused, Done or Archived. Done projects sort last and collapse into a `Done (N)` group in the All view. |
+| **Home** | Pending proposals you can approve inline, the agent activity timeline, and vault health (notes per type, broken links, orphans, recent notes). Each broken link can open the note that holds it or create the missing note. An empty vault shows the starter-pack onboarding. Until three setup steps are done (install notes, connect an agent, start a project), a **Get set up** checklist sits above the grid and ticks itself off. |
+| **Explore** | Filters by layer and type with counts, search, list or grid, keyboard navigation, and the new-note dialog. An empty vault and a search with no matches show different empty states, each with one action. |
+| **Projects** | Project notes, filtered by status with counts. The status chip on each row is a menu: Active, Paused, Done or Archived. Done projects sort last and collapse into a `Done (N)` group in the All view. The empty state offers New project. |
 | **Editor** | Frontmatter form generated from the note type, Markdown body in edit / preview / split, `[[` wikilink autocomplete, connections (links, backlinks, unresolved) and a local graph. A conflict banner appears if the file changed on disk. |
-| **Graph** | Every note and link, with type and layer filters in a floating toolbar, node search, broken links and neighborhood focus. Coming back to Graph shows the picture you left, with the same positions and zoom, without laying it out again; a reload keeps the positions for the same vault. Vault changes still update it. On a graph over 300 notes the layout runs in the background, so you can click and open notes while it settles, and zoomed-out labels show only the best-connected notes. |
-| **Inbox** | Proposals with a side-by-side or unified diff; Approve, Edit and approve, or Reject. Pack proposals are grouped with **Approve all**. |
+| **Graph** | Every note and link, with type and layer filters in a floating toolbar, node search, broken links and neighborhood focus. On an empty vault the toolbar is hidden and the canvas offers starter notes or Explore. Coming back to Graph shows the picture you left, with the same positions and zoom, without laying it out again; a reload keeps the positions for the same vault. Vault changes still update it. On a graph over 300 notes the layout runs in the background, so you can click and open notes while it settles, and zoomed-out labels show only the best-connected notes. |
+| **Inbox** | Proposals with a side-by-side or unified diff; Approve, Edit and approve, or Reject. Pack proposals are grouped with **Approve all**. An empty inbox says why and offers one action: install the starter notes, or connect an agent. |
 | **Settings** | Six sections: **General** (language, theme, vault path; in the [desktop app](desktop) also **Open folder** and **Change folder**), **Startup**, **Agents** (connect or disconnect each coding agent and see the file change it makes), **Search** (semantic search on or off), **Updates** and **About**. Each change applies as soon as you pick it; there is no Save button. Startup and Updates are desktop-only; see [Desktop settings](desktop#desktop-settings). |
 | **Skills** | Every skill installed for your coding agents, grouped by area: filter by agent or area, search by name and description, change a skill's area, and expand a row for its path and version. |
-| **Recommend** | Project description and layers → profiles and per-layer candidates with `use_when`, `performs_best` and `avoid_when`, selection, and the export modal with **STACK.md / AGENTS.md / CLAUDE.md / Cursor** tabs, each with copy or download. Shows whether the mode is **Keywords** or **Hybrid** and the score breakdown. An **Ask an agent** run is kept per browser tab: it keeps going when you leave the page, and the Dock shows its progress. |
+| **Recommend** | Project description and layers → profiles and per-layer candidates with `use_when`, `performs_best` and `avoid_when`, selection, and the export modal with **STACK.md / AGENTS.md / CLAUDE.md / Cursor** tabs, each with copy or download. Shows whether the mode is **Keywords** or **Hybrid** and the score breakdown. On an empty vault it asks you to install the starter packs first. An **Ask an agent** run is kept per browser tab: it keeps going when you leave the page, and the Dock shows its progress. |
 
 ## Shortcuts
 
