@@ -403,7 +403,7 @@ export function EditorPage() {
   const typeLabel = t(`type.${note.type}` as TranslationKey);
   const unresolved = note.links.filter((link) => allNotes.data !== undefined && !typeById.has(link));
   const editorPane = (
-    <div className="overflow-hidden rounded-2xl border border-border bg-card">
+    <div className="overflow-hidden rounded-2xl border border-border bg-muted/30">
       <CodeMirror
         value={body}
         minHeight={view === "split" ? "45vh" : "55vh"}
@@ -419,13 +419,13 @@ export function EditorPage() {
     </div>
   );
   const previewPane = (
-    <div className={cn("rounded-2xl border border-border bg-card/40 px-5 py-4", view === "split" && "min-h-[45vh]")}>
+    <div className={cn("rounded-2xl border border-border bg-muted/25 px-5 py-4", view === "split" && "min-h-[45vh]")}>
       <MarkdownPreview body={body} className="max-w-[72ch]" />
     </div>
   );
 
   const header = (
-    <header className="sticky top-0 z-30 flex items-center gap-2 border-b border-border/60 bg-background py-2">
+    <header className="sticky top-0 z-30 flex items-center gap-2 border-b border-border/60 bg-card py-2">
       <Breadcrumb className="min-w-0 flex-1">
         <BreadcrumbList maxItems={Number.POSITIVE_INFINITY} className="flex-nowrap gap-x-0.5 text-xs">
           <BreadcrumbItem key="explore">
@@ -560,7 +560,7 @@ export function EditorPage() {
           <button
             type="button"
             onClick={() => void reload()}
-            className="rounded-full border border-border bg-background px-3 py-1 text-xs font-medium transition-colors hover:bg-muted"
+            className="rounded-full border border-border bg-muted/50 px-3 py-1 text-xs font-medium transition-colors hover:bg-muted"
           >
             {t("editor.conflict.reload")}
           </button>

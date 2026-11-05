@@ -7,7 +7,6 @@ import { createPortal } from "react-dom";
 import { Link } from "react-router";
 import { PromptInput } from "@/components/agents/prompt-input";
 import { EXPORT_TARGETS, ExportModal } from "@/components/export-modal";
-import { DOCK_HEIGHT, DOCK_OFFSET } from "@/components/layout";
 import {
   AdaptiveStepper,
   AdaptiveStepperDecrement,
@@ -54,9 +53,8 @@ const PROFILE_COLUMNS = "grid gap-3 [grid-template-columns:repeat(auto-fill,minm
 /** Only the first cards of a column stagger in; the rest appear with them. */
 const STAGGER_LIMIT = 10;
 const STAGGER_STEP = 0.02;
-/** The Dock floats 16px off the bottom edge and is 54px tall; the selection pill sits 12px above it. */
-const DOCK_BOTTOM = DOCK_OFFSET;
-const BAR_GAP = 12;
+/** The selection pill floats 20px off the window's bottom edge, inside the content panel. */
+const BAR_BOTTOM = 20;
 
 const enter = (index: number, reduce: boolean) => ({
   initial: index < STAGGER_LIMIT ? { opacity: 0, y: reduce ? 0 : 6 } : false,
@@ -115,7 +113,7 @@ function ModeIndicator({ mode }: { mode: Recommendation["mode"] }) {
   const t = useT();
   const hybrid = mode === "hybrid";
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-2 py-0.5 font-mono text-[10.5px] text-muted-foreground">
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/60 px-2 py-0.5 font-mono text-[10.5px] text-muted-foreground">
       <span aria-hidden="true" className={cn("size-1.5 rounded-full", hybrid ? "bg-primary" : "bg-muted-foreground/60")} />
       {t(hybrid ? "recommend.mode.hybrid" : "recommend.mode.keywords")}
     </span>
@@ -168,7 +166,7 @@ function CandidateCard({ candidate, maxScore, selected, reduce, onToggle }: Cand
       selected={selected}
       size="compact"
       className={cn(
-        "gap-2.5 bg-card py-3 hover:border-foreground/20",
+        "gap-2.5 bg-muted/40 py-3 hover:border-foreground/20",
         avoid && "border-destructive/35 hover:border-destructive/50",
         (hybrid === undefined ? candidate.score <= 0 : hybrid <= 0) && "border-dashed bg-transparent",
       )}
@@ -239,7 +237,7 @@ function RecommendationResults({ recommendation, layerTitle, selected, reduce, o
           <div className={PROFILE_COLUMNS}>
             {recommendation.profiles.map((profile, index) => (
               <motion.div key={profile.id} {...enter(index, reduce)} className="min-w-0">
-                <Card size="compact" className="h-full gap-3 bg-card py-3.5">
+                <Card size="compact" className="h-full gap-3 bg-muted/40 py-3.5">
                   <CardHeader>
                     <div className="flex min-w-0 items-center gap-2">
                       <Link
@@ -313,7 +311,7 @@ function RecommendationResults({ recommendation, layerTitle, selected, reduce, o
 }
 
 function ResultsSkeleton({ layers, perLayer, label }: { layers: string[]; perLayer: number; label: string }) {
-  const block = "rounded-2xl border bg-card motion-safe:animate-pulse";
+  const block = "rounded-2xl border bg-muted/40 motion-safe:animate-pulse";
   return (
     <div role="status" aria-label={label} className="flex flex-col gap-6">
       <span className="sr-only">{label}</span>
@@ -538,7 +536,7 @@ export function RecommendPage() {
                 aria-label={`${t("recommend.copyCli")}: ${EMBEDDINGS_CLI}`}
                 title={t("recommend.copyCli")}
                 onClick={() => void copyText(EMBEDDINGS_CLI)}
-                className="mt-0.5 inline-flex h-6 max-w-full items-center gap-1.5 self-start rounded-md border border-border bg-card px-2 font-mono text-[10.5px] text-foreground transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                className="mt-0.5 inline-flex h-6 max-w-full items-center gap-1.5 self-start rounded-md border border-border bg-muted/60 px-2 font-mono text-[10.5px] text-foreground transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
               >
                 <span className="truncate">{EMBEDDINGS_CLI}</span>
                 <Copy className="size-3 shrink-0 text-muted-foreground" aria-hidden="true" />
@@ -563,7 +561,7 @@ export function RecommendPage() {
           placeholder={t("recommend.placeholder")}
           minRows={2}
           maxRows={8}
-          className="bg-card"
+          className="bg-muted/50"
           trailingAction={
             <Button
               variant="secondary"
@@ -699,7 +697,7 @@ export function RecommendPage() {
                     onClick={() => fillExample(t(key))}
                     whileTap={reduce ? undefined : { scale: 0.97 }}
                     className={cn(
-                      "inline-flex h-7 max-w-full min-w-0 items-center rounded-full border border-border bg-card px-3 text-[12px] text-muted-foreground transition-colors",
+                      "inline-flex h-7 max-w-full min-w-0 items-center rounded-full border border-border bg-muted/60 px-3 text-[12px] text-muted-foreground transition-colors",
                       "hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
                     )}
                   >
@@ -724,8 +722,8 @@ export function RecommendPage() {
                   animate={{ opacity: 1, y: 0, x: "-50%" }}
                   exit={{ opacity: 0, y: reduce ? 0 : 8, x: "-50%", transition: { duration: 0.12, ease: EASE_OUT } }}
                   transition={reduce ? { duration: 0.12 } : SPRING_PANEL}
-                  style={{ bottom: DOCK_BOTTOM + DOCK_HEIGHT + BAR_GAP }}
-                  className="fixed left-1/2 z-40 flex items-center gap-1 rounded-full border bg-background/70 py-1 pr-1 pl-1 shadow-[0_8px_30px_rgba(0,0,0,0.25)] backdrop-blur-xl"
+                  style={{ bottom: BAR_BOTTOM }}
+                  className="fixed left-1/2 z-40 flex items-center gap-1 rounded-full border bg-card/85 py-1 pr-1 pl-1 shadow-[0_8px_30px_rgba(0,0,0,0.25)] backdrop-blur-xl"
                 >
                   <button
                     type="button"

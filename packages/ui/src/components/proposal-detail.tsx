@@ -205,7 +205,7 @@ export function ProposalDetail({
           "flex items-center gap-1",
           panel
             ? "shrink-0 justify-end border-t border-border px-3 py-2"
-            : "fixed bottom-[82px] left-1/2 z-40 max-w-[calc(100vw-1rem)] -translate-x-1/2 overflow-x-auto rounded-full border border-border bg-card/80 p-1.5 shadow-[0_8px_30px_rgba(0,0,0,0.25)] backdrop-blur-xl [scrollbar-width:none]",
+            : "fixed bottom-5 left-1/2 z-40 max-w-[calc(100vw-1rem)] -translate-x-1/2 overflow-x-auto rounded-full border border-border bg-card/85 p-1.5 shadow-[0_8px_30px_rgba(0,0,0,0.25)] backdrop-blur-xl [scrollbar-width:none]",
         )}
       >
         {actions}

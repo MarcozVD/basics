@@ -52,10 +52,10 @@ function RouteSkeleton() {
   );
 }
 
-/** The graph fills the viewport; its fallback keeps the same box so nothing shifts when the canvas arrives. */
+/** The graph fills the panel; its fallback keeps the same box so nothing shifts when the canvas arrives. */
 function GraphSkeleton() {
   return (
-    <div className="grid h-[calc(100dvh-3rem-78px)] place-items-center">
+    <div className="grid min-h-0 flex-1 place-items-center">
       <Loading />
     </div>
   );

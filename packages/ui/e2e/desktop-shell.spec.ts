@@ -30,7 +30,7 @@ test("the desktop app owns its shortcuts: Ctrl+F searches, browser actions are s
   await stubDesktop(page);
   await page.goto("/");
 
-  // Desktop detected: the header renders the window buttons a browser never has.
+  // Desktop detected: the title strip renders the window buttons a browser never has.
   await expect(page.getByTestId("window-controls")).toBeVisible();
 
   // Ctrl+K opens the palette with a query, Ctrl+F clears it and takes the caret: the app's

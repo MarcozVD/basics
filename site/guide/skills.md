@@ -46,7 +46,7 @@ in the skill file. An entry keyed by a skill you have uninstalled is harmless; `
 
 ## In the app
 
-The web UI and the desktop app have a **Skills** page in the Dock (press `G` then `K`, or pick **Skills** in the command
+The web UI and the desktop app have a **Skills** page in the sidebar (press `G` then `K`, or pick **Skills** in the command
 palette). It shows the same list as `basics skills`:
 
 - **Agent chips** narrow the list to one agent: **All**, **Claude Code**, **opencode**, **Codex** or **Shared**. Each shows

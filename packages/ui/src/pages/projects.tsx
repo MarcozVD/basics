@@ -160,7 +160,7 @@ function StatusChip({ status, className }: { status: ProjectStatus; className?: 
     <span
       className={cn(
         "inline-flex h-5 shrink-0 items-center gap-1.5 rounded-full border px-2 text-[10px] font-medium",
-        status === "done" ? DONE_TONE : "border-border bg-background/60 text-muted-foreground",
+        status === "done" ? DONE_TONE : "border-border bg-muted/60 text-muted-foreground",
         className,
       )}
     >
@@ -445,7 +445,7 @@ function LinkList({ ids, noteById, empty }: { ids: string[]; noteById: Map<strin
             key={id}
             to={`/notes/${encodeURIComponent(id)}`}
             title={id}
-            className="inline-flex h-6 max-w-full items-center rounded-full border border-border bg-card/50 px-2 text-[10.5px] text-foreground transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            className="inline-flex h-6 max-w-full items-center rounded-full border border-border bg-muted/50 px-2 text-[10.5px] text-foreground transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
           >
             <span className="truncate">{label}</span>
           </Link>
@@ -494,7 +494,7 @@ function ProjectDetail({
   return (
     <aside
       aria-label={t("projects.detail")}
-      className="hidden min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-border bg-card/20 min-[1280px]:flex"
+      className="hidden min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-border bg-muted/25 min-[1280px]:flex"
     >
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
         <header className="border-b border-border/70 p-5">
@@ -1043,7 +1043,7 @@ export function ProjectsPage() {
             <p className="mt-1 max-w-[68ch] text-sm text-muted-foreground">{t("projects.intro")}</p>
           </div>
         </header>
-        <div className="flex min-h-[calc(100dvh-14rem)] items-center justify-center py-10">
+        <div className="flex min-h-0 flex-1 items-center justify-center py-10">
           <div className="max-w-xl text-center">
             <span className="mx-auto grid size-12 place-items-center rounded-2xl bg-muted/60 text-muted-foreground">
               <FolderKanban className="size-5" aria-hidden="true" />
@@ -1113,7 +1113,7 @@ export function ProjectsPage() {
             classNames={{ field: "h-9" }}
           />
 
-          <div className="flex h-9 items-center gap-1.5 rounded-xl border border-border bg-background px-2.5 text-xs text-muted-foreground">
+          <div className="flex h-9 items-center gap-1.5 rounded-xl border border-border bg-muted/50 px-2.5 text-xs text-muted-foreground">
             <ArrowDownUp className="size-3.5" aria-hidden="true" />
             <span className="sr-only">{t("projects.sort")}</span>
             <Select value={prefs.sort} onValueChange={(value) => setPrefs((currentPrefs) => ({ ...currentPrefs, sort: value as Sort }))}>
@@ -1129,7 +1129,7 @@ export function ProjectsPage() {
         </div>
       </header>
 
-      <div className="grid min-h-0 gap-4 min-[1280px]:h-[calc(100dvh-16rem)] min-[1280px]:grid-cols-[420px_minmax(0,1fr)]">
+      <div className="grid min-h-0 gap-4 min-[1280px]:flex-1 min-[1280px]:grid-cols-[420px_minmax(0,1fr)]">
         <div className="flex min-h-0 min-w-0 flex-col">
           <div
             data-project-scroll
@@ -1215,7 +1215,7 @@ export function ProjectsPage() {
         ) : (
           <aside
             aria-label={t("projects.detail")}
-            className="hidden min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-border bg-card/20 min-[1280px]:flex"
+            className="hidden min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-border bg-muted/25 min-[1280px]:flex"
           >
             <p className="m-auto max-w-sm px-6 text-center text-sm text-muted-foreground">{t("projects.filtered.title")}</p>
           </aside>

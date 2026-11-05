@@ -21,12 +21,13 @@ interface PageProps extends HTMLAttributes<HTMLDivElement> {
 }
 
 /**
- * Full-width page frame. `<main>` in the layout already reserves the floating
- * Dock's space, so the wrapper only adds the page's own bottom rhythm.
+ * Full-width page frame. The panel's `<main>` is the scroll container; the wrapper
+ * grows to fill it (`flex-1`) and is a column, so a page that fills the panel can
+ * use `flex-1 min-h-0` on its own root instead of a viewport calculation.
  */
 export function Page({ children, className, ...props }: PageProps) {
   return (
-    <div {...props} className={cn("w-full min-w-0 pt-4 pb-8", PAGE_GUTTERS, className)}>
+    <div {...props} className={cn("flex w-full min-w-0 flex-1 flex-col pt-4 pb-8", PAGE_GUTTERS, className)}>
       {children}
     </div>
   );

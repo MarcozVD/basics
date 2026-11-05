@@ -482,7 +482,7 @@ export function InboxPage() {
             <div
               key={group.from}
               data-pack={group.name}
-              className="flex min-w-0 items-center gap-2 rounded-xl border border-border/70 bg-card/50 px-3 py-1.5"
+              className="flex min-w-0 items-center gap-2 rounded-xl border border-border/70 bg-muted/50 px-3 py-1.5"
             >
               <Package className="hidden size-3.5 shrink-0 text-muted-foreground sm:block" aria-hidden="true" />
               <span className="min-w-0 flex-1 truncate text-xs">
@@ -663,7 +663,7 @@ export function InboxPage() {
       {nothingPending ? (
         zeroState
       ) : (
-        <div className="grid min-h-0 gap-4 min-[1280px]:h-[calc(100dvh-16rem)] min-[1280px]:grid-cols-[420px_minmax(0,1fr)]">
+        <div className="grid min-h-0 gap-4 min-[1280px]:flex-1 min-[1280px]:grid-cols-[420px_minmax(0,1fr)]">
           <div className="flex min-h-0 min-w-0 flex-col">
             {packBar ? <div className="mb-3">{packBar}</div> : null}
 
@@ -766,7 +766,7 @@ export function InboxPage() {
 
           <aside
             aria-label={t("page.inbox.title")}
-            className="hidden min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-border bg-card/20 min-[1280px]:flex"
+            className="hidden min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-border bg-muted/25 min-[1280px]:flex"
           >
             {inbox.isPending || (Boolean(current) && detailQuery.isPending) ? (
               <div className="grid h-full place-items-center">

@@ -102,7 +102,7 @@ function matchesQuery(skill: SkillEntry, query: string): boolean {
 
 /** One group of rows: a single card with hairline separators, like Settings. */
 function Rows({ children }: { children: ReactNode }) {
-  return <div className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card">{children}</div>;
+  return <div className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-muted/30">{children}</div>;
 }
 
 function Chip({ tone, children }: { tone: "primary" | "muted"; children: ReactNode }) {
@@ -225,7 +225,7 @@ function AreaControl({
         <SelectTrigger
           aria-label={t("skills.changeArea", { name: skill.name })}
           title={t("skills.changeArea", { name: skill.name })}
-          className="h-6 rounded-full border-border bg-card px-2 py-0 text-[11px]"
+          className="h-6 rounded-full border-border bg-muted/60 px-2 py-0 text-[11px]"
         >
           <SelectValue />
         </SelectTrigger>
@@ -636,7 +636,7 @@ export function SkillsPage() {
               leftIcon={<Search />}
               className="w-full sm:w-64"
               classNames={{
-                field: "h-8 bg-card",
+                field: "h-8 bg-muted/60",
                 input: "text-[13px] [&::-webkit-search-cancel-button]:hidden",
                 leftIcon: "left-2.5",
               }}

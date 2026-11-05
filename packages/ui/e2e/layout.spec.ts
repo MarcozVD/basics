@@ -60,9 +60,9 @@ async function settle(page: import("@playwright/test").Page) {
 }
 
 interface LayoutMetrics {
-  headerPadLeft: number;
   h1Left: number | null;
-  dockTop: number;
+  mainLeft: number | null;
+  panelBottom: number | null;
   gridBottom: number | null;
   mainClientHeight: number;
   mainScrollHeight: number;
@@ -74,16 +74,16 @@ interface LayoutMetrics {
 async function measureHome(page: import("@playwright/test").Page): Promise<LayoutMetrics> {
   return page.evaluate(() => {
     const main = document.querySelector<HTMLElement>("main");
-    const header = document.querySelector<HTMLElement>("header");
-    const dock = document.querySelector<HTMLElement>("nav")?.getBoundingClientRect();
+    const mainBox = main?.getBoundingClientRect();
+    const panelBox = document.querySelector<HTMLElement>('[data-testid="content-panel"]')?.getBoundingClientRect();
     const h1 = document.querySelector<HTMLElement>("h1")?.getBoundingClientRect();
     const grid = document.querySelector<HTMLElement>('[data-testid="home-grid"]')?.getBoundingClientRect();
     const panel = document.querySelector<HTMLElement>('[data-testid="activity-panel"]');
     const row = panel?.querySelector("li")?.getBoundingClientRect();
     return {
-      headerPadLeft: header ? Number.parseFloat(getComputedStyle(header).paddingLeft) : 0,
       h1Left: h1 ? h1.left : null,
-      dockTop: dock ? dock.top : 0,
+      mainLeft: mainBox ? mainBox.left : null,
+      panelBottom: panelBox ? panelBox.bottom : null,
       gridBottom: grid ? grid.bottom : null,
       mainClientHeight: main?.clientHeight ?? 0,
       mainScrollHeight: main?.scrollHeight ?? 0,
@@ -94,7 +94,7 @@ async function measureHome(page: import("@playwright/test").Page): Promise<Layou
   });
 }
 
-test("Home clears the Dock and caps the activity panel on desktop sizes", async ({ page }) => {
+test("Home fills the content panel and caps the activity panel on desktop sizes", async ({ page }) => {
   const restoreActivity = seedActivity(60);
   const restoreInbox = clearInbox();
   try {
@@ -109,16 +109,18 @@ test("Home clears the Dock and caps the activity panel on desktop sizes", async 
 
       const m = await measureHome(page);
 
-      // The top bar's left edge and the page title share the gutter for this width.
-      expect(m.headerPadLeft).toBe(gutter);
-      expect(m.h1Left).toBe(gutter);
+      // The page title starts one gutter inside the scroll container at this width.
+      expect(m.mainLeft).not.toBeNull();
+      expect(m.h1Left).not.toBeNull();
+      expect((m.h1Left as number) - (m.mainLeft as number)).toBe(gutter);
 
       if (width >= 1024) {
-        // The wide layout fills the space above the Dock: the page never scrolls,
-        // the grid's bottom sits above the Dock's top, and the activity panel scrolls.
+        // The wide layout fills the panel: the page never scrolls and the grid's
+        // bottom stays above the panel's bottom edge.
         expect(m.mainScrollHeight).toBeLessThanOrEqual(m.mainClientHeight + 1);
         expect(m.gridBottom).not.toBeNull();
-        expect(m.gridBottom as number).toBeLessThanOrEqual(m.dockTop);
+        expect(m.panelBottom).not.toBeNull();
+        expect(m.gridBottom as number).toBeLessThanOrEqual(m.panelBottom as number);
         expect(m.panelClientHeight).not.toBeNull();
         expect(m.panelScrollHeight as number).toBeGreaterThan(m.panelClientHeight as number);
       } else {
@@ -135,29 +137,29 @@ test("Home clears the Dock and caps the activity panel on desktop sizes", async 
   }
 });
 
-test("every page shares the top bar gutter", async ({ page }) => {
+test("every page shares the panel gutter", async ({ page }) => {
   for (const route of ["/", "/explore", "/projects", "/inbox", "/recommend"]) {
     await page.setViewportSize({ width: 1280, height: 820 });
     await page.goto(route);
     await settle(page);
     const m = await measureHome(page);
-    expect(m.headerPadLeft).toBe(40);
-    expect(m.h1Left, `page title left on ${route}`).toBe(40);
+    expect(m.mainLeft, `main left on ${route}`).not.toBeNull();
+    expect(m.h1Left, `page title left on ${route}`).not.toBeNull();
+    expect((m.h1Left as number) - (m.mainLeft as number), `page title offset on ${route}`).toBe(40);
   }
 });
 
-test("a browser keeps its own window chrome: the header has no window buttons and no drag region", async ({ page }) => {
+test("a browser keeps its own window chrome: no window strip, buttons or drag region", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 820 });
   await page.goto("/");
   await settle(page);
 
-  // The custom title bar belongs to the desktop app only: same UI, native window here.
+  // The custom window strip belongs to the desktop app only: same UI, native window here.
+  await expect(page.getByTestId("content-panel")).toBeVisible();
   await expect(page.getByTestId("window-controls")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Minimize" })).toHaveCount(0);
-  await expect(page.locator("header[data-tauri-drag-region]")).toHaveCount(0);
-  // No chrome is made unselectable either: the header keeps its usual browser look.
-  const chrome = page.locator("header").filter({ has: page.getByTestId("brand-logo") });
-  await expect(chrome).not.toHaveClass(/select-none/);
+  await expect(page.getByTestId("title-strip")).toHaveCount(0);
+  await expect(page.locator("[data-tauri-drag-region]")).toHaveCount(0);
 });
 
 test("a browser keeps its own shortcuts: Ctrl+F and right-click are not taken over", async ({ page }) => {
@@ -180,4 +182,72 @@ test("a browser keeps its own shortcuts: Ctrl+F and right-click are not taken ov
     return event.defaultPrevented;
   });
   expect(menu).toBe(false);
+});
+
+test("the sidebar collapses to a rail and back, following the window width", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 820 });
+  await page.goto("/");
+  await settle(page);
+
+  const sidebar = page.getByTestId("sidebar");
+  await expect(sidebar).toBeVisible();
+  expect(Math.round((await sidebar.boundingBox())?.width ?? 0)).toBe(224);
+
+  // An explicit choice wins over the width default and is remembered.
+  await page.getByTestId("sidebar-toggle").click();
+  await expect.poll(async () => Math.round((await sidebar.boundingBox())?.width ?? 0)).toBe(64);
+  expect(await page.evaluate(() => localStorage.getItem("basics:sidebar"))).toBe("collapsed");
+
+  await page.reload();
+  await settle(page);
+  await expect.poll(async () => Math.round((await sidebar.boundingBox())?.width ?? 0)).toBe(64);
+  expect(await page.evaluate(() => localStorage.getItem("basics:sidebar"))).toBe("collapsed");
+
+  await page.getByTestId("sidebar-toggle").click();
+  await expect.poll(async () => Math.round((await sidebar.boundingBox())?.width ?? 0)).toBe(224);
+});
+
+test("on a narrow window the sidebar hides behind a menu button that opens a drawer", async ({ page }) => {
+  await page.setViewportSize({ width: 480, height: 800 });
+  await page.goto("/");
+  await settle(page);
+
+  await expect(page.getByTestId("sidebar")).toHaveCount(0);
+  const menu = page.getByTestId("sidebar-menu");
+  await expect(menu).toBeVisible();
+
+  await menu.click();
+  const drawer = page.getByRole("dialog");
+  await expect(drawer).toBeVisible();
+  await expect(drawer.getByRole("navigation")).toBeVisible();
+
+  // Escape closes it and focus returns to the button that opened it.
+  await page.keyboard.press("Escape");
+  await expect(drawer).toHaveCount(0);
+  await expect(menu).toBeFocused();
+});
+
+test("the shell fits a 320px browser and the 900x600 minimum window", async ({ page }) => {
+  for (const { width, height } of [
+    { width: 320, height: 640 },
+    { width: 900, height: 600 },
+  ]) {
+    await page.setViewportSize({ width, height });
+    await page.goto("/");
+    await settle(page);
+
+    await expect(page.getByTestId("content-panel")).toBeVisible();
+    // Nothing sticks out sideways: the panel keeps the page inside the window.
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    expect(overflow, `${width}x${height} horizontal overflow`).toBeLessThanOrEqual(1);
+
+    if (width < 768) {
+      await expect(page.getByTestId("sidebar")).toHaveCount(0);
+      await expect(page.getByTestId("sidebar-menu")).toBeVisible();
+    } else {
+      await expect(page.getByTestId("sidebar")).toBeVisible();
+      // Between 768 and 1279 the column is the 64px icon rail.
+      expect(Math.round((await page.getByTestId("sidebar").boundingBox())?.width ?? 0)).toBe(64);
+    }
+  }
 });

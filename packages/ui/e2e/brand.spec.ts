@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-test("serves the favicon and shows the brand mark in the top bar", async ({ page, request }) => {
+test("serves the favicon and shows the brand mark in the sidebar", async ({ page, request }) => {
   const favicon = await request.get("/favicon.svg");
   expect(favicon.status()).toBe(200);
   expect(favicon.headers()["content-type"]).toContain("image/svg+xml");

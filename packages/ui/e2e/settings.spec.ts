@@ -2,13 +2,13 @@ import { expect, test } from "@playwright/test";
 
 const CLIENTS = ["Claude Code", "opencode", "Codex", "Cursor", "Claude Desktop"];
 
-test("opens Settings with Ctrl+, and the header gear marks it current", async ({ page }) => {
+test("opens Settings with Ctrl+, and the sidebar marks it current", async ({ page }) => {
   await page.goto("/");
 
   await page.keyboard.press("Control+,");
   await expect(page).toHaveURL(/\/settings$/);
   await expect(page.getByRole("heading", { name: "Settings", level: 1 })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Settings" })).toHaveAttribute("aria-current", "page");
+  await expect(page.getByTestId("sidebar").getByRole("link", { name: "Settings" })).toHaveAttribute("aria-current", "page");
 
   // The section list is a keyboard path: arrows move the selection, `aria-current` follows.
   const general = page.getByRole("button", { name: "General", exact: true });

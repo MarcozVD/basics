@@ -62,18 +62,18 @@ On the very first launch there is no vault yet. The window shows a **Choose vaul
 
 ## Title bar and window controls
 
-On Windows and Linux the app has no system title bar. Its own header is the title bar:
+On Windows and Linux the app has no system title bar. A thin strip above the content holds the window controls:
 
-- Drag any empty part of the header to move the window. Buttons, **EN | ES** and the theme toggle do not drag.
-- Double-click the empty header to maximize; double-click again to restore.
+- Drag the empty part of the strip, or the top of the sidebar, to move the window.
+- Double-click the strip or the top of the sidebar to maximize; double-click again to restore.
 - **Minimize**, **Maximize / Restore** and **Close** sit at the top right. **Close** hides the window to the tray, like
   the window close described above; the server keeps running.
 - Drag any edge or corner of the window to resize it, on the loading page too. A maximized window does not resize.
 
-On macOS the window keeps its native traffic-light buttons, drawn over the header.
+On macOS the window keeps its native traffic-light buttons, drawn over the top of the sidebar, which leaves room for them.
 
-A browser opened with `basics ui` has no window controls and no drag area: its header and window stay as the browser
-draws them.
+A browser opened with `basics ui` has no strip, no window controls and no drag area: the page starts at the top of the
+window, and the browser draws its own tabs and address bar.
 
 ## What the app window can do
 
@@ -103,8 +103,8 @@ A browser running the same UI (`basics ui`) keeps all of them.
 - Inside a text field, the editing keys keep working: copy, paste, cut, select all and undo. On macOS, Ctrl keeps its
   caret movement keys inside fields.
 - Right-click shows no browser menu, except in fields (inputs and the note editor), where you get copy and paste.
-- Links and images cannot be dragged out of the window. The header and the Dock cannot be selected with the mouse;
-  text on the page can.
+- Links and images cannot be dragged out of the window. The title strip and the top of the sidebar cannot be selected with
+  the mouse; text on the page can.
 
 **DevTools** (F12, Ctrl+Shift+I) are not available in the installed app. The Windows release turns off WebView2's
 browser keys, and the app has no menu to open them. Development builds (`npm run desktop:dev`) keep those keys on, so

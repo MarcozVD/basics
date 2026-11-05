@@ -153,7 +153,9 @@ function Section({ id, title, description, children }: { id: SectionId; title: s
 
 /** One group of rows: a single card with hairline separators, like the rest of the app. */
 function Rows({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={cn("divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card", className)}>{children}</div>;
+  return (
+    <div className={cn("divide-y divide-border overflow-hidden rounded-2xl border border-border bg-muted/30", className)}>{children}</div>
+  );
 }
 
 function Row({
@@ -430,7 +432,7 @@ function DesktopOnlySection({ id, description, body }: { id: SectionId; descript
   const desktop = useMemo(() => isDesktop(), []);
   return (
     <Section id={id} title={t(`settings.${id}.title`)} description={description}>
-      <div className="flex flex-col gap-3 rounded-2xl border border-border bg-card px-4 py-4">
+      <div className="flex flex-col gap-3 rounded-2xl border border-border bg-muted/30 px-4 py-4">
         <div className="flex items-center gap-2 text-muted-foreground">
           <MonitorSmartphone className="size-4 shrink-0" aria-hidden="true" />
           <p className="text-sm font-medium text-foreground">{t("settings.desktopOnly.title")}</p>
@@ -785,7 +787,7 @@ function AgentsSection() {
     <Section id="agents" title={t("settings.agents.title")} description={t("settings.agents.description")}>
       <p className="max-w-[72ch] text-sm text-muted-foreground">{t("settings.agents.explainer")}</p>
 
-      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card px-3 py-2">
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-muted/40 px-3 py-2">
         <span className="text-[11px] font-medium text-muted-foreground">{t("settings.agents.mcpUrl")}</span>
         <code className="min-w-0 flex-1 overflow-x-auto font-mono text-[11px] whitespace-nowrap">{mcpUrl}</code>
         <CopyButton value={mcpUrl} />
