@@ -50,7 +50,7 @@ export const NAV_LINKS: NavLink[] = [
   { to: "/skills", labelKey: "nav.skills", purposeKey: "nav.skills.purpose", icon: Puzzle, shortcut: "K" },
 ];
 
-const SETTINGS_LINK: NavLink = { to: "/settings", labelKey: "nav.settings", icon: Settings, shortcut: ",", chord: true };
+export const SETTINGS_LINK: NavLink = { to: "/settings", labelKey: "nav.settings", icon: Settings, shortcut: ",", chord: true };
 
 /** Expanded width on wide windows. */
 export const SIDEBAR_EXPANDED = 224;
@@ -358,7 +358,7 @@ export function SidebarNav({ collapsed, onNavigate, onToggle, draggable, mac }: 
  * it is an icon rail; below 768px the layout hides it and opens `SidebarNav` in a drawer.
  * An explicit collapse choice (toggle or Ctrl/Cmd+B) wins over the width default.
  */
-export function Sidebar() {
+export function Sidebar({ hidden = false }: { hidden?: boolean }) {
   const reduce = useReducedMotion();
   const wide = useMedia("(min-width: 1280px)");
   const [choice, setChoice] = useState<boolean | null>(readSidebarChoice);
@@ -376,6 +376,8 @@ export function Sidebar() {
   }, []);
 
   useEffect(() => {
+    // Sidebar style only: the floating bar owns navigation while it is on.
+    if (hidden) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (!(event.metaKey || event.ctrlKey) || event.altKey) return;
       if (event.key.toLowerCase() !== "b") return;
@@ -384,17 +386,26 @@ export function Sidebar() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [collapsed, setCollapsed]);
+  }, [collapsed, setCollapsed, hidden]);
 
   return (
     <motion.aside
       data-testid="sidebar"
       initial={false}
-      animate={{ width: collapsed ? SIDEBAR_RAIL : SIDEBAR_EXPANDED }}
-      transition={reduce ? { duration: 0 } : SPRING_LAYOUT}
+      animate={{ width: hidden ? 0 : collapsed ? SIDEBAR_RAIL : SIDEBAR_EXPANDED, opacity: hidden ? 0 : 1 }}
+      transition={{
+        width: reduce ? { duration: 0 } : SPRING_LAYOUT,
+        opacity: { duration: reduce ? 0 : 0.15 },
+      }}
+      inert={hidden || undefined}
+      aria-hidden={hidden || undefined}
       className="relative z-20 flex h-full shrink-0 flex-col overflow-hidden bg-shell"
     >
-      <SidebarNav collapsed={collapsed} onToggle={() => setCollapsed(!collapsed)} draggable={desktop} mac={mac} />
+      {/* The inner column keeps its width while the outer one animates, so labels never
+          wrap as the navigation style changes. */}
+      <div className="h-full shrink-0" style={{ width: collapsed ? SIDEBAR_RAIL : SIDEBAR_EXPANDED }}>
+        <SidebarNav collapsed={collapsed} onToggle={() => setCollapsed(!collapsed)} draggable={desktop} mac={mac} />
+      </div>
     </motion.aside>
   );
 }

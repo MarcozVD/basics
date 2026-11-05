@@ -29,6 +29,7 @@ import { enableEmbeddings, exportStack, recommend } from "@/lib/api";
 import { modChord } from "@/lib/desktop";
 import { EASE_OUT, SPRING_PANEL } from "@/lib/ease";
 import { useEmbeddingsProgress } from "@/lib/events";
+import { DOCK_SPACE, useResolvedDockEdge } from "@/lib/navigation";
 import { queryKeys, useEmbeddings, useLayers, useStats } from "@/lib/queries";
 import { clearRecommend, updateAgent, updateRecommend, useRecommendStore } from "@/lib/recommend-store";
 import { useReturnFocus } from "@/lib/return-focus";
@@ -342,6 +343,9 @@ function ResultsSkeleton({ layers, perLayer, label }: { layers: string[]; perLay
 export function RecommendPage() {
   const t = useT();
   const reduce = useReducedMotion() ?? false;
+  const dockEdge = useResolvedDockEdge();
+  // The selection pill sits above the floating bar when it rests on the bottom edge.
+  const barBottom = BAR_BOTTOM + (dockEdge === "bottom" ? DOCK_SPACE : 0);
   const layersQuery = useLayers();
   const stats = useStats();
   const vaultEmpty = stats.data?.total === 0;
@@ -728,7 +732,7 @@ export function RecommendPage() {
                   animate={{ opacity: 1, y: 0, x: "-50%" }}
                   exit={{ opacity: 0, y: reduce ? 0 : 8, x: "-50%", transition: { duration: 0.12, ease: EASE_OUT } }}
                   transition={reduce ? { duration: 0.12 } : SPRING_PANEL}
-                  style={{ bottom: BAR_BOTTOM }}
+                  style={{ bottom: barBottom }}
                   className="fixed left-1/2 z-40 flex items-center gap-1 rounded-full border bg-card/85 py-1 pr-1 pl-1 shadow-[0_8px_30px_rgba(0,0,0,0.25)] backdrop-blur-xl"
                 >
                   <button

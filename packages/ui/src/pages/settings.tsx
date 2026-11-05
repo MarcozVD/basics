@@ -24,6 +24,7 @@ import {
   writeDesktopSettings,
 } from "@/lib/desktop";
 import { useEmbeddingsProgress } from "@/lib/events";
+import { type DockEdge, type NavigationStyle, setDockEdge, setNavigationStyle, useNavigation } from "@/lib/navigation";
 import { queryKeys, useConnectStatus, useEmbeddings, useHealth } from "@/lib/queries";
 import { type Theme, useTheme } from "@/lib/theme";
 import { toast } from "@/lib/toast";
@@ -257,10 +258,13 @@ function GeneralSection() {
   const t = useT();
   const { language, setLanguage } = useI18n();
   const { theme, setTheme } = useTheme();
+  const navigation = useNavigation();
   const health = useHealth();
   const desktop = useMemo(() => isDesktop(), []);
   const [savedLanguage, flashLanguage] = useSavedFlash();
   const [savedTheme, flashTheme] = useSavedFlash();
+  const [savedNavigation, flashNavigation] = useSavedFlash();
+  const [savedEdge, flashEdge] = useSavedFlash();
   const [languageError, setLanguageError] = useState(false);
   // Vault actions exist only in the desktop app; in a browser the CLI hint below is all.
   const [confirmChange, setConfirmChange] = useState(false);
@@ -354,6 +358,43 @@ function GeneralSection() {
             </Tabs>
           </fieldset>
         </Row>
+        <Row
+          title={t("nav.style.title")}
+          description={t("nav.style.description")}
+          status={<SavedHint visible={savedNavigation} />}
+          vertical
+        >
+          <ChoiceGroup<NavigationStyle>
+            label={t("nav.style.title")}
+            value={navigation.style}
+            onChange={(value) => {
+              setNavigationStyle(value);
+              flashNavigation();
+            }}
+            options={[
+              { value: "sidebar", label: t("nav.style.sidebar") },
+              { value: "floating", label: t("nav.style.floating") },
+            ]}
+          />
+        </Row>
+        {navigation.style === "floating" ? (
+          <Row title={t("nav.edge.title")} description={t("nav.edge.description")} status={<SavedHint visible={savedEdge} />} vertical>
+            <ChoiceGroup<DockEdge>
+              label={t("nav.edge.title")}
+              value={navigation.edge}
+              onChange={(value) => {
+                setDockEdge(value);
+                flashEdge();
+              }}
+              options={[
+                { value: "bottom", label: t("nav.edge.bottom") },
+                { value: "top", label: t("nav.edge.top") },
+                { value: "left", label: t("nav.edge.left") },
+                { value: "right", label: t("nav.edge.right") },
+              ]}
+            />
+          </Row>
+        ) : null}
         <Row title={t("settings.vault.title")} description={t("settings.vault.description")} vertical={desktop}>
           <div className="flex min-w-0 items-center gap-2">
             <span title={vault} className="max-w-[42ch] truncate font-mono text-[11px] text-muted-foreground max-sm:max-w-[52vw]">
@@ -1081,7 +1122,7 @@ export function SettingsPage() {
 
       <Reveal index={1}>
         <div className="grid min-w-0 gap-6 lg:grid-cols-[180px_minmax(0,1fr)] lg:gap-10">
-          <nav aria-label={t("settings.sections")} className="lg:sticky lg:top-4 lg:self-start">
+          <nav aria-label={t("settings.sections")} className="lg:sticky lg:top-[calc(var(--nav-top,0px)+1rem)] lg:self-start">
             <ul className="flex gap-1 overflow-x-auto pb-1 lg:flex-col lg:overflow-visible lg:pb-0">
               {SECTIONS.map((section, index) => {
                 const current = section === active;

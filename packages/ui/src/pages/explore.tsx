@@ -341,7 +341,7 @@ export function ExplorePage() {
 
   return (
     <Page className={cn("pt-0", PAGE_SECTIONS)}>
-      <Reveal index={0} className="mx-page-gutter sticky top-0 z-20 bg-card px-page-gutter pt-4 pb-0">
+      <Reveal index={0} className="mx-page-gutter sticky top-[var(--nav-top,0px)] z-20 bg-card px-page-gutter pt-4 pb-0">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-baseline gap-2">
             <h1 className="text-xl font-semibold tracking-tight">{t("page.explore.title")}</h1>

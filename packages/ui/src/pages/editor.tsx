@@ -425,7 +425,7 @@ export function EditorPage() {
   );
 
   const header = (
-    <header className="sticky top-0 z-30 flex items-center gap-2 border-b border-border/60 bg-card py-2">
+    <header className="sticky top-[var(--nav-top,0px)] z-30 flex items-center gap-2 border-b border-border/60 bg-card py-2">
       <Breadcrumb className="min-w-0 flex-1">
         <BreadcrumbList maxItems={Number.POSITIVE_INFINITY} className="flex-nowrap gap-x-0.5 text-xs">
           <BreadcrumbItem key="explore">

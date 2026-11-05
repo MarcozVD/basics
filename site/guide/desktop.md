@@ -153,6 +153,17 @@ defaults, so the app still starts.
   `basics init`, the same as on first run, and the server restarts with it. Notes in the old folder are not moved.
   Cancel changes nothing.
 
+**General → Navigation** chooses how the main navigation looks:
+
+- **Sidebar** (default): a column on the left with the labels.
+- **Floating**: the same items in a bar. Drag its grip (the handle at its start) to the bottom, top, left or right edge; it
+  snaps to the nearest edge when you let go. Left and right show the bar vertically; if the window is too short for that,
+  the bar stays at the bottom. **Bar position** in the same section sets the edge without dragging.
+- With the grip focused, the arrow keys move the bar, and the new edge is announced to screen readers.
+
+The window content leaves room for the bar on its edge, so nothing scrolls under it. The choice is saved in the app and
+applies without a restart. Below 768px wide both styles use the menu button and drawer.
+
 **Settings → Updates** shows the installed version, the result of the last check, **Check now**, and the **Check for
 updates on start** switch. See [Updates](#updates).
 

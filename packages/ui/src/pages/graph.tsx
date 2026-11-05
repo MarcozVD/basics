@@ -20,6 +20,7 @@ import { Button as LinkButton } from "@/components/ui/button";
 import { type TranslationKey, useT } from "@/i18n";
 import { modChord } from "@/lib/desktop";
 import { EASE_OUT, SPRING_PRESS } from "@/lib/ease";
+import { DOCK_SPACE, DOCK_SPACE_VERTICAL, useResolvedDockEdge } from "@/lib/navigation";
 import { PAGE_ENTER_MS, PAGE_REDUCED_MS } from "@/lib/page-transition";
 import { useGraph, useHealth, useLayers, useNote, useNotes, useStats } from "@/lib/queries";
 import { cn } from "@/lib/utils";
@@ -52,6 +53,8 @@ export function GraphPage() {
   const t = useT();
   const navigate = useNavigate();
   const reduce = useReducedMotion() ?? false;
+  // The floating bar's edge decides where the toolbar, the fit area and the drawer sit.
+  const dockEdge = useResolvedDockEdge();
   const canvasRef = useRef<GraphCanvasHandle>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -103,7 +106,7 @@ export function GraphPage() {
     return () => observer.disconnect();
   }, []);
 
-  const toolbarTop = TOOLBAR_OFFSET;
+  const toolbarTop = TOOLBAR_OFFSET + (dockEdge === "top" ? DOCK_SPACE : 0);
 
   // ⌘F / Ctrl+F jumps to the node search, like Explore.
   useEffect(() => {
@@ -130,7 +133,23 @@ export function GraphPage() {
     canvasRef.current?.fit();
   }, [toolbarHeight]);
 
-  const insets: Insets = useMemo(() => ({ top: toolbarTop + toolbarHeight + 20, right: 32, bottom: 24, left: 32 }), [toolbarHeight]);
+  // Refit when the bar changes edge: the fit area moved even if the toolbar did not.
+  const lastDockEdge = useRef(dockEdge);
+  useEffect(() => {
+    if (lastDockEdge.current === dockEdge) return;
+    lastDockEdge.current = dockEdge;
+    canvasRef.current?.fit();
+  }, [dockEdge]);
+
+  const insets: Insets = useMemo(
+    () => ({
+      top: toolbarTop + toolbarHeight + 20,
+      right: 32 + (dockEdge === "right" ? DOCK_SPACE_VERTICAL : 0),
+      bottom: 24 + (dockEdge === "bottom" ? DOCK_SPACE : 0),
+      left: 32 + (dockEdge === "left" ? DOCK_SPACE_VERTICAL : 0),
+    }),
+    [toolbarTop, toolbarHeight, dockEdge],
+  );
 
   const byId = useMemo(() => new Map((data?.nodes ?? []).map((node) => [node.id, node])), [data]);
 
@@ -490,7 +509,9 @@ export function GraphPage() {
         ariaLabel={t("graph.drawer")}
         backdropClassName="bg-transparent backdrop-blur-none"
         className={cn(
-          "top-[60px] right-3 bottom-[86px] w-[360px] rounded-2xl border border-border",
+          "right-3 bottom-[86px] w-[360px] rounded-2xl border border-border",
+          dockEdge === "top" ? "top-[142px]" : "top-[60px]",
+          dockEdge === "right" && "right-[94px]",
           "bg-popover/90 shadow-[0_8px_30px_rgba(0,0,0,0.25)] backdrop-blur-xl",
         )}
       >

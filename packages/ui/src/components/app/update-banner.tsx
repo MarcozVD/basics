@@ -5,6 +5,7 @@ import { Button } from "@/components/motion/button/base";
 import { useT } from "@/i18n";
 import { isDesktop } from "@/lib/desktop";
 import { EASE_OUT } from "@/lib/ease";
+import { useResolvedDockEdge } from "@/lib/navigation";
 import { dismissUpdate, installUpdate, useUpdateState } from "@/lib/updater";
 import { cn } from "@/lib/utils";
 
@@ -19,6 +20,7 @@ export function UpdateBanner() {
   const t = useT();
   const reduce = useReducedMotion();
   const desktop = useMemo(() => isDesktop(), []);
+  const dockEdge = useResolvedDockEdge();
   const update = useUpdateState();
   const [notesOpen, setNotesOpen] = useState(false);
   const info = update.update;
@@ -26,6 +28,8 @@ export function UpdateBanner() {
   const percent = update.total && update.total > 0 ? Math.min(100, Math.round((update.downloaded / update.total) * 100)) : null;
   const downloading = update.phase === "downloading";
   const installing = update.phase === "installing";
+  // Keep clear of the navigation bar: top edge sits below it, right edge moves it left.
+  const positionClass = dockEdge === "top" ? "top-[126px] right-4" : dockEdge === "right" ? "top-16 left-4" : "top-16 right-4";
 
   return (
     <AnimatePresence>
@@ -38,7 +42,10 @@ export function UpdateBanner() {
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: reduce ? 0 : -8 }}
           transition={{ duration: 0.18, ease: EASE_OUT }}
-          className="fixed top-16 right-4 z-40 w-[min(400px,calc(100vw-2rem))] rounded-2xl border border-border bg-card p-4 shadow-[0_12px_36px_rgba(0,0,0,0.28)]"
+          className={cn(
+            "fixed z-40 w-[min(400px,calc(100vw-2rem))] rounded-2xl border border-border bg-card p-4 shadow-[0_12px_36px_rgba(0,0,0,0.28)]",
+            positionClass,
+          )}
         >
           <div className="flex items-start gap-3">
             <span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-full bg-primary/10 text-primary-text">

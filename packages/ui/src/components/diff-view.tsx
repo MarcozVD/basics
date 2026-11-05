@@ -201,7 +201,7 @@ export function DiffView({ before, after, file }: { before: string | null; after
           <UnifiedRows segments={segments} expanded={expanded} onToggle={toggle} />
         ) : (
           <>
-            <div className="sticky top-0 z-10 grid grid-cols-2 border-b border-border bg-muted/40 text-[11px] font-medium text-muted-foreground">
+            <div className="sticky top-[var(--nav-top,0px)] z-10 grid grid-cols-2 border-b border-border bg-muted/40 text-[11px] font-medium text-muted-foreground">
               <div className="border-r border-border/60 px-3 py-1.5">{t("diff.current")}</div>
               <div className="px-3 py-1.5">{t("diff.proposed")}</div>
             </div>

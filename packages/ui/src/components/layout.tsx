@@ -1,6 +1,6 @@
 import { Menu } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { memo, type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, memo, type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   type Location,
   type NavigationType,
@@ -11,6 +11,7 @@ import {
   useOutlet,
 } from "react-router";
 import { AppCommandPalette } from "@/components/app/command-palette";
+import { FloatingNav } from "@/components/app/floating-nav";
 import { NewNoteDialog } from "@/components/app/new-note-dialog";
 import { Sidebar, SidebarNav } from "@/components/app/sidebar";
 import { UpdateBanner } from "@/components/app/update-banner";
@@ -22,10 +23,12 @@ import { isAgentRunActive, useAgentRunStatus } from "@/lib/agent-run";
 import { isDesktop, isMacos } from "@/lib/desktop";
 import { useDesktopShell } from "@/lib/desktop-shell";
 import { EASE_IN, EASE_OUT } from "@/lib/ease";
+import { DOCK_SPACE, DOCK_SPACE_VERTICAL, DOCK_VERTICAL_MIN, type DockEdge, setDockEdge, useNavigation } from "@/lib/navigation";
 import { PAGE_ENTER_MS, PAGE_ENTER_OFFSET, PAGE_EXIT_MS, PAGE_EXIT_OFFSET, PAGE_REDUCED_MS, pageDirection } from "@/lib/page-transition";
 import { useGlobalShortcuts } from "@/lib/shortcuts";
 import { dismissToast, toast, useToasts } from "@/lib/toast";
 import { startUpdater } from "@/lib/updater";
+import { cn } from "@/lib/utils";
 
 /** Below this the sidebar hides behind a menu button and opens in a drawer. */
 const MOBILE_QUERY = "(max-width: 767px)";
@@ -138,6 +141,45 @@ export function Layout() {
   };
   const [menuOpen, setMenuOpen] = useState(false);
   const mobile = useMedia(MOBILE_QUERY);
+  // Navigation style is local and applied without a reload. On a phone both styles use
+  // the drawer, so the stored style returns when the window grows again.
+  const navigation = useNavigation();
+  const floating = navigation.style === "floating" && !mobile;
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [panelHeight, setPanelHeight] = useState(() => (typeof window === "undefined" ? 0 : window.innerHeight));
+  useLayoutEffect(() => {
+    const panel = panelRef.current;
+    if (!panel) return;
+    const measure = () => setPanelHeight(panel.clientHeight);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(panel);
+    return () => observer.disconnect();
+  }, []);
+  // A vertical bar needs a tall enough panel; otherwise it snaps to the bottom without
+  // losing the remembered edge, so growing the window brings it back.
+  const requestedEdge = navigation.edge;
+  const edge: DockEdge =
+    floating && (requestedEdge === "left" || requestedEdge === "right") && panelHeight < DOCK_VERTICAL_MIN ? "bottom" : requestedEdge;
+  const navSpace = edge === "top" || edge === "bottom" ? DOCK_SPACE : DOCK_SPACE_VERTICAL;
+  // Reserve the bar's edge with margins, not padding: pages size themselves to `main`
+  // and overflow it, so padding would not stop content scrolling under the bar. Margins
+  // shrink the scrollport itself, which guarantees nothing interactive lands beneath it.
+  const mainStyle: CSSProperties = floating
+    ? {
+        marginTop: edge === "top" ? navSpace : undefined,
+        marginRight: edge === "right" ? navSpace : undefined,
+        marginBottom: edge === "bottom" ? navSpace : undefined,
+        marginLeft: edge === "left" ? navSpace : undefined,
+        scrollPaddingTop: edge === "top" ? navSpace : STICKY_SPACE,
+        scrollPaddingRight: edge === "right" ? navSpace : undefined,
+        scrollPaddingBottom: edge === "bottom" ? navSpace : 32,
+        scrollPaddingLeft: edge === "left" ? navSpace : undefined,
+        // The bar sits outside the scrollport (reserved by margin), so sticky headers
+        // stick to a top that is already clear of it.
+        ["--nav-top" as string]: "0px",
+      }
+    : { scrollPaddingBottom: 32, scrollPaddingTop: STICKY_SPACE, ["--nav-top" as string]: "0px" };
   // Window chrome is the app's own only inside the desktop app; a browser keeps its
   // native title bar, find bar and reload. `isDesktop()` never changes for a page.
   const desktop = useMemo(() => isDesktop(), []);
@@ -183,7 +225,7 @@ export function Layout() {
 
   return (
     <div className="flex h-dvh overflow-hidden bg-shell text-foreground">
-      {!mobile ? <Sidebar /> : null}
+      {!mobile ? <Sidebar hidden={floating} /> : null}
 
       <div className="relative flex min-w-0 flex-1 flex-col">
         {desktop ? (
@@ -196,14 +238,11 @@ export function Layout() {
         ) : null}
 
         <div
+          ref={panelRef}
           data-testid="content-panel"
           className="relative m-2 flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-card"
         >
-          <main
-            ref={scrollRef}
-            style={{ scrollPaddingBottom: 32, scrollPaddingTop: STICKY_SPACE }}
-            className="min-h-0 flex-1 overflow-x-clip overflow-y-auto max-md:pt-12"
-          >
+          <main ref={scrollRef} style={mainStyle} className="min-h-0 flex-1 overflow-x-clip overflow-y-auto max-md:pt-12">
             <AnimatePresence mode="popLayout" initial={false} custom={transitionCustom}>
               <motion.div
                 key={pageKey}
@@ -219,6 +258,8 @@ export function Layout() {
               </motion.div>
             </AnimatePresence>
           </main>
+
+          {floating ? <FloatingNav edge={edge} onEdgeChange={setDockEdge} /> : null}
 
           {mobile ? (
             <button
@@ -247,7 +288,13 @@ export function Layout() {
 
       {/* Above portalled popovers (`z-[9999]`): a toast action such as "Open" must stay
           clickable even while a dropdown is open over the panel corner. */}
-      <AnimatedToastStack toasts={toasts} onDismiss={dismissToast} position="bottom-right" fixed className="z-[10000]" />
+      <AnimatedToastStack
+        toasts={toasts}
+        onDismiss={dismissToast}
+        position={floating && edge === "right" ? "bottom-left" : "bottom-right"}
+        fixed
+        className={cn("z-[10000]", floating && edge === "bottom" && "bottom-28")}
+      />
       <UpdateBanner />
       <AppCommandPalette />
       <NewNoteDialog />
