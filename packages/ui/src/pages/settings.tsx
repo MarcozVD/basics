@@ -7,7 +7,7 @@ import { Button } from "@/components/motion/button/base";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/motion/collapsible";
 import { Switch } from "@/components/motion/switch";
 import { Tabs, TabsList, TabsTrigger } from "@/components/motion/tabs";
-import { PAGE_SECTIONS, Page } from "@/components/page";
+import { PAGE_SECTIONS, Page, Reveal } from "@/components/page";
 import { ErrorState, Loading } from "@/components/state";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { type TranslationKey, useI18n, useT } from "@/i18n";
@@ -1072,57 +1072,61 @@ export function SettingsPage() {
 
   return (
     <Page className={PAGE_SECTIONS}>
-      <div className="flex flex-col gap-1">
-        <h1 className="text-xl font-semibold tracking-tight">{t("settings.title")}</h1>
-        <p className="max-w-[68ch] text-sm text-muted-foreground">{t("settings.description")}</p>
-      </div>
-
-      <div className="grid min-w-0 gap-6 lg:grid-cols-[180px_minmax(0,1fr)] lg:gap-10">
-        <nav aria-label={t("settings.sections")} className="lg:sticky lg:top-4 lg:self-start">
-          <ul className="flex gap-1 overflow-x-auto pb-1 lg:flex-col lg:overflow-visible lg:pb-0">
-            {SECTIONS.map((section, index) => {
-              const current = section === active;
-              return (
-                <li key={section} className="shrink-0">
-                  <button
-                    type="button"
-                    ref={(element) => {
-                      buttons.current[index] = element;
-                    }}
-                    aria-current={current ? "true" : undefined}
-                    onClick={() => select(section)}
-                    onKeyDown={(event) => onNavKeyDown(event, index)}
-                    className={cn(
-                      "w-full rounded-full px-3 py-1.5 text-left text-sm whitespace-nowrap transition-colors lg:whitespace-normal",
-                      "focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring",
-                      current ? "bg-muted font-medium text-foreground" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-                    )}
-                  >
-                    {t(SECTION_LABEL[section])}
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </nav>
-
-        <div className="min-w-0">
-          <motion.div
-            key={active}
-            initial={{ opacity: 0, y: reduce ? 0 : 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.15 }}
-            className="min-w-0"
-          >
-            {active === "general" ? <GeneralSection /> : null}
-            {active === "startup" ? <StartupSection /> : null}
-            {active === "agents" ? <AgentsSection /> : null}
-            {active === "search" ? <SearchSection /> : null}
-            {active === "updates" ? <UpdatesSection /> : null}
-            {active === "about" ? <AboutSection /> : null}
-          </motion.div>
+      <Reveal index={0}>
+        <div className="flex flex-col gap-1">
+          <h1 className="text-xl font-semibold tracking-tight">{t("settings.title")}</h1>
+          <p className="max-w-[68ch] text-sm text-muted-foreground">{t("settings.description")}</p>
         </div>
-      </div>
+      </Reveal>
+
+      <Reveal index={1}>
+        <div className="grid min-w-0 gap-6 lg:grid-cols-[180px_minmax(0,1fr)] lg:gap-10">
+          <nav aria-label={t("settings.sections")} className="lg:sticky lg:top-4 lg:self-start">
+            <ul className="flex gap-1 overflow-x-auto pb-1 lg:flex-col lg:overflow-visible lg:pb-0">
+              {SECTIONS.map((section, index) => {
+                const current = section === active;
+                return (
+                  <li key={section} className="shrink-0">
+                    <button
+                      type="button"
+                      ref={(element) => {
+                        buttons.current[index] = element;
+                      }}
+                      aria-current={current ? "true" : undefined}
+                      onClick={() => select(section)}
+                      onKeyDown={(event) => onNavKeyDown(event, index)}
+                      className={cn(
+                        "w-full rounded-full px-3 py-1.5 text-left text-sm whitespace-nowrap transition-colors lg:whitespace-normal",
+                        "focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring",
+                        current ? "bg-muted font-medium text-foreground" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                      )}
+                    >
+                      {t(SECTION_LABEL[section])}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </nav>
+
+          <div className="min-w-0">
+            <motion.div
+              key={active}
+              initial={{ opacity: 0, y: reduce ? 0 : 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.15 }}
+              className="min-w-0"
+            >
+              {active === "general" ? <GeneralSection /> : null}
+              {active === "startup" ? <StartupSection /> : null}
+              {active === "agents" ? <AgentsSection /> : null}
+              {active === "search" ? <SearchSection /> : null}
+              {active === "updates" ? <UpdatesSection /> : null}
+              {active === "about" ? <AboutSection /> : null}
+            </motion.div>
+          </div>
+        </div>
+      </Reveal>
     </Page>
   );
 }

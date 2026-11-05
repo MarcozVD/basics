@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsList, TabsTrigger } from "@/components/motion/tabs";
 import { Tooltip } from "@/components/motion/tooltip";
 import { TypeChip } from "@/components/note-form/note-preview";
-import { PAGE_SECTIONS, Page } from "@/components/page";
+import { PAGE_SECTIONS, Page, Reveal } from "@/components/page";
 import { ErrorState, Loading } from "@/components/state";
 import { Button as LinkButton } from "@/components/ui/button";
 import { type TranslationKey, useT } from "@/i18n";
@@ -331,7 +331,7 @@ export function ExplorePage() {
 
   return (
     <Page className={cn("pt-0", PAGE_SECTIONS)}>
-      <div className="mx-page-gutter sticky top-0 z-20 bg-card px-page-gutter pt-4 pb-0">
+      <Reveal index={0} className="mx-page-gutter sticky top-0 z-20 bg-card px-page-gutter pt-4 pb-0">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-baseline gap-2">
             <h1 className="text-xl font-semibold tracking-tight">{t("page.explore.title")}</h1>
@@ -473,7 +473,7 @@ export function ExplorePage() {
         </fieldset>
 
         {view === "list" && rows.length > 0 ? <ListHeader sort={sort} onSort={setSort} /> : null}
-      </div>
+      </Reveal>
 
       <div className="pt-1">
         {listQuery.isPending ? (

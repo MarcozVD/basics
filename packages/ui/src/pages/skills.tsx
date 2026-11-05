@@ -6,7 +6,7 @@ import { Link, useSearchParams } from "react-router";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/motion/collapsible";
 import { Input } from "@/components/motion/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/motion/select";
-import { PAGE_SECTIONS, Page } from "@/components/page";
+import { PAGE_SECTIONS, Page, Reveal } from "@/components/page";
 import { ErrorState, Loading } from "@/components/state";
 import { type TranslationKey, useT } from "@/i18n";
 import { agentColor } from "@/lib/agent-color";
@@ -597,80 +597,82 @@ export function SkillsPage() {
 
   return (
     <Page className={PAGE_SECTIONS}>
-      <div className="flex flex-col gap-3">
-        <div className="flex flex-col gap-1">
-          <h1 className="text-xl font-semibold tracking-tight">{t("page.skills.title")}</h1>
-          <p className="max-w-[68ch] text-sm text-muted-foreground">{t("skills.description")}</p>
-        </div>
-
-        <div className="flex flex-col gap-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <fieldset
-              className="m-0 flex min-w-0 flex-1 basis-60 flex-wrap items-center gap-1.5 border-0 p-0"
-              aria-label={t("skills.filters")}
-            >
-              <FilterChip selected={agent === "all"} count={counts.all} onClick={() => setAgent("all")}>
-                {t("skills.filter.all")}
-              </FilterChip>
-              {SKILL_AGENTS.map((id) => (
-                <FilterChip
-                  key={id}
-                  selected={agent === id}
-                  count={counts[id]}
-                  disabled={counts[id] === 0 && agent !== id}
-                  hint={id === "shared" ? t("skills.agent.shared.hint") : undefined}
-                  onClick={() => setAgent(id)}
-                >
-                  {t(AGENT_LABEL[id])}
-                </FilterChip>
-              ))}
-            </fieldset>
-
-            <Input
-              type="search"
-              value={query}
-              onChange={setQuery}
-              placeholder={t("skills.searchPlaceholder")}
-              aria-label={t("skills.searchPlaceholder")}
-              id={searchId}
-              leftIcon={<Search />}
-              className="w-full sm:w-64"
-              classNames={{
-                field: "h-8 bg-muted/60",
-                input: "text-[13px] [&::-webkit-search-cancel-button]:hidden",
-                leftIcon: "left-2.5",
-              }}
-            />
+      <Reveal index={0}>
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-1">
+            <h1 className="text-xl font-semibold tracking-tight">{t("page.skills.title")}</h1>
+            <p className="max-w-[68ch] text-sm text-muted-foreground">{t("skills.description")}</p>
           </div>
 
-          {visibleAreas.length > 0 ? (
-            <fieldset className="m-0 flex min-w-0 flex-wrap items-center gap-1.5 border-0 p-0" aria-label={t("skills.filters.areas")}>
-              <FilterChip selected={area === "all"} count={areaTotal} onClick={() => setAreaFilter("all")}>
-                {t("skills.filter.allAreas")}
-              </FilterChip>
-              {visibleAreas.map((id) => (
-                <FilterChip
-                  key={id}
-                  selected={area === id}
-                  count={areaCounts[id]}
-                  disabled={areaCounts[id] === 0 && area !== id}
-                  onClick={() => setAreaFilter(id)}
-                >
-                  {t(AREA_LABEL[id])}
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <fieldset
+                className="m-0 flex min-w-0 flex-1 basis-60 flex-wrap items-center gap-1.5 border-0 p-0"
+                aria-label={t("skills.filters")}
+              >
+                <FilterChip selected={agent === "all"} count={counts.all} onClick={() => setAgent("all")}>
+                  {t("skills.filter.all")}
                 </FilterChip>
-              ))}
-            </fieldset>
-          ) : null}
+                {SKILL_AGENTS.map((id) => (
+                  <FilterChip
+                    key={id}
+                    selected={agent === id}
+                    count={counts[id]}
+                    disabled={counts[id] === 0 && agent !== id}
+                    hint={id === "shared" ? t("skills.agent.shared.hint") : undefined}
+                    onClick={() => setAgent(id)}
+                  >
+                    {t(AGENT_LABEL[id])}
+                  </FilterChip>
+                ))}
+              </fieldset>
+
+              <Input
+                type="search"
+                value={query}
+                onChange={setQuery}
+                placeholder={t("skills.searchPlaceholder")}
+                aria-label={t("skills.searchPlaceholder")}
+                id={searchId}
+                leftIcon={<Search />}
+                className="w-full sm:w-64"
+                classNames={{
+                  field: "h-8 bg-muted/60",
+                  input: "text-[13px] [&::-webkit-search-cancel-button]:hidden",
+                  leftIcon: "left-2.5",
+                }}
+              />
+            </div>
+
+            {visibleAreas.length > 0 ? (
+              <fieldset className="m-0 flex min-w-0 flex-wrap items-center gap-1.5 border-0 p-0" aria-label={t("skills.filters.areas")}>
+                <FilterChip selected={area === "all"} count={areaTotal} onClick={() => setAreaFilter("all")}>
+                  {t("skills.filter.allAreas")}
+                </FilterChip>
+                {visibleAreas.map((id) => (
+                  <FilterChip
+                    key={id}
+                    selected={area === id}
+                    count={areaCounts[id]}
+                    disabled={areaCounts[id] === 0 && area !== id}
+                    onClick={() => setAreaFilter(id)}
+                  >
+                    {t(AREA_LABEL[id])}
+                  </FilterChip>
+                ))}
+              </fieldset>
+            ) : null}
+          </div>
+
+          <BasicsSkillNotice />
+
+          <p role="status" aria-live="polite" className="sr-only">
+            {t("skills.results", { count: filtered.length })}
+          </p>
         </div>
+      </Reveal>
 
-        <BasicsSkillNotice />
-
-        <p role="status" aria-live="polite" className="sr-only">
-          {t("skills.results", { count: filtered.length })}
-        </p>
-      </div>
-
-      {body()}
+      <Reveal index={1}>{body()}</Reveal>
     </Page>
   );
 }

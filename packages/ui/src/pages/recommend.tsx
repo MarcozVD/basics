@@ -18,7 +18,7 @@ import { CARD_TARGET_CLASS, Card, CardContent, CardHeader } from "@/components/m
 import { Checkbox } from "@/components/motion/checkbox";
 import { Loader } from "@/components/motion/loader";
 import { Tooltip } from "@/components/motion/tooltip";
-import { PAGE_SECTIONS, Page } from "@/components/page";
+import { PAGE_SECTIONS, Page, Reveal } from "@/components/page";
 import { AgentPanel } from "@/components/recommend/agent-panel";
 import { CreateProjectDialog } from "@/components/recommend/create-project-dialog";
 import { ErrorState } from "@/components/state";
@@ -480,171 +480,177 @@ export function RecommendPage() {
   return (
     <div className="min-h-full">
       <Page className={cn(PAGE_SECTIONS, selected.size > 0 && "pb-16")}>
-        <div className="flex flex-col gap-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-xl font-semibold tracking-tight">{t("page.recommend.title")}</h1>
-            {recommendation ? <ModeIndicator mode={recommendation.mode} /> : null}
+        <Reveal index={0}>
+          <div className="flex flex-col gap-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-xl font-semibold tracking-tight">{t("page.recommend.title")}</h1>
+              {recommendation ? <ModeIndicator mode={recommendation.mode} /> : null}
+              {recommendation?.mode === "keywords" ? (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  pressScale={0.97}
+                  className="h-7 px-2.5"
+                  disabled={enableSemantic.isPending}
+                  onClick={() => enableSemantic.mutate()}
+                >
+                  {enableSemantic.isPending ? (
+                    <Loader variant="spinner" size={14} label={t("recommend.enableHybrid.working")} />
+                  ) : (
+                    <Sparkles className="size-3.5" aria-hidden="true" />
+                  )}
+                  {t("recommend.enableHybrid")}
+                </Button>
+              ) : null}
+              {(description.trim() || recommendation) && (
+                <Button variant="ghost" size="sm" pressScale={0.97} className="h-7 px-2.5" onClick={clear}>
+                  {t("recommend.reset")}
+                </Button>
+              )}
+            </div>
+            <p className="max-w-[68ch] text-sm text-muted-foreground">{t("recommend.intro")}</p>
             {recommendation?.mode === "keywords" ? (
+              <div className="flex flex-col gap-1 text-xs text-muted-foreground">
+                {embeddings.data ? (
+                  <p>
+                    {t("recommend.enableHybrid.explain", {
+                      model: embeddings.data.model,
+                      size: formatBytes(embeddings.data.download.total),
+                    })}
+                  </p>
+                ) : null}
+                {enableSemantic.isPending ? (
+                  <p role="status" className="flex items-center gap-1.5">
+                    <Loader variant="spinner" size={12} label={t("recommend.enableHybrid.working")} />
+                    {enableProgress
+                      ? t("recommend.enableHybrid.progress", { done: enableProgress.done, total: enableProgress.total })
+                      : t("recommend.enableHybrid.working")}
+                  </p>
+                ) : null}
+                {enableSemantic.isError ? (
+                  <p role="alert" className="text-destructive">
+                    {enableSemantic.error instanceof Error ? enableSemantic.error.message : t("recommend.enableHybrid.failed")}
+                  </p>
+                ) : null}
+                <button
+                  type="button"
+                  aria-label={`${t("recommend.copyCli")}: ${EMBEDDINGS_CLI}`}
+                  title={t("recommend.copyCli")}
+                  onClick={() => void copyText(EMBEDDINGS_CLI)}
+                  className="mt-0.5 inline-flex h-6 max-w-full items-center gap-1.5 self-start rounded-md border border-border bg-muted/60 px-2 font-mono text-[10.5px] text-foreground transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                >
+                  <span className="truncate">{EMBEDDINGS_CLI}</span>
+                  <Copy className="size-3 shrink-0 text-muted-foreground" aria-hidden="true" />
+                </button>
+              </div>
+            ) : null}
+          </div>
+        </Reveal>
+
+        <Reveal index={1}>
+          <PromptInput
+            ref={inputRef}
+            value={description}
+            onValueChange={setDescription}
+            onSubmit={submit}
+            submitOn="mod-enter"
+            keepValueOnSubmit
+            loading={run.isPending}
+            loadingIndicator={<Loader variant="spinner" size={14} label={t("recommend.loading")} />}
+            submitLabel={t("recommend.submit")}
+            showSubmitLabel
+            aria-label={t("recommend.description")}
+            aria-keyshortcuts="Meta+Enter Control+Enter"
+            placeholder={t("recommend.placeholder")}
+            minRows={2}
+            maxRows={8}
+            className="bg-muted/50"
+            trailingAction={
               <Button
                 variant="secondary"
                 size="sm"
                 pressScale={0.97}
-                className="h-7 px-2.5"
-                disabled={enableSemantic.isPending}
-                onClick={() => enableSemantic.mutate()}
+                className="h-8"
+                aria-expanded={agentOpen}
+                onClick={() => setAgentOpen(!agentOpen)}
               >
-                {enableSemantic.isPending ? (
-                  <Loader variant="spinner" size={14} label={t("recommend.enableHybrid.working")} />
-                ) : (
-                  <Sparkles className="size-3.5" aria-hidden="true" />
-                )}
-                {t("recommend.enableHybrid")}
+                <MessageSquareText className="size-3.5" aria-hidden="true" />
+                {t("recommend.agent.open")}
               </Button>
-            ) : null}
-            {(description.trim() || recommendation) && (
-              <Button variant="ghost" size="sm" pressScale={0.97} className="h-7 px-2.5" onClick={clear}>
-                {t("recommend.reset")}
-              </Button>
-            )}
-          </div>
-          <p className="max-w-[68ch] text-sm text-muted-foreground">{t("recommend.intro")}</p>
-          {recommendation?.mode === "keywords" ? (
-            <div className="flex flex-col gap-1 text-xs text-muted-foreground">
-              {embeddings.data ? (
-                <p>
-                  {t("recommend.enableHybrid.explain", {
-                    model: embeddings.data.model,
-                    size: formatBytes(embeddings.data.download.total),
-                  })}
-                </p>
-              ) : null}
-              {enableSemantic.isPending ? (
-                <p role="status" className="flex items-center gap-1.5">
-                  <Loader variant="spinner" size={12} label={t("recommend.enableHybrid.working")} />
-                  {enableProgress
-                    ? t("recommend.enableHybrid.progress", { done: enableProgress.done, total: enableProgress.total })
-                    : t("recommend.enableHybrid.working")}
-                </p>
-              ) : null}
-              {enableSemantic.isError ? (
-                <p role="alert" className="text-destructive">
-                  {enableSemantic.error instanceof Error ? enableSemantic.error.message : t("recommend.enableHybrid.failed")}
-                </p>
-              ) : null}
-              <button
-                type="button"
-                aria-label={`${t("recommend.copyCli")}: ${EMBEDDINGS_CLI}`}
-                title={t("recommend.copyCli")}
-                onClick={() => void copyText(EMBEDDINGS_CLI)}
-                className="mt-0.5 inline-flex h-6 max-w-full items-center gap-1.5 self-start rounded-md border border-border bg-muted/60 px-2 font-mono text-[10.5px] text-foreground transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-              >
-                <span className="truncate">{EMBEDDINGS_CLI}</span>
-                <Copy className="size-3 shrink-0 text-muted-foreground" aria-hidden="true" />
-              </button>
-            </div>
-          ) : null}
-        </div>
+            }
+            leadingAction={
+              <kbd className="ml-2 rounded-full border border-border px-1.5 font-mono text-[10px] leading-4 text-muted-foreground">
+                {t("recommend.shortcut", { combo: modChord("↵") })}
+              </kbd>
+            }
+          />
+        </Reveal>
 
-        <PromptInput
-          ref={inputRef}
-          value={description}
-          onValueChange={setDescription}
-          onSubmit={submit}
-          submitOn="mod-enter"
-          keepValueOnSubmit
-          loading={run.isPending}
-          loadingIndicator={<Loader variant="spinner" size={14} label={t("recommend.loading")} />}
-          submitLabel={t("recommend.submit")}
-          showSubmitLabel
-          aria-label={t("recommend.description")}
-          aria-keyshortcuts="Meta+Enter Control+Enter"
-          placeholder={t("recommend.placeholder")}
-          minRows={2}
-          maxRows={8}
-          className="bg-muted/50"
-          trailingAction={
-            <Button
-              variant="secondary"
-              size="sm"
-              pressScale={0.97}
-              className="h-8"
-              aria-expanded={agentOpen}
-              onClick={() => setAgentOpen(!agentOpen)}
+        <Reveal index={2}>
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+            <fieldset
+              aria-label={t("recommend.layers")}
+              className="m-0 flex min-w-0 flex-1 basis-80 flex-wrap items-center gap-1.5 border-0 p-0"
             >
-              <MessageSquareText className="size-3.5" aria-hidden="true" />
-              {t("recommend.agent.open")}
-            </Button>
-          }
-          leadingAction={
-            <kbd className="ml-2 rounded-full border border-border px-1.5 font-mono text-[10px] leading-4 text-muted-foreground">
-              {t("recommend.shortcut", { combo: modChord("↵") })}
-            </kbd>
-          }
-        />
+              <span className="mr-1 text-xs text-muted-foreground">{t("recommend.layers")}</span>
+              {(layersQuery.data ?? []).map((layer) => {
+                const active = activeLayers.includes(layer.id);
+                return (
+                  <motion.button
+                    key={layer.id}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => toggleLayer(layer.id)}
+                    whileTap={reduce ? undefined : { scale: 0.97 }}
+                    className={cn(
+                      "inline-flex h-7 items-center gap-1 rounded-full border px-3 text-[12px] font-medium transition-colors",
+                      "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+                      active
+                        ? "border-foreground/15 bg-foreground/[0.07] text-foreground"
+                        : "border-border text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {active && <Check className="size-3" aria-hidden="true" />}
+                    {layer.title || layer.id}
+                  </motion.button>
+                );
+              })}
+            </fieldset>
 
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-          <fieldset
-            aria-label={t("recommend.layers")}
-            className="m-0 flex min-w-0 flex-1 basis-80 flex-wrap items-center gap-1.5 border-0 p-0"
-          >
-            <span className="mr-1 text-xs text-muted-foreground">{t("recommend.layers")}</span>
-            {(layersQuery.data ?? []).map((layer) => {
-              const active = activeLayers.includes(layer.id);
-              return (
-                <motion.button
-                  key={layer.id}
-                  type="button"
-                  aria-pressed={active}
-                  onClick={() => toggleLayer(layer.id)}
-                  whileTap={reduce ? undefined : { scale: 0.97 }}
-                  className={cn(
-                    "inline-flex h-7 items-center gap-1 rounded-full border px-3 text-[12px] font-medium transition-colors",
-                    "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
-                    active
-                      ? "border-foreground/15 bg-foreground/[0.07] text-foreground"
-                      : "border-border text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  {active && <Check className="size-3" aria-hidden="true" />}
-                  {layer.title || layer.id}
-                </motion.button>
-              );
-            })}
-          </fieldset>
-
-          <div className="flex items-center gap-2">
-            <span className="flex items-center gap-1 text-xs text-muted-foreground">
-              <span aria-hidden="true">{t("recommend.perLayer")}</span>
-              <Tooltip content={t("recommend.perLayer.hint")}>
-                <button
-                  type="button"
-                  aria-label={t("recommend.perLayer.hint")}
-                  className="grid size-3.5 cursor-help place-items-center rounded-full text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-                >
-                  <Info className="size-3" aria-hidden="true" />
-                </button>
-              </Tooltip>
-            </span>
-            {/* The stepper's liquid geometry is drawn at 48px; scaled to the 32px filter row. */}
-            <div className="h-8 w-36">
-              <div className="w-[13.5rem] origin-top-left scale-[0.6667]">
-                <AdaptiveStepper
-                  value={perLayer}
-                  onValueChange={setPerLayer}
-                  min={1}
-                  max={10}
-                  fill="var(--muted)"
-                  aria-label={t("recommend.perLayer")}
-                  formatLegend={(valueText) => t("recommend.perLayerLegend", { value: valueText })}
-                >
-                  <AdaptiveStepperDecrement aria-label={t("recommend.decreasePerLayer")} />
-                  <AdaptiveStepperValue />
-                  <AdaptiveStepperIncrement aria-label={t("recommend.increasePerLayer")} />
-                </AdaptiveStepper>
+            <div className="flex items-center gap-2">
+              <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                <span aria-hidden="true">{t("recommend.perLayer")}</span>
+                <Tooltip content={t("recommend.perLayer.hint")}>
+                  <button
+                    type="button"
+                    aria-label={t("recommend.perLayer.hint")}
+                    className="grid size-3.5 cursor-help place-items-center rounded-full text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                  >
+                    <Info className="size-3" aria-hidden="true" />
+                  </button>
+                </Tooltip>
+              </span>
+              {/* The stepper's liquid geometry is drawn at 48px; scaled to the 32px filter row. */}
+              <div className="h-8 w-36">
+                <div className="w-[13.5rem] origin-top-left scale-[0.6667]">
+                  <AdaptiveStepper
+                    value={perLayer}
+                    onValueChange={setPerLayer}
+                    min={1}
+                    max={10}
+                    fill="var(--muted)"
+                    aria-label={t("recommend.perLayer")}
+                    formatLegend={(valueText) => t("recommend.perLayerLegend", { value: valueText })}
+                  >
+                    <AdaptiveStepperDecrement aria-label={t("recommend.decreasePerLayer")} />
+                    <AdaptiveStepperValue />
+                    <AdaptiveStepperIncrement aria-label={t("recommend.increasePerLayer")} />
+                  </AdaptiveStepper>
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        </Reveal>
 
         <AnimatePresence initial={false}>
           {agentOpen ? (

@@ -1,6 +1,6 @@
 import { Menu } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { memo, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { memo, type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   type Location,
   type NavigationType,
@@ -21,7 +21,8 @@ import { useI18n } from "@/i18n";
 import { isAgentRunActive, useAgentRunStatus } from "@/lib/agent-run";
 import { isDesktop, isMacos } from "@/lib/desktop";
 import { useDesktopShell } from "@/lib/desktop-shell";
-import { EASE_OUT } from "@/lib/ease";
+import { EASE_IN, EASE_OUT } from "@/lib/ease";
+import { PAGE_ENTER_MS, PAGE_ENTER_OFFSET, PAGE_EXIT_MS, PAGE_EXIT_OFFSET, PAGE_REDUCED_MS, pageDirection } from "@/lib/page-transition";
 import { useGlobalShortcuts } from "@/lib/shortcuts";
 import { dismissToast, toast, useToasts } from "@/lib/toast";
 import { startUpdater } from "@/lib/updater";
@@ -42,14 +43,55 @@ const PageFrame = memo(function PageFrame({
   location,
   navigationType,
   outlet,
+  epoch,
 }: {
   location: Location;
   navigationType: NavigationType;
   outlet: ReactNode;
+  epoch: number;
 }) {
   const value = useMemo(() => ({ location, navigationType }), [location, navigationType]);
-  return <UNSAFE_LocationContext.Provider value={value}>{outlet}</UNSAFE_LocationContext.Provider>;
+  // Returning to a route that is still exiting reuses the motion wrapper (same key)
+  // but must not reuse the page's component state, or its query-param restore effect
+  // sees the same pathname it left. The epoch only changes on a pathname change.
+  return (
+    <UNSAFE_LocationContext.Provider key={epoch} value={value}>
+      {outlet}
+    </UNSAFE_LocationContext.Provider>
+  );
 });
+
+interface PageTransitionCustom {
+  direction: 1 | -1;
+  reduce: boolean;
+}
+
+/**
+ * The shell is still; only the page moves. The outgoing page leaves 6px towards the
+ * side the incoming page came from, over a short ease-in, while the incoming page
+ * travels 12px from that side and settles with the shared ease-out. `popLayout`
+ * mounts the new page immediately, so a second click never waits for the first exit.
+ *
+ * `popLayout` also pins the outgoing page out of the panel's scroll flow, so resetting
+ * the shared scroll container for the incoming page cannot move the old content.
+ */
+const PAGE_VARIANTS = {
+  enter: (custom: PageTransitionCustom) => ({
+    opacity: 0,
+    x: custom.reduce ? 0 : PAGE_ENTER_OFFSET * custom.direction,
+    y: 0,
+  }),
+  center: { opacity: 1, x: 0, y: 0 },
+  exit: (custom: PageTransitionCustom) => ({
+    opacity: 0,
+    x: custom.reduce ? 0 : -PAGE_EXIT_OFFSET * custom.direction,
+    y: 0,
+    transition: {
+      duration: (custom.reduce ? PAGE_REDUCED_MS : PAGE_EXIT_MS) / 1000,
+      ease: EASE_IN,
+    },
+  }),
+};
 
 /** Live media query, initialised synchronously so the first paint has the right layout. */
 function useMedia(query: string): boolean {
@@ -73,8 +115,27 @@ export function Layout() {
   const agentStatus = useAgentRunStatus();
   const onRecommend = location.pathname === "/recommend";
   const reduce = useReducedMotion();
+  const reduced = Boolean(reduce);
   const toasts = useToasts();
   const scrollRef = useRef<HTMLElement>(null);
+  // Navigation direction is derived during render, before the new page mounts, so the
+  // entering page and the outgoing page resolve their variants from the same value.
+  const lastPathRef = useRef(location.pathname);
+  const directionRef = useRef<1 | -1>(1);
+  // Returning to a route that is still exiting reuses its motion wrapper, so the page
+  // component is remounted with this epoch to run its route-entry effects again.
+  // Query-only changes keep the same epoch and do not replay the page transition.
+  const pageEpochRef = useRef(0);
+  if (location.pathname !== lastPathRef.current) {
+    pageEpochRef.current += 1;
+    directionRef.current = pageDirection(lastPathRef.current, location.pathname, navigationType);
+    lastPathRef.current = location.pathname;
+  }
+  const pageKey = location.pathname;
+  const transitionCustom: PageTransitionCustom = {
+    direction: directionRef.current,
+    reduce: reduced,
+  };
   const [menuOpen, setMenuOpen] = useState(false);
   const mobile = useMedia(MOBILE_QUERY);
   // Window chrome is the app's own only inside the desktop app; a browser keeps its
@@ -112,6 +173,14 @@ export function Layout() {
     if (!mobile) setMenuOpen(false);
   }, [mobile]);
 
+  // Every route starts at the top of the panel. The outgoing page is popped out of the
+  // scroll flow by `AnimatePresence`, so this reset never moves content still on screen.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the reset is keyed by route, not by the ref
+  useLayoutEffect(() => {
+    const main = scrollRef.current;
+    if (main && main.scrollTop !== 0) main.scrollTop = 0;
+  }, [location.pathname]);
+
   return (
     <div className="flex h-dvh overflow-hidden bg-shell text-foreground">
       {!mobile ? <Sidebar /> : null}
@@ -133,17 +202,20 @@ export function Layout() {
           <main
             ref={scrollRef}
             style={{ scrollPaddingBottom: 32, scrollPaddingTop: STICKY_SPACE }}
-            className="min-h-0 flex-1 overflow-y-auto max-md:pt-12"
+            className="min-h-0 flex-1 overflow-x-clip overflow-y-auto max-md:pt-12"
           >
-            <AnimatePresence mode="popLayout" initial={false}>
+            <AnimatePresence mode="popLayout" initial={false} custom={transitionCustom}>
               <motion.div
-                key={location.pathname}
-                initial={{ opacity: 0, y: reduce ? 0 : 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.18, ease: EASE_OUT }}
+                key={pageKey}
+                custom={transitionCustom}
+                variants={PAGE_VARIANTS}
+                initial="enter"
+                animate="center"
+                exit="exit"
+                transition={{ duration: (reduced ? PAGE_REDUCED_MS : PAGE_ENTER_MS) / 1000, ease: EASE_OUT }}
                 className="flex h-full flex-col"
               >
-                <PageFrame location={location} navigationType={navigationType} outlet={outlet} />
+                <PageFrame location={location} navigationType={navigationType} outlet={outlet} epoch={pageEpochRef.current} />
               </motion.div>
             </AnimatePresence>
           </main>

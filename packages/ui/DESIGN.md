@@ -199,8 +199,11 @@ Springs and easings live in `src/lib/ease.ts`.
 | Overlay entrances | `SPRING_PANEL` | Modals, drawer, selection bar |
 | Content swaps | `SPRING_SWAP` | Save → check, dirty dot |
 | Fades | `EASE_OUT` | 100–180ms |
+| Page exit | `EASE_IN` | Outgoing page fade, 120ms (`lib/ease.ts`) |
 
-- Route change: content fades in and rises 8px over 180ms, never blocking input.
+- Route change (`lib/page-transition.ts`, `components/layout.tsx`): the page slides in sidebar order. Direction is `+1` toward a lower sidebar item and `-1` toward a higher one (`/notes/:id` ranks just after Explore, `/inbox/:id` just after Inbox); browser Back/Forward (POP) always reverses. The outgoing page fades out with `EASE_IN` over 120ms and moves 6px opposite to the travel; the incoming page fades in from 0 with `EASE_OUT` over 220ms and moves 12px from the travel side. `<main>` clips horizontal overflow, so travel never adds a scrollbar. Rapid navigation never blocks input.
+- **Reveal** (`components/page.tsx`): the top-level blocks of a page (page header, first panels) enter with opacity from 0 and 6px up over 220ms `EASE_OUT`, 30ms apart, capped at the fourth block. Lists and cards that already animate their own rows are not wrapped.
+- Reduced motion for both: opacity only, 100ms; no page travel, no Reveal offset and no stagger.
 - Lists: enter with y 6px + opacity, 20ms stagger, only the first 10 items animate; exits fade in ~100ms.
 - Counts roll with `AnimatedNumber`. The score bar fills in 400ms, the longest motion in the app; nothing on a frequent action exceeds 400ms.
 - `prefers-reduced-motion`: every animation drops to opacity only or none (`useReducedMotion()`, `motion-safe:` for CSS pulses).

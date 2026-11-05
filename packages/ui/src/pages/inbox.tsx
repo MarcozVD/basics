@@ -9,7 +9,7 @@ import { AnimatedNumber } from "@/components/motion/animated-number";
 import { Button } from "@/components/motion/button/base";
 import { CenterMorphModal, CenterMorphModalContent } from "@/components/motion/center-morph-modal";
 import { Tabs, TabsList, TabsTrigger } from "@/components/motion/tabs";
-import { PAGE_SECTIONS, Page } from "@/components/page";
+import { PAGE_SECTIONS, Page, Reveal } from "@/components/page";
 import { issuesToErrors, ProposalDetail, ProposalEditModal } from "@/components/proposal-detail";
 import { ErrorState, Loading } from "@/components/state";
 import { Button as LinkButton } from "@/components/ui/button";
@@ -550,118 +550,120 @@ export function InboxPage() {
   return (
     <Page className={`${PAGE_SECTIONS} min-h-0`}>
       <span className="sr-only">{t("inbox.shortcuts")}</span>
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex items-baseline gap-2">
-            <h1 className="text-xl font-semibold tracking-tight">{t("page.inbox.title")}</h1>
-            <span className="inline-flex items-baseline gap-1.5 text-xs text-muted-foreground">
-              <AnimatedNumber
-                value={packFiltered.length}
-                startOnView={false}
-                duration={0.5}
-                className="text-sm font-medium text-foreground"
-              />
-              {t("inbox.pending")}
-              {packFilter ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    const params = new URLSearchParams(searchParams);
-                    params.delete("pack");
-                    setSearchParams(params, { replace: true });
-                    setSelected(0);
-                  }}
-                  className="ml-2 rounded-sm text-xs text-muted-foreground underline decoration-border underline-offset-2 transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-                >
-                  {t("inbox.clearPackFilter", { pack: packFilter })}
-                </button>
-              ) : null}
-            </span>
+      <Reveal index={0}>
+        <header className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-baseline gap-2">
+              <h1 className="text-xl font-semibold tracking-tight">{t("page.inbox.title")}</h1>
+              <span className="inline-flex items-baseline gap-1.5 text-xs text-muted-foreground">
+                <AnimatedNumber
+                  value={packFiltered.length}
+                  startOnView={false}
+                  duration={0.5}
+                  className="text-sm font-medium text-foreground"
+                />
+                {t("inbox.pending")}
+                {packFilter ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const params = new URLSearchParams(searchParams);
+                      params.delete("pack");
+                      setSearchParams(params, { replace: true });
+                      setSelected(0);
+                    }}
+                    className="ml-2 rounded-sm text-xs text-muted-foreground underline decoration-border underline-offset-2 transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                  >
+                    {t("inbox.clearPackFilter", { pack: packFilter })}
+                  </button>
+                ) : null}
+              </span>
+            </div>
+            <p className="mt-1 max-w-[68ch] text-sm text-muted-foreground">{t("inbox.intro")}</p>
           </div>
-          <p className="mt-1 max-w-[68ch] text-sm text-muted-foreground">{t("inbox.intro")}</p>
-        </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          {selectionActive ? (
-            <section aria-label={t("inbox.selectionBar")} className="flex flex-wrap items-center gap-2" data-testid="inbox-selection-bar">
-              <span className="text-sm font-medium tabular-nums">{t("inbox.selectedCount", { count: pickedVisible.length })}</span>
-              <Button
-                variant="primary"
-                size="sm"
-                pressScale={0.97}
-                disabled={approveAll.isPending || rejectAll.isPending}
-                className="h-8 shrink-0"
-                onClick={() => approveAll.mutate({ request: { ids: pickedIds }, mode: "selection" })}
-              >
-                {t("inbox.approveSelected")}
-              </Button>
-              <Button
-                variant="secondary"
-                size="sm"
-                pressScale={0.97}
-                disabled={approveAll.isPending || rejectAll.isPending}
-                className="h-8 shrink-0 border-destructive/40 text-destructive"
-                onClick={() => setRejectOpen("selection")}
-              >
-                {t("inbox.rejectSelected")}
-              </Button>
-              <Button variant="ghost" size="sm" pressScale={0.97} className="h-8 shrink-0" onClick={clearSelection}>
-                {t("inbox.clearSelection")}
-              </Button>
-            </section>
-          ) : (
-            <>
-              {showRejectAll ? (
+          <div className="flex flex-wrap items-center gap-2">
+            {selectionActive ? (
+              <section aria-label={t("inbox.selectionBar")} className="flex flex-wrap items-center gap-2" data-testid="inbox-selection-bar">
+                <span className="text-sm font-medium tabular-nums">{t("inbox.selectedCount", { count: pickedVisible.length })}</span>
                 <Button
-                  ref={rejectAllButtonRef}
-                  variant="secondary"
-                  size="sm"
-                  pressScale={0.97}
-                  disabled={rejectAll.isPending}
-                  className="h-8 shrink-0 border-destructive/40 text-destructive"
-                  onClick={() => setRejectOpen("all")}
-                >
-                  {t("inbox.rejectAllCount", { count: approveAllCount })}
-                </Button>
-              ) : null}
-              {showApproveAll ? (
-                <Button
-                  ref={approveAllButtonRef}
                   variant="primary"
                   size="sm"
                   pressScale={0.97}
-                  disabled={approveAll.isPending}
-                  aria-haspopup="dialog"
-                  aria-expanded={approveAllOpen}
-                  onClick={() => setApproveAllOpen(true)}
+                  disabled={approveAll.isPending || rejectAll.isPending}
                   className="h-8 shrink-0"
+                  onClick={() => approveAll.mutate({ request: { ids: pickedIds }, mode: "selection" })}
                 >
-                  {t("inbox.approveAllCount", { count: approveAllCount })}
+                  {t("inbox.approveSelected")}
                 </Button>
-              ) : null}
-              <Tabs value={filter} onValueChange={(value) => setFilter(value as Filter)} variant="segment">
-                <TabsList>
-                  {(
-                    [
-                      ["all", t("type.all"), counts.all],
-                      ["create", t("proposal.action.create"), counts.create],
-                      ["update", t("proposal.action.update"), counts.update],
-                    ] as const
-                  ).map(([value, label, count]) => (
-                    <TabsTrigger key={value} value={value} className="gap-1.5 px-3 py-1 text-xs">
-                      {label}
-                      <span className="font-mono text-[11px]">{count}</span>
-                    </TabsTrigger>
-                  ))}
-                </TabsList>
-              </Tabs>
-            </>
-          )}
-        </div>
-      </header>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  pressScale={0.97}
+                  disabled={approveAll.isPending || rejectAll.isPending}
+                  className="h-8 shrink-0 border-destructive/40 text-destructive"
+                  onClick={() => setRejectOpen("selection")}
+                >
+                  {t("inbox.rejectSelected")}
+                </Button>
+                <Button variant="ghost" size="sm" pressScale={0.97} className="h-8 shrink-0" onClick={clearSelection}>
+                  {t("inbox.clearSelection")}
+                </Button>
+              </section>
+            ) : (
+              <>
+                {showRejectAll ? (
+                  <Button
+                    ref={rejectAllButtonRef}
+                    variant="secondary"
+                    size="sm"
+                    pressScale={0.97}
+                    disabled={rejectAll.isPending}
+                    className="h-8 shrink-0 border-destructive/40 text-destructive"
+                    onClick={() => setRejectOpen("all")}
+                  >
+                    {t("inbox.rejectAllCount", { count: approveAllCount })}
+                  </Button>
+                ) : null}
+                {showApproveAll ? (
+                  <Button
+                    ref={approveAllButtonRef}
+                    variant="primary"
+                    size="sm"
+                    pressScale={0.97}
+                    disabled={approveAll.isPending}
+                    aria-haspopup="dialog"
+                    aria-expanded={approveAllOpen}
+                    onClick={() => setApproveAllOpen(true)}
+                    className="h-8 shrink-0"
+                  >
+                    {t("inbox.approveAllCount", { count: approveAllCount })}
+                  </Button>
+                ) : null}
+                <Tabs value={filter} onValueChange={(value) => setFilter(value as Filter)} variant="segment">
+                  <TabsList>
+                    {(
+                      [
+                        ["all", t("type.all"), counts.all],
+                        ["create", t("proposal.action.create"), counts.create],
+                        ["update", t("proposal.action.update"), counts.update],
+                      ] as const
+                    ).map(([value, label, count]) => (
+                      <TabsTrigger key={value} value={value} className="gap-1.5 px-3 py-1 text-xs">
+                        {label}
+                        <span className="font-mono text-[11px]">{count}</span>
+                      </TabsTrigger>
+                    ))}
+                  </TabsList>
+                </Tabs>
+              </>
+            )}
+          </div>
+        </header>
+      </Reveal>
 
       {nothingPending ? (
-        zeroState
+        <Reveal index={1}>{zeroState}</Reveal>
       ) : (
         <div className="grid min-h-0 gap-4 min-[1280px]:flex-1 min-[1280px]:grid-cols-[420px_minmax(0,1fr)]">
           <div className="flex min-h-0 min-w-0 flex-col">
