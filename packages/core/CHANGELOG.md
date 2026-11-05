@@ -1,5 +1,44 @@
 # @marcozvd/basics-core
 
+## 1.5.0
+
+### Minor Changes
+
+- a44defb: List the skills installed in your coding agents.
+  
+  - `basics skills` shows the agents and folders it found, then the skills grouped by area (Frontend, Backend, Security, Testing, DevOps, Data, AI & agents, Docs & writing, Workflow, Other). `basics skills --json` prints the same data.
+  - It reads user-level skill folders for Claude Code (including skills from installed plugins), OpenCode, Codex, and the shared `~/.agents/skills`. It only reads skill files and never runs them.
+  - `GET /api/skills` returns the same list. `PUT /api/skills/:key/area` and `DELETE /api/skills/:key/area` move a skill to another area, or back to the detected one.
+  - Core: the config gains an optional `skills.areas` map from skill key to area id.
+- 239fe0b: Projects can be marked done, and two UI fixes:
+  
+  - Projects: a `done` status next to active, paused and archived. The status chip is a menu on each row; done projects sort last and collapse into a remembered `Done (N)` group in the All view. `get_vault_overview` and `record_project_outcome` accept done projects; archived ones are still left out of the overview.
+  - Spanish: the `paused` status label is now "En pausa" (was "Pausado") everywhere it is shown.
+  - Fix: Explore kept the "All" filter for a moment when opening a note from a filtered list (Checks, layers). The exiting page now keeps its own URL and filters while it fades.
+  - Fix: the Recommend "Ask an agent" run survives leaving the page and a reload. The Dock shows a running dot, a toast offers to open Recommend when the run finishes elsewhere, and an interrupted run offers Retry.
+
+### Patch Changes
+
+- db7a40e: Smaller MCP responses for agents, a slimmer `plan-stack` prompt, and faster search.
+  
+  MCP contract changes:
+  
+  - `search_vault` returns `{ "hits": [...], "total": n, "hint"?: "..." }` instead of a bare array. `total` counts the notes that matched before `limit`; `hint` appears only when the list is capped.
+  - `get_note` no longer returns `hash`, the concurrency token the app editor uses. Agents never needed it.
+  - `recommend_stack` omits empty `matched_*` and `negated_*` lists, zero parts of `score_breakdown` and a zero `language_boost`. Its `note` is one line; the scoring details moved to the tool description.
+  - Every MCP JSON response is compact (no indentation).
+  
+  Other changes:
+  
+  - The `plan-stack` prompt is about 17% shorter, with the same steps and rules.
+  - The UI server and the MCP server build the search index once per vault change instead of on every query. On the 860-note test vault a search for a new query went from about 9 ms to 2.5 ms over HTTP; the result ranking is unchanged.
+  - Core exports `buildSearchIndex` and `searchAll`. `search` keeps its array result.
+- 15d9a41: The app and the MCP server answer faster on big vaults.
+  
+  - The UI server and the MCP server keep the parsed vault in memory and reload it only when a note file changes. Before, every request and every tool call re-read the whole vault. On an 866-note vault a warm `/api/graph` went from about 700 ms to a few milliseconds, and MCP tools from about 670 ms to about 16 ms.
+  - Edits made in an editor or by `git pull` are still seen by the next request or tool call. Inbox proposals are read from disk every time.
+  - Core exports `VaultCache`, `vaultSignature` and `vaultSignatureAsync` for code that holds a vault across calls.
+
 ## 1.4.2
 
 ### Patch Changes

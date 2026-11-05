@@ -1,5 +1,99 @@
 # @marcozvd/basics
 
+## 1.5.0
+
+### Minor Changes
+
+- a44defb: List the skills installed in your coding agents.
+  
+  - `basics skills` shows the agents and folders it found, then the skills grouped by area (Frontend, Backend, Security, Testing, DevOps, Data, AI & agents, Docs & writing, Workflow, Other). `basics skills --json` prints the same data.
+  - It reads user-level skill folders for Claude Code (including skills from installed plugins), OpenCode, Codex, and the shared `~/.agents/skills`. It only reads skill files and never runs them.
+  - `GET /api/skills` returns the same list. `PUT /api/skills/:key/area` and `DELETE /api/skills/:key/area` move a skill to another area, or back to the detected one.
+  - Core: the config gains an optional `skills.areas` map from skill key to area id.
+- 50d940f: Add `basics disconnect` to remove Basics from your coding agents.
+  
+  - `basics disconnect [clients...]` (also `--client <names...>`) removes only the `basics` MCP entry from each client's config and, by default, the Basics skill. Every other entry in those files stays. A config that held only the Basics entry is deleted.
+  - `--no-skill` keeps the skill, `--dry-run` prints what would change and writes nothing. Claude Code is removed with the `claude` CLI when it is on PATH.
+  - A config that cannot be parsed is left untouched and reported for a manual edit.
+  - The local API gets `GET /api/connect/status` (which clients are detected and connected) and `POST /api/disconnect`, which requires a non-empty list of clients so no agent is unregistered by accident.
+- 4181dda: Desktop app settings: Startup, close behaviour and vault folder.
+  
+  - Settings → Startup: start Basics when you sign in, start minimized (never, when I sign in, or always), and closing the window either keeps Basics running in the tray or quits it. The values are saved in the app's config folder.
+  - The tray menu has **Settings...**, which opens the Settings page.
+  - Settings → General: **Open folder** opens the vault in the file manager; **Change folder** asks for confirmation, then sets up the picked folder as a vault and restarts the server. Notes in the old folder are not moved.
+  - Settings → Updates shows the installed version and links to the releases page.
+- b9848f0: Add a Settings page to the web UI and the desktop app. Open it from the gear in the header or with `Ctrl`/`⌘+,`.
+  
+  - **General**: language, theme, and the vault path, with a copy button.
+  - **Agents**: connect or disconnect each coding agent with one button, see its state, and read the file change under "Show what changes".
+  - **Search**: turn semantic search on or off, with download size, progress, and index counts. Turning it off keeps the downloaded files. The new `POST /api/embeddings/disable` endpoint does this.
+  - **Startup** and **Updates** are desktop-only; in a browser they explain that and link to the desktop guide.
+  - **About**: version, vault path, and links to the docs, GitHub, and third-party licenses.
+- fa54fb2: Add a Skills page to the web UI and the desktop app, in the Dock as **Skills** (`G` then `K`) and in the command palette.
+  
+  - Filter by agent (Claude Code, opencode, Codex, Shared) or by area; the area is kept in the address, so a filtered link can be shared.
+  - Search skill names and descriptions, ignoring case and accents.
+  - Each area shows five skills with **Show all N** to see the rest. Expand a row for its path and version.
+  - Move a skill to another area from its row; **Changed by you** marks it, and reset restores the detected area.
+- 239fe0b: Projects can be marked done, and two UI fixes:
+  
+  - Projects: a `done` status next to active, paused and archived. The status chip is a menu on each row; done projects sort last and collapse into a remembered `Done (N)` group in the All view. `get_vault_overview` and `record_project_outcome` accept done projects; archived ones are still left out of the overview.
+  - Spanish: the `paused` status label is now "En pausa" (was "Pausado") everywhere it is shown.
+  - Fix: Explore kept the "All" filter for a moment when opening a note from a filtered list (Checks, layers). The exiting page now keeps its own URL and filters while it fades.
+  - Fix: the Recommend "Ask an agent" run survives leaving the page and a reload. The Dock shows a running dot, a toast offers to open Recommend when the run finishes elsewhere, and an interrupted run offers Retry.
+
+### Patch Changes
+
+- 071d277: - Desktop app: the window controls (minimize, maximize, close) and the drag area now live in the app header, and browser shortcuts and menus (reload, print, zoom, find, context menu) are turned off. Ctrl+F opens the app search.
+  - Fix: after an update, the browser or the desktop app could keep showing the previous UI. `index.html` is now always revalidated, and hashed files under `/assets/` are cached for good.
+- f30f814: The desktop app can update itself.
+  
+  - When the app starts it checks for a new version. If one is available, a card in the top-right corner shows the version, the release notes and **Update and restart**. **Later** hides it until the next start.
+  - **Update and restart** downloads the update with a progress bar, closes the app, installs it and opens the new version. Your vault and config are not touched.
+  - Settings → Updates shows the installed version, has **Check now**, and a switch for checking on start (on by default).
+  - The first version with the updater has to be installed by hand, once, from the GitHub Releases page.
+- 17898d8: Graph loads faster and stays usable on big vaults.
+  
+  - Large graphs (over 300 notes) settle in the background, so you can click and open notes while the layout runs. On an 860-note vault the flat graph is usable about 16 seconds sooner.
+  - Zoomed out on a graph over 300 notes, labels show only the best-connected notes. Zoom in to see the rest.
+  - Going back to Graph shows the picture you left, with the same positions and zoom, without laying it out again. On an 860-note vault the first frame came after about 5 to 16 seconds before, and now it is about 0.5 seconds.
+  - Reloading the page keeps the node positions for the same vault and view.
+  - Graph data is reused for five minutes, so opening the page again does not refetch it.
+- db7a40e: Smaller MCP responses for agents, a slimmer `plan-stack` prompt, and faster search.
+  
+  MCP contract changes:
+  
+  - `search_vault` returns `{ "hits": [...], "total": n, "hint"?: "..." }` instead of a bare array. `total` counts the notes that matched before `limit`; `hint` appears only when the list is capped.
+  - `get_note` no longer returns `hash`, the concurrency token the app editor uses. Agents never needed it.
+  - `recommend_stack` omits empty `matched_*` and `negated_*` lists, zero parts of `score_breakdown` and a zero `language_boost`. Its `note` is one line; the scoring details moved to the tool description.
+  - Every MCP JSON response is compact (no indentation).
+  
+  Other changes:
+  
+  - The `plan-stack` prompt is about 17% shorter, with the same steps and rules.
+  - The UI server and the MCP server build the search index once per vault change instead of on every query. On the 860-note test vault a search for a new query went from about 9 ms to 2.5 ms over HTTP; the result ranking is unchanged.
+  - Core exports `buildSearchIndex` and `searchAll`. `search` keeps its array result.
+- 92390e1: A UX pass so a first-time user understands every page. Visual identity, routes, behaviour and keyboard shortcuts are unchanged.
+  
+  - The Dock is labelled and every page opens with a one-line intro; filters and controls carry a term hint explaining what they do.
+  - Home shows a get-set-up checklist while the vault, an agent or a project are missing, and empty states link to the one action that fills them.
+  - Recommend explains itself: **Per layer** has a tooltip, the empty state is just the day-one example chips, and **Ask an agent** says how it differs from Recommend.
+  - Shortcut hints follow the platform: `⌘K` / `⌘F` / `⌘↵` on macOS, `Ctrl+K` / `Ctrl+F` / `Ctrl+Enter` elsewhere, in the Dock, Explore, Graph and Recommend.
+  - Explore: the Layers column keeps each chip at its natural width and folds the rest into a `+n` (one chip + `+n` when the column is narrow), so a short layer name is never cut.
+  - Graph: leaving and coming back to `/graph` keeps the canvas painting (the kept cytoscape renderer is no longer detached and destroyed).
+  - Projects: missing paths are hidden in the list, empty reason and lessons say how to fill them, and the check hint says a coding agent can record the results.
+  - Skills: **Details** / **Hide details** replace "more"/"less", the **Shared** filter has a hint, and the per-row area select is labelled.
+- 15d9a41: The app and the MCP server answer faster on big vaults.
+  
+  - The UI server and the MCP server keep the parsed vault in memory and reload it only when a note file changes. Before, every request and every tool call re-read the whole vault. On an 866-note vault a warm `/api/graph` went from about 700 ms to a few milliseconds, and MCP tools from about 670 ms to about 16 ms.
+  - Edits made in an editor or by `git pull` are still seen by the next request or tool call. Inbox proposals are read from disk every time.
+  - Core exports `VaultCache`, `vaultSignature` and `vaultSignatureAsync` for code that holds a vault across calls.
+- Updated dependencies [a44defb]
+- Updated dependencies [db7a40e]
+- Updated dependencies [239fe0b]
+- Updated dependencies [15d9a41]
+  - @marcozvd/basics-core@1.5.0
+
 ## 1.4.2
 
 ### Patch Changes
