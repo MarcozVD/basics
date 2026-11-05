@@ -1,11 +1,12 @@
 import type { GraphData, GraphNode, GraphNodeType, NoteType } from "@marcozvd/basics-core";
 import { Crosshair, FilePlus2, Layers, Scan, Search, SquareArrowOutUpRight, Waypoints, X } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
-import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { lazy, type KeyboardEvent as ReactKeyboardEvent, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { type GraphCacheScope, type GraphLayoutMode, graphCacheKey } from "@/components/graph/graph-cache";
-import GraphCanvas, { type GraphCanvasHandle, type Insets } from "@/components/graph/graph-canvas";
+import type { GraphCanvasHandle, Insets } from "@/components/graph/graph-canvas";
 import { GRAPH_TYPES, layerSlice, matchNodes, neighborhood } from "@/components/graph/graph-model";
+import { GraphSkeleton } from "@/components/graph/graph-skeleton";
 import { AnimatedNumber } from "@/components/motion/animated-number";
 import { Button } from "@/components/motion/button/base";
 import { Drawer } from "@/components/motion/drawer";
@@ -14,13 +15,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/motion/switch";
 import { Tooltip } from "@/components/motion/tooltip";
 import { TypeChip } from "@/components/note-form/note-preview";
-import { ErrorState, Loading } from "@/components/state";
+import { DelayedMount, ErrorState } from "@/components/state";
 import { Button as LinkButton } from "@/components/ui/button";
 import { type TranslationKey, useT } from "@/i18n";
 import { modChord } from "@/lib/desktop";
 import { EASE_OUT, SPRING_PRESS } from "@/lib/ease";
+import { PAGE_ENTER_MS, PAGE_REDUCED_MS } from "@/lib/page-transition";
 import { useGraph, useHealth, useLayers, useNote, useNotes, useStats } from "@/lib/queries";
 import { cn } from "@/lib/utils";
+
+// Cytoscape is the single heaviest dependency in the panel: load its chunk only when the
+// canvas is actually about to mount, after the page transition has finished.
+const GraphCanvas = lazy(() => import("@/components/graph/graph-canvas"));
 
 /** Drawer width plus its right gap, kept clear when centering a node beside it. */
 const DRAWER_SPACE = 372;
@@ -60,6 +66,9 @@ export function GraphPage() {
   const [focusId, setFocusId] = useState<string | null>(null);
   const [toolbarHeight, setToolbarHeight] = useState(48);
   const [rootWidth, setRootWidth] = useState(0);
+  // The canvas waits out the page's enter transition: cytoscape's chunk and its first layout
+  // are the heaviest work in the app, and the transition should own the first frames.
+  const [canvasReady, setCanvasReady] = useState(false);
 
   const graph = useGraph(broken);
   const layers = useLayers();
@@ -75,6 +84,12 @@ export function GraphPage() {
     observer.observe(toolbar);
     return () => observer.disconnect();
   }, []);
+
+  // Holding the canvas back lets the enter transition finish before cytoscape boots.
+  useEffect(() => {
+    const timer = window.setTimeout(() => setCanvasReady(true), (reduce ? PAGE_REDUCED_MS : PAGE_ENTER_MS) + 40);
+    return () => window.clearTimeout(timer);
+  }, [reduce]);
 
   // Labels are costly at 1280 with the expanded sidebar: measure the canvas
   // width and fall back to icon-only controls before the toolbar has to wrap.
@@ -238,9 +253,9 @@ export function GraphPage() {
   return (
     <div ref={rootRef} className="relative min-h-0 flex-1">
       {graph.isPending || (health.isPending && !health.data) ? (
-        <div className="grid h-full place-items-center">
-          <Loading />
-        </div>
+        <DelayedMount>
+          <GraphSkeleton className="absolute inset-0" label={t("state.loading")} />
+        </DelayedMount>
       ) : graph.error ? (
         <div className="mx-auto max-w-xl px-6 pt-24">
           <ErrorState error={graph.error} />
@@ -248,20 +263,26 @@ export function GraphPage() {
       ) : data && data.nodes.length === 0 ? (
         <EmptyGraph vaultEmpty={vaultEmpty} />
       ) : data ? (
-        <GraphCanvas
-          ref={canvasRef}
-          data={data}
-          mode="full"
-          cacheScope={cacheScope}
-          visibleIds={visibleIds}
-          query={search}
-          grouped={grouped && !focusId}
-          selectedId={selectedId}
-          insets={insets}
-          onNodeClick={setSelectedId}
-          onBackgroundClick={() => setSelectedId(null)}
-          className="absolute inset-0"
-        />
+        canvasReady ? (
+          <Suspense fallback={<GraphSkeleton className="absolute inset-0" label={t("state.loading")} />}>
+            <GraphCanvas
+              ref={canvasRef}
+              data={data}
+              mode="full"
+              cacheScope={cacheScope}
+              visibleIds={visibleIds}
+              query={search}
+              grouped={grouped && !focusId}
+              selectedId={selectedId}
+              insets={insets}
+              onNodeClick={setSelectedId}
+              onBackgroundClick={() => setSelectedId(null)}
+              className="absolute inset-0"
+            />
+          </Suspense>
+        ) : (
+          <GraphSkeleton className="absolute inset-0" label={t("state.loading")} />
+        )
       ) : null}
 
       {(data?.nodes.length ?? 0) > 0 ? (

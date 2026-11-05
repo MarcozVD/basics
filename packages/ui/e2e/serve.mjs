@@ -12,6 +12,8 @@ const vault = path.join(runDir, "vault");
 const config = path.join(runDir, "config.json");
 const empty = process.env.BASICS_E2E_EMPTY === "1";
 const generated = Number.parseInt(process.env.BASICS_E2E_GENERATED ?? "0", 10);
+/** Extra projects and inbox proposals for specs that exercise those list pages. */
+const workload = Number.parseInt(process.env.BASICS_E2E_WORK ?? "0", 10);
 const port = process.env.BASICS_E2E_PORT ?? "4810";
 const stateFile = process.env.BASICS_E2E_STATE ?? ".vault-path";
 
@@ -53,6 +55,35 @@ function writeLargeVault(dir, techs) {
   for (let i = 0; i < profiles; i++) {
     const stack = Array.from({ length: layers }, (_, layer) => `  layer-${layer}: [tech-${(layer + i) % techs}]`).join("\n");
     write("profiles", `profile-${i}`, `type: profile\ntitle: Profile ${i}\nstack:\n${stack}`, `# Profile ${i}`);
+  }
+  // The list pages need content too: the generated stack has no projects or inbox proposals.
+  for (let i = 0; i < workload; i++) {
+    write(
+      "projects",
+      `project-${i}`,
+      [
+        "type: project",
+        `title: Project ${i}`,
+        `status: ${i % 5 === 0 ? "done" : "active"}`,
+        "reason: Synthetic project for the page budget specs.",
+        "lessons: []",
+      ].join("\n"),
+      `# Project ${i}`,
+    );
+    write(
+      "inbox",
+      `proposal-${i}`,
+      [
+        "type: layer",
+        `title: Proposed layer ${i}`,
+        "proposal:",
+        "  action: create",
+        "  proposed_by: agent-e2e",
+        "  reason: Synthetic proposal for the page budget specs.",
+        '  created: "2026-01-01T00:00:00.000Z"',
+      ].join("\n"),
+      `# Proposed layer ${i}`,
+    );
   }
 }
 

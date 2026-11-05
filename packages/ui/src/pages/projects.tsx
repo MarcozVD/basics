@@ -23,6 +23,7 @@ import { ErrorState, Loading } from "@/components/state";
 import { type TranslationKey, useI18n } from "@/i18n";
 import { exportStack, getNote, saveNote } from "@/lib/api";
 import { EASE_OUT, SPRING_LAYOUT } from "@/lib/ease";
+import { useFirstPaint, useProgressiveCount } from "@/lib/progressive";
 import { queryKeys, useNotes } from "@/lib/queries";
 import { formatCompactRelativeTime, formatFullDateTime, formatRelativeTime } from "@/lib/relative-time";
 import { useReturnFocus } from "@/lib/return-focus";
@@ -813,6 +814,16 @@ export function ProjectsPage() {
   const doneRows = useMemo(() => visible.flatMap((row, index) => (row.project.status === "done" ? [{ row, index }] : [])), [visible]);
   const grouped = prefs.status === "all" && searchText.trim().length === 0 && doneRows.length > 0;
   const showDone = !grouped || prefs.done;
+  // A long project list mounts the first screenful, then fills in idle slices.
+  const firstPaint = useFirstPaint();
+  const renderLimit = useProgressiveCount(mainRows.length + doneRows.length, `${prefs.status}|${prefs.sort}|${searchText}`, {
+    active: firstPaint,
+    initial: 8,
+    chunk: 14,
+  });
+  const visibleLimit = firstPaint ? Math.max(renderLimit, selected + 1) : 0;
+  const shownMain = mainRows.filter((entry) => entry.index < visibleLimit);
+  const shownDone = doneRows.filter((entry) => entry.index < visibleLimit);
   /** Indices the keyboard can reach: hidden rows are skipped. */
   const reachable = useMemo(
     () => (showDone ? visible.map((_, index) => index) : mainRows.map((entry) => entry.index)),
@@ -1162,7 +1173,7 @@ export function ProjectsPage() {
                     {t("projects.clearFilters")}
                   </Button>
                 </div>
-              ) : (
+              ) : !firstPaint ? null : (
                 <div className="flex flex-col">
                   <div
                     role="listbox"
@@ -1171,8 +1182,8 @@ export function ProjectsPage() {
                     tabIndex={-1}
                     className="flex flex-col"
                   >
-                    {mainRows.map(renderRow)}
-                    {grouped ? null : doneRows.map(renderRow)}
+                    {shownMain.map(renderRow)}
+                    {grouped ? null : shownDone.map(renderRow)}
                   </div>
 
                   {grouped ? (
@@ -1198,7 +1209,7 @@ export function ProjectsPage() {
                         tabIndex={-1}
                         className="flex flex-col"
                       >
-                        {doneRows.map(renderRow)}
+                        {shownDone.map(renderRow)}
                       </div>
                     </details>
                   ) : null}
@@ -1207,7 +1218,7 @@ export function ProjectsPage() {
             </div>
           </div>
 
-          {current ? (
+          {current && firstPaint ? (
             <ProjectDetail
               project={current}
               layerTitles={layerTitles}

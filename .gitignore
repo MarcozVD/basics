@@ -9,4 +9,4 @@ site/.vitepress/dist/
 packages/ui/test-results/
 packages/ui/playwright-report/
 packages/ui/e2e/.vault-path
-packages/ui/e2e/.vault-path-large
+packages/ui/e2e/.vault-path-*

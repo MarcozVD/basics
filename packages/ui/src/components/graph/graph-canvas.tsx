@@ -456,6 +456,7 @@ interface PersistentCanvas {
   /** Inputs of the class work that has already been applied to this picture. */
   appliedVisibility: { ids: Set<string> | null; boxed: boolean } | null;
   appliedQuery: string | null;
+  appliedSelection?: string | null;
 }
 
 let persistent: PersistentCanvas | null = null;
@@ -931,8 +932,13 @@ export default function GraphCanvas({
   const perfRecord = useRef<GraphPerfMount | null>(null);
   /** The off-thread layout still in flight, if any. */
   const layoutRun = useRef<GraphLayoutRun | null>(null);
+  /** The frame scheduled between the element sync and the placement, if any. */
+  const placeFrame = useRef<number | null>(null);
   const [hover, setHover] = useState<Hover | null>(null);
   const [palette, setPalette] = useState<Palette | null>(null);
+  // Creating the instance and feeding it elements are two heavy steps; let the first one
+  // paint before the second starts, so the canvas boot is not one long blocked task.
+  const [elementsReady, setElementsReady] = useState(false);
 
   const elements = useMemo(() => (mode === "local" && centerId ? localGraph(data, centerId) : data), [data, mode, centerId]);
   // The editor's local graph is a small strip and stays flat; so does focus mode.
@@ -1076,11 +1082,9 @@ export default function GraphCanvas({
       // The instance still holds the picture and the camera it was left with.
       firstRun.current = false;
       perfCount("reuses");
-      // Its container was detached for a while: make sure the canvas matches the page again
-      // before the kept picture is shown (a stale 0×0 size would paint nothing).
-      requestAnimationFrame(() => {
-        if (!cy.destroyed()) cy.resize();
-      });
+      // Its container was detached for a while. The ResizeObserver below compares the kept
+      // canvas box with the live one; a redundant resize here would repaint the whole renderer
+      // on the click that returns to the page.
     } else {
       // Two nested divs: `shell` is what the page attaches and detaches, `host` is the
       // cytoscape container inside it. Moving the shell never removes `host` from its parent,
@@ -1113,6 +1117,7 @@ export default function GraphCanvas({
           unchanged: false,
           appliedVisibility: null,
           appliedQuery: null,
+          appliedSelection: undefined,
         };
     }
     cyRef.current = cy;
@@ -1198,20 +1203,35 @@ export default function GraphCanvas({
       resize.disconnect();
       bridge.container = null;
       cyRef.current = null;
+      // Leaving the page must abandon the boot: a worker layout, a pending placement or a
+      // glide that outlives the mount would block the next page on the main thread.
+      const wasRunning = layoutRun.current !== null;
+      layoutRun.current?.cancel();
+      layoutRun.current = null;
       if (persistent?.cy === cy) {
-        // Leaving the page keeps the picture for the next visit. A layout still running is
-        // left alone: it belongs to this picture, so the return shows it settled. Its seeds
-        // are not worth storing, only the camera.
-        if (layoutRun.current && bridge.cache) rememberCamera(bridge.cache, { zoom: cy.zoom(), pan: { ...cy.pan() } });
-        else rememberGraphState(cy, bridge.cache);
+        cy.stop();
+        cy.elements().stop();
+        gliding.delete(cy);
+        // Only the camera is worth keeping from an unfinished picture; the next visit
+        // rebuilds it instead of continuing a half-applied layout.
+        if (wasRunning) {
+          if (bridge.cache) rememberCamera(bridge.cache, { zoom: cy.zoom(), pan: { ...cy.pan() } });
+        } else {
+          rememberGraphState(cy, bridge.cache);
+        }
         persistent.shell.remove();
         return;
       }
       // Going away for good: stop the simulation instead of paying for a picture no one sees.
-      layoutRun.current?.cancel();
-      layoutRun.current = null;
       cy.destroy();
     };
+  }, []);
+
+  // One frame between building the renderer and adding the picture: the empty canvas box
+  // paints first, then the element sync and layout run in their own task.
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => setElementsReady(true));
+    return () => cancelAnimationFrame(raf);
   }, []);
 
   useEffect(() => {
@@ -1231,6 +1251,7 @@ export default function GraphCanvas({
   // only moves on the first run (local graphs re-fit, they are rebuilt per note).
   // biome-ignore lint/correctness/useExhaustiveDependencies: fitVisible only reads refs
   useEffect(() => {
+    if (!elementsReady) return;
     const cy = cyRef.current;
     if (!cy) return;
     const effectStart = performance.now();
@@ -1271,50 +1292,87 @@ export default function GraphCanvas({
       if (!layoutRun.current) perfSettled(perfRecord.current, "cache");
       return;
     }
-    const placeStart = performance.now();
-    const scope = bridge.cache;
-    // First look at this data: reuse the last visit's positions so a return is instant.
-    // Every node on screen counts, including the layer spacers and band headers.
-    const cached =
-      first && scope
-        ? recallGraph(
-            scope,
-            cy.nodes().map((node) => node.id()),
-          )
-        : null;
-    if (cached) {
-      cy.batch(() => {
+    // The element sync and the placement are the two heavy steps of a cold graph. Yield
+    // between them so a cold boot never stacks them into one long task; leaving the page
+    // cancels the frame and the next visit starts clean.
+    const frame = requestAnimationFrame(() => {
+      placeFrame.current = null;
+      if (cyRef.current !== cy || cy.destroyed()) return;
+      const placeStart = performance.now();
+      const scope = bridge.cache;
+      // First look at this data: reuse the last visit's positions so a return is instant.
+      // Every node on screen counts, including the layer spacers and band headers.
+      const cached =
+        first && scope
+          ? recallGraph(
+              scope,
+              cy.nodes().map((node) => node.id()),
+            )
+          : null;
+      if (cached) {
+        cy.batch(() => {
+          cy.nodes().forEach((node) => {
+            const position = cached.positions.get(node.id());
+            if (position) node.position(position);
+          });
+        });
+        if (cached.exact) {
+          // Same graph as last time: restore the picture as it was, no layout, no fit.
+          perfCount("cacheHits");
+          if (cached.camera) {
+            cy.stop(true);
+            cy.viewport(cached.camera);
+            perfCount("cameraRestores");
+          } else {
+            fitVisible(false);
+          }
+          scaleLabelsToFit(cy, cy.zoom());
+          toggleDetailLabels(cy);
+          toggleLabelCulling(cy);
+          rememberGraphState(cy, scope);
+          perfPhase(perfRecord.current, "place", performance.now() - placeStart);
+          perfFirstFrame(perfRecord.current);
+          perfSettled(perfRecord.current, "cache");
+          return;
+        }
+        // Structure changed: grouped re-grids exactly (cheap), flat settles from the known
+        // positions instead of starting from scratch.
+        perfCount("cachePartials");
+        if (layout) {
+          runPresetLayout(cy, layout);
+          fitVisible(false);
+          scaleLabelsToFit(cy, cy.zoom());
+          toggleDetailLabels(cy);
+          rememberGraphState(cy, scope);
+          perfPhase(perfRecord.current, "place", performance.now() - placeStart);
+          perfFirstFrame(perfRecord.current);
+          perfSettled(perfRecord.current, "layout");
+          return;
+        }
+        cy.nodes().removeStyle("font-size");
+        const seeds = new Map<string, Position>();
         cy.nodes().forEach((node) => {
           const position = cached.positions.get(node.id());
-          if (position) node.position(position);
+          if (position) seeds.set(node.id(), position);
         });
-      });
-      if (cached.exact) {
-        // Same graph as last time: restore the picture as it was, no layout, no fit.
-        perfCount("cacheHits");
-        if (cached.camera) {
-          cy.stop(true);
-          cy.viewport(cached.camera);
-          perfCount("cameraRestores");
-        } else {
-          fitVisible(false);
-        }
-        scaleLabelsToFit(cy, cy.zoom());
-        toggleDetailLabels(cy);
-        toggleLabelCulling(cy);
-        rememberGraphState(cy, scope);
+        fitVisible(false);
         perfPhase(perfRecord.current, "place", performance.now() - placeStart);
         perfFirstFrame(perfRecord.current);
-        perfSettled(perfRecord.current, "cache");
+        settleFlatGraph(cy, seeds, false, true);
         return;
       }
-      // Structure changed: grouped re-grids exactly (cheap), flat settles from the known
-      // positions instead of starting from scratch.
-      perfCount("cachePartials");
+      if (mode === "local") {
+        cy.nodes().removeStyle("font-size");
+        runLayout(cy, { randomize: true, animate: false, compact: true, fit: () => fitVisible(false) });
+        perfPhase(perfRecord.current, "place", performance.now() - placeStart);
+        perfFirstFrame(perfRecord.current);
+        perfSettled(perfRecord.current, "layout");
+        return;
+      }
       if (layout) {
         runPresetLayout(cy, layout);
-        fitVisible(false);
-        scaleLabelsToFit(cy, cy.zoom());
+        if (first || boxedChanged || freshInstance) fitVisible(false);
+        else scaleLabelsToFit(cy, cy.zoom());
         toggleDetailLabels(cy);
         rememberGraphState(cy, scope);
         perfPhase(perfRecord.current, "place", performance.now() - placeStart);
@@ -1323,50 +1381,29 @@ export default function GraphCanvas({
         return;
       }
       cy.nodes().removeStyle("font-size");
-      const seeds = new Map<string, Position>();
-      cy.nodes().forEach((node) => {
-        const position = cached.positions.get(node.id());
-        if (position) seeds.set(node.id(), position);
-      });
-      fitVisible(false);
+      // A first look starts from a spiral (hubs in the middle); a refresh keeps the picture on
+      // screen and lets the incremental layout nudge it.
+      const seeds = freshInstance ? seedPositions(cy) : currentPositions(cy);
+      settleTo(cy, seeds, { animate: false });
+      const refit = first || boxedChanged || freshInstance;
+      if (refit) fitVisible(false);
       perfPhase(perfRecord.current, "place", performance.now() - placeStart);
       perfFirstFrame(perfRecord.current);
-      settleFlatGraph(cy, seeds, false, true);
-      return;
-    }
-    if (mode === "local") {
-      cy.nodes().removeStyle("font-size");
-      runLayout(cy, { randomize: true, animate: false, compact: true, fit: () => fitVisible(false) });
-      perfPhase(perfRecord.current, "place", performance.now() - placeStart);
-      perfFirstFrame(perfRecord.current);
-      perfSettled(perfRecord.current, "layout");
-      return;
-    }
-    if (layout) {
-      runPresetLayout(cy, layout);
-      if (first || boxedChanged || freshInstance) fitVisible(false);
-      else scaleLabelsToFit(cy, cy.zoom());
-      toggleDetailLabels(cy);
-      rememberGraphState(cy, scope);
-      perfPhase(perfRecord.current, "place", performance.now() - placeStart);
-      perfFirstFrame(perfRecord.current);
-      perfSettled(perfRecord.current, "layout");
-      return;
-    }
-    cy.nodes().removeStyle("font-size");
-    // A first look starts from a spiral (hubs in the middle); a refresh keeps the picture on
-    // screen and lets the incremental layout nudge it.
-    const seeds = freshInstance ? seedPositions(cy) : currentPositions(cy);
-    settleTo(cy, seeds, { animate: false });
-    const refit = first || boxedChanged || freshInstance;
-    if (refit) fitVisible(false);
-    perfPhase(perfRecord.current, "place", performance.now() - placeStart);
-    perfFirstFrame(perfRecord.current);
-    settleFlatGraph(cy, seeds, freshInstance, refit);
-  }, [elements, mode, reduce, boxed, t]);
+      settleFlatGraph(cy, seeds, freshInstance, refit);
+    });
+    placeFrame.current = frame;
+    return () => {
+      if (placeFrame.current === frame) {
+        cancelAnimationFrame(frame);
+        placeFrame.current = null;
+      }
+    };
+  }, [elements, mode, reduce, boxed, t, elementsReady]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: re-apply after the elements sync
   useEffect(() => {
+    // Nothing to hide until the elements are in the kept canvas.
+    if (!elementsReady) return;
     const cy = cyRef.current;
     if (!cy) return;
     const applied = persistent?.cy === cy ? persistent : null;
@@ -1407,9 +1444,11 @@ export default function GraphCanvas({
     });
     perfPhase(perfRecord.current, "visibility", performance.now() - started);
     if (applied) applied.appliedVisibility = { ids: visibleIds, boxed };
-  }, [elements, visibleIds, boxed]);
+  }, [elements, visibleIds, boxed, elementsReady]);
 
   useEffect(() => {
+    // The query is applied once the elements exist; before that there is nothing to dim.
+    if (!elementsReady) return;
     const cy = cyRef.current;
     if (!cy) return;
     const applied = persistent?.cy === cy ? persistent : null;
@@ -1429,14 +1468,18 @@ export default function GraphCanvas({
     });
     perfPhase(perfRecord.current, "search", performance.now() - started);
     if (applied) applied.appliedQuery = query;
-  }, [elements, query]);
+  }, [elements, query, elementsReady]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: re-apply after the elements sync
   useEffect(() => {
+    if (!elementsReady) return;
     const cy = cyRef.current;
     if (!cy) return;
-    const started = performance.now();
+    const applied = persistent?.cy === cy ? persistent : null;
     const picked = selectedId ?? (mode === "local" ? centerId : null);
+    // The kept picture already carries this selection: nothing to redraw.
+    if (applied?.unchanged && applied.appliedSelection === picked) return;
+    const started = performance.now();
     cy.batch(() => {
       cy.nodes(".picked").removeClass("picked");
       if (picked) cy.getElementById(picked).addClass("picked");
@@ -1444,7 +1487,8 @@ export default function GraphCanvas({
     if (boxed) emphasizeNode(cy, picked ?? null);
     else cy.batch(() => cy.elements().removeClass("fade lit veiled"));
     perfPhase(perfRecord.current, "selection", performance.now() - started);
-  }, [elements, selectedId, mode, centerId, boxed]);
+    if (applied) applied.appliedSelection = picked;
+  }, [elements, selectedId, mode, centerId, boxed, elementsReady]);
 
   return (
     <div className={cn("relative overflow-hidden", className)}>

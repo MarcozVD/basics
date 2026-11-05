@@ -1,3 +1,4 @@
+import { useQueryClient } from "@tanstack/react-query";
 import {
   FolderKanban,
   House,
@@ -22,6 +23,7 @@ import { isAgentRunActive, useAgentRunStatus } from "@/lib/agent-run";
 import { isDesktop, isMacos, modChord } from "@/lib/desktop";
 import { PALETTE_SEARCH_EVENT } from "@/lib/desktop-shell";
 import { SPRING_LAYOUT } from "@/lib/ease";
+import { prefetchRoute } from "@/lib/prefetch";
 import { useHealth, useInbox } from "@/lib/queries";
 import { cn } from "@/lib/utils";
 
@@ -116,11 +118,17 @@ function NavItem({ item, active, collapsed, pending, agentRunning, layoutId, onN
   const shortcut = shortcutLabel(item);
   const showCount = item.to === "/inbox" && pending > 0;
   const showAgent = item.to === "/recommend" && agentRunning && !active;
+  const queryClient = useQueryClient();
+  // Hover, keyboard focus and touch all warm the same route: chunk plus first-paint queries.
+  const warm = () => prefetchRoute(item.to, queryClient);
 
   const link = (
     <Link
       to={item.to}
       onClick={onNavigate}
+      onPointerEnter={warm}
+      onPointerDown={warm}
+      onFocus={warm}
       aria-label={t(item.labelKey)}
       aria-current={active ? "page" : undefined}
       className={cn(

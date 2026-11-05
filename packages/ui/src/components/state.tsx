@@ -1,4 +1,6 @@
 import { AlertTriangle, Inbox as InboxIcon } from "lucide-react";
+import { motion } from "motion/react";
+import { type ReactNode, useEffect, useState } from "react";
 import { Loader } from "@/components/motion/loader";
 import { useT } from "@/i18n";
 import { ApiRequestError } from "@/lib/api";
@@ -41,5 +43,25 @@ export function Empty({ title, description }: { title?: string; description?: st
       <p className="text-sm font-medium">{title ?? t("state.empty.title")}</p>
       <p className="text-sm text-muted-foreground">{description ?? t("state.empty.description")}</p>
     </div>
+  );
+}
+
+/**
+ * Waits `delay` before mounting its children, then fades them in over 150ms. A cold route
+ * that resolves faster than the delay paints straight to content; one that is slower gets a
+ * quiet placeholder instead of a flash. The wrapper keeps the flex box so the placeholder can
+ * fill the panel exactly like the content it stands in for.
+ */
+export function DelayedMount({ children, delay = 150 }: { children: ReactNode; delay?: number }) {
+  const [shown, setShown] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setShown(true), delay);
+    return () => clearTimeout(timer);
+  }, [delay]);
+  if (!shown) return null;
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.15 }} className="flex min-h-0 flex-1 flex-col">
+      {children}
+    </motion.div>
   );
 }

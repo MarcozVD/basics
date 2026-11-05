@@ -17,6 +17,7 @@ import { Button as LinkButton } from "@/components/ui/button";
 import { type TranslationKey, useT } from "@/i18n";
 import { modChord } from "@/lib/desktop";
 import { EASE_OUT, SPRING_LAYOUT, SPRING_PRESS } from "@/lib/ease";
+import { useFirstPaint, useProgressiveCount } from "@/lib/progressive";
 import { useLayers, useNotes, useSearch, useStats } from "@/lib/queries";
 import { formatCompactRelativeTime } from "@/lib/relative-time";
 import { cn } from "@/lib/utils";
@@ -209,6 +210,13 @@ export function ExplorePage() {
     return result;
   }, [grouped, rows]);
 
+  // Long lists mount the first screenful, then fill in idle slices instead of one big commit.
+  // The frame paints once before any row mounts, so the click's first frame is never the list.
+  const firstPaint = useFirstPaint();
+  const renderLimit = useProgressiveCount(rows.length, `${view}|${sort}|${type ?? ""}|${layer ?? ""}|${query}`, {
+    active: firstPaint,
+  });
+
   // Entering /explore without query params restores the saved controls; explicit params always win.
   useEffect(() => {
     const entering = previousPath.current !== "/explore" && pathname === "/explore";
@@ -234,6 +242,8 @@ export function ExplorePage() {
   }, [pathname, view, sort, type, layer]);
 
   const highlighted = Math.min(hovered ?? selected, Math.max(0, rows.length - 1));
+  // Keyboard navigation can reach past the mounted slice; keep the row it points at mounted.
+  const visibleRows = Math.max(renderLimit, highlighted + 1);
 
   useEffect(() => {
     if (selected >= rows.length) setSelected(Math.max(0, rows.length - 1));
@@ -476,7 +486,7 @@ export function ExplorePage() {
       </Reveal>
 
       <div className="pt-1">
-        {listQuery.isPending ? (
+        {!firstPaint ? null : listQuery.isPending ? (
           <Loading />
         ) : listQuery.error ? (
           <ErrorState error={listQuery.error} />
@@ -535,11 +545,14 @@ export function ExplorePage() {
             className="flex flex-col gap-4 rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
           >
             {groups.map((group) => {
+              // A group only mounts once every row before it is mounted: headings below the
+              // fill line would otherwise jump down as earlier groups grow.
+              if (group.start >= visibleRows) return null;
               const headingId = group.type ? `explore-group-${group.type}` : undefined;
               const items = (
                 <div className={cn(view === "grid" ? "grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-2" : "flex flex-col")}>
                   <AnimatePresence mode="popLayout">
-                    {group.rows.map((row, offset) => renderItem(row, group.start + offset))}
+                    {group.rows.map((row, offset) => (group.start + offset < visibleRows ? renderItem(row, group.start + offset) : null))}
                   </AnimatePresence>
                 </div>
               );

@@ -18,6 +18,7 @@ import { agentColor, agentInitial } from "@/lib/agent-color";
 import { ApiRequestError, approveAllProposals, approveProposal, rejectAllProposals, rejectProposal } from "@/lib/api";
 import { EASE_OUT, SPRING_LAYOUT } from "@/lib/ease";
 import { groupPackProposals, packProposer } from "@/lib/packs";
+import { useFirstPaint, useProgressiveCount } from "@/lib/progressive";
 import { useInbox, useProposal, useStats } from "@/lib/queries";
 import { formatRelativeTime } from "@/lib/relative-time";
 import { useReturnFocus } from "@/lib/return-focus";
@@ -116,6 +117,14 @@ export function InboxPage() {
     () => (filter === "all" ? packFiltered : packFiltered.filter((proposal) => proposal.meta.action === filter)),
     [filter, packFiltered],
   );
+  // Long inboxes mount the first screenful, then fill in idle slices.
+  const firstPaint = useFirstPaint();
+  const renderLimit = useProgressiveCount(visible.length, `${filter}|${packFilter ?? ""}`, {
+    active: firstPaint,
+    initial: 6,
+    chunk: 10,
+  });
+  const visibleWindow = firstPaint ? Math.max(renderLimit, selected + 1) : 0;
   const visibleIds = useMemo(() => new Set(visible.map((proposal) => proposal.id)), [visible]);
   // The selection only ever counts proposals that are still visible: it is not stored
   // in the URL, and a filter change drops the ids it hides.
@@ -689,7 +698,7 @@ export function InboxPage() {
               ) : (
                 <div className="grid gap-3 min-[640px]:grid-cols-2 min-[1280px]:grid-cols-1">
                   <AnimatePresence initial mode="popLayout">
-                    {visible.map((proposal, index) => {
+                    {visible.slice(0, visibleWindow).map((proposal, index) => {
                       const busy =
                         (approve.isPending && approve.variables === proposal.id) || (reject.isPending && reject.variables === proposal.id);
                       const typeLabel = t(`type.${proposal.type}` as TranslationKey);

@@ -207,6 +207,9 @@ Springs and easings live in `src/lib/ease.ts`.
 - Lists: enter with y 6px + opacity, 20ms stagger, only the first 10 items animate; exits fade in ~100ms.
 - Counts roll with `AnimatedNumber`. The score bar fills in 400ms, the longest motion in the app; nothing on a frequent action exceeds 400ms.
 - `prefers-reduced-motion`: every animation drops to opacity only or none (`useReducedMotion()`, `motion-safe:` for CSS pulses).
+- **Loading order.** A click paints the outgoing page and the incoming frame (title, controls, filters) first; heavy content mounts after that first paint. Explore, Projects and Inbox mount their lists on the next frame and add rows in idle chunks (`lib/progressive.ts`). The graph canvas (Cytoscape) is not created until the enter transition has finished (`PAGE_ENTER_MS` plus a small margin; `PAGE_REDUCED_MS` under reduced motion), and a graph skeleton with the same panel box stands in until then.
+- **Skeletons.** A skeleton appears only if a route is still loading after 150ms (`DelayedMount` in `components/state.tsx`). It then fades in over 150ms. A route that resolves sooner paints straight to content, with no skeleton flash. The skeleton and the page do not overlap: the skeleton fades in, the page fades in when it arrives. Cached data renders on the first active frame with no skeleton.
+- **Prefetch.** Hovering, pressing or focusing a sidebar item loads that route's chunk and its first query (`lib/prefetch.ts`), so the click usually mounts with data already cached.
 
 ## Components
 
@@ -245,7 +248,7 @@ Springs and easings live in `src/lib/ease.ts`.
 | `/skills` | Skills | Installed agent skills grouped by area. Two filter rows (agent chips, then area chips with `?area=`), instant search, five rows per area with `Show all N`, a per-row area override with reset. Sidebar item (`G then K`); the All view previews five rows per area. Expanded rows read "Details" / "Hide details"; the Shared filter has a hint. |
 | overlays | ⌘K palette, New note dialog | Available on every route. |
 
-Every route except Home is lazy-loaded (`App.tsx`, `React.lazy` + a quiet skeleton) and prefetched when the browser is idle; CodeMirror, Cytoscape, Shiki and the markdown stack only load with the routes that use them.
+Every route except Home is lazy-loaded (`App.tsx`, `React.lazy` + a quiet skeleton, shown only after 150ms) and prefetched on sidebar hover or focus and when the browser is idle; CodeMirror, Cytoscape, Shiki and the markdown stack only load with the routes that use them.
 
 ## Do's and don'ts
 
