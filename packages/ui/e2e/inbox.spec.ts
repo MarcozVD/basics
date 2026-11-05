@@ -86,7 +86,7 @@ test("lists and approves a proposal from the inbox", async ({ page }) => {
   await expect(page).toHaveURL(/\/notes\/django$/);
 
   await page.locator('nav a[href="/inbox"]').click();
-  await expect(page.getByText(/Inbox zero/)).toBeVisible();
+  await expect(page.getByText(/Nothing to review yet/)).toBeVisible();
   // With nothing pending the whole content area holds one empty state: no list and no detail pane.
   await expect(page.getByTestId("inbox-list")).toHaveCount(0);
   await expect(page.locator("aside")).toHaveCount(0);
@@ -100,7 +100,7 @@ test("approves a proposal directly from the list card", async ({ page }) => {
 
   await page.locator('[data-proposal-id="svelte"]').getByRole("button", { name: "Approve", exact: true }).click();
 
-  await expect(page.getByText(/Inbox zero/)).toBeVisible();
+  await expect(page.getByText(/Nothing to review yet/)).toBeVisible();
   // The empty list drops the stale selection instead of deep-linking to a proposal that no longer exists.
   await expect(page).toHaveURL(/\/inbox$/);
   await expect(page.getByText("Approved", { exact: true })).toBeVisible();
@@ -145,7 +145,7 @@ test("approves every pending proposal from the inbox header", async ({ page }) =
     await dialog.getByRole("button", { name: "Approve all", exact: true }).click();
 
     await expect(page.getByText("Approved 3 · 0 kept for review", { exact: true })).toBeVisible();
-    await expect(page.getByText(/Inbox zero/)).toBeVisible();
+    await expect(page.getByText(/Nothing to review yet/)).toBeVisible();
   } finally {
     for (const id of ids) {
       fs.rmSync(path.join(vaultPath(), "inbox", `${id}.md`), { force: true });
@@ -212,7 +212,7 @@ test("rejects every pending proposal from the inbox header", async ({ page }) =>
     await dialog.getByRole("button", { name: "Reject all", exact: true }).click();
 
     await expect(page.getByText("Rejected 3 · 0 kept", { exact: true })).toBeVisible();
-    await expect(page.getByText(/Inbox zero/)).toBeVisible();
+    await expect(page.getByText(/Nothing to review yet/)).toBeVisible();
   } finally {
     for (const id of ids) fs.rmSync(path.join(vaultPath(), "inbox", `${id}.md`), { force: true });
   }

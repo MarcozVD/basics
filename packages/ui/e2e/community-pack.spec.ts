@@ -157,7 +157,7 @@ test("adds a pack from GitHub, reviews proposals in the inbox and approves all",
   await expect(packBar.getByRole("button", { name: "Confirm approve all?" })).toBeVisible();
   await packBar.getByRole("button", { name: "Confirm approve all?" }).click();
   await expect(page.getByText("Approved 2 proposals")).toBeVisible();
-  await expect(page.getByText("Inbox zero — agents' proposals will show up here.")).toBeVisible();
+  await expect(page.getByText(/Nothing to review yet/)).toBeVisible();
 
   // The notes are installed and owned by the pack.
   const packs = (await (await page.request.get("/api/packs")).json()) as {

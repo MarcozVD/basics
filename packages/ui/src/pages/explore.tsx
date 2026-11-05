@@ -1,8 +1,8 @@
 import type { NoteType } from "@marcozvd/basics-core";
-import { ArrowDownUp, Layers, LayoutGrid, LayoutList, Plus, Search, SearchX } from "lucide-react";
+import { ArrowDownUp, Layers, LayoutGrid, LayoutList, Package, Plus, Search, SearchX } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
-import { useLocation, useNavigate, useSearchParams } from "react-router";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router";
 import { AnimatedNumber } from "@/components/motion/animated-number";
 import { Button } from "@/components/motion/button/base";
 import { CARD_TARGET_CLASS, Card, CardContent, CardFooter, CardHeader } from "@/components/motion/card";
@@ -13,9 +13,10 @@ import { Tooltip } from "@/components/motion/tooltip";
 import { TypeChip } from "@/components/note-form/note-preview";
 import { PAGE_SECTIONS, Page } from "@/components/page";
 import { ErrorState, Loading } from "@/components/state";
+import { Button as LinkButton } from "@/components/ui/button";
 import { type TranslationKey, useT } from "@/i18n";
 import { EASE_OUT, SPRING_LAYOUT, SPRING_PRESS } from "@/lib/ease";
-import { useLayers, useNotes, useSearch } from "@/lib/queries";
+import { useLayers, useNotes, useSearch, useStats } from "@/lib/queries";
 import { formatCompactRelativeTime } from "@/lib/relative-time";
 import { cn } from "@/lib/utils";
 
@@ -158,6 +159,10 @@ export function ExplorePage() {
   const notes = useNotes(filter);
   const allInLayer = useNotes(layer ? { layer } : {});
   const hits = useSearch(query, filter);
+  const stats = useStats();
+  // An empty vault and a filter that matches nothing need different words and
+  // different ways out: filter first, then check whether there is anything at all.
+  const vaultEmpty = stats.data?.total === 0;
   const listQuery = query ? hits : notes;
 
   const counts = useMemo(() => {
@@ -473,21 +478,48 @@ export function ExplorePage() {
         ) : listQuery.error ? (
           <ErrorState error={listQuery.error} />
         ) : rows.length === 0 ? (
-          <motion.div
-            initial={{ opacity: 0, y: reduce ? 0 : 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.18, ease: EASE_OUT }}
-            className="flex flex-col items-center gap-1 rounded-2xl border border-dashed border-border px-4 py-12 text-center"
-          >
-            <SearchX className="mb-1 size-5 text-muted-foreground" aria-hidden="true" />
-            <p className="text-sm font-medium">{t("explore.empty.title")}</p>
-            <p className="text-sm text-muted-foreground">{t("explore.empty.description")}</p>
-            {hasFilters && (
-              <Button variant="secondary" size="sm" className="mt-3" pressScale={0.97} onClick={clearFilters}>
-                {t("explore.clearFilters")}
-              </Button>
-            )}
-          </motion.div>
+          vaultEmpty ? (
+            <motion.div
+              initial={{ opacity: 0, y: reduce ? 0 : 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.18, ease: EASE_OUT }}
+              className="flex flex-col items-center gap-1 rounded-2xl border border-dashed border-border px-4 py-12 text-center"
+            >
+              <Package className="mb-1 size-5 text-muted-foreground" aria-hidden="true" />
+              <p className="text-sm font-medium">{t("explore.emptyVault.title")}</p>
+              <p className="max-w-[52ch] text-sm text-muted-foreground">{t("explore.emptyVault.description")}</p>
+              <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+                <LinkButton asChild size="sm">
+                  <Link to="/?packs=1">{t("explore.emptyVault.packs")}</Link>
+                </LinkButton>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  pressScale={0.97}
+                  onClick={() => window.dispatchEvent(new CustomEvent("basics:new-note", { detail: { type } }))}
+                >
+                  <Plus className="size-3.5" aria-hidden="true" />
+                  {t("explore.emptyVault.newNote")}
+                </Button>
+              </div>
+            </motion.div>
+          ) : (
+            <motion.div
+              initial={{ opacity: 0, y: reduce ? 0 : 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.18, ease: EASE_OUT }}
+              className="flex flex-col items-center gap-1 rounded-2xl border border-dashed border-border px-4 py-12 text-center"
+            >
+              <SearchX className="mb-1 size-5 text-muted-foreground" aria-hidden="true" />
+              <p className="text-sm font-medium">{t("explore.empty.title")}</p>
+              <p className="text-sm text-muted-foreground">{t("explore.empty.description")}</p>
+              {hasFilters && (
+                <Button variant="secondary" size="sm" className="mt-3" pressScale={0.97} onClick={clearFilters}>
+                  {t("explore.clearFilters")}
+                </Button>
+              )}
+            </motion.div>
+          )
         ) : (
           <div
             key={view}

@@ -23,12 +23,13 @@ import { PAGE_SECTIONS, Page } from "@/components/page";
 import { AgentPanel } from "@/components/recommend/agent-panel";
 import { CreateProjectDialog } from "@/components/recommend/create-project-dialog";
 import { ErrorState } from "@/components/state";
+import { Button as LinkButton } from "@/components/ui/button";
 import { type TranslationKey, useT } from "@/i18n";
 import { resetAgentRun } from "@/lib/agent-run";
 import { enableEmbeddings, exportStack, recommend } from "@/lib/api";
 import { EASE_OUT, SPRING_PANEL } from "@/lib/ease";
 import { useEmbeddingsProgress } from "@/lib/events";
-import { queryKeys, useEmbeddings, useLayers } from "@/lib/queries";
+import { queryKeys, useEmbeddings, useLayers, useStats } from "@/lib/queries";
 import { clearRecommend, updateAgent, updateRecommend, useRecommendStore } from "@/lib/recommend-store";
 import { useReturnFocus } from "@/lib/return-focus";
 import { toast } from "@/lib/toast";
@@ -343,6 +344,8 @@ export function RecommendPage() {
   const t = useT();
   const reduce = useReducedMotion() ?? false;
   const layersQuery = useLayers();
+  const stats = useStats();
+  const vaultEmpty = stats.data?.total === 0;
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const store = useRecommendStore();
   const queryClient = useQueryClient();
@@ -668,6 +671,13 @@ export function RecommendPage() {
               onToggle={toggleTech}
               onUseProfile={useProfile}
             />
+          ) : vaultEmpty ? (
+            <div className="flex flex-col items-start gap-3 pt-2">
+              <p className="max-w-[72ch] text-sm text-muted-foreground">{t("recommend.emptyVault.description")}</p>
+              <LinkButton asChild size="sm">
+                <Link to="/?packs=1">{t("recommend.emptyVault.action")}</Link>
+              </LinkButton>
+            </div>
           ) : (
             <div className="flex flex-col gap-3 pt-2">
               <p className="max-w-[72ch] text-sm text-muted-foreground">{t("recommend.empty.description")}</p>

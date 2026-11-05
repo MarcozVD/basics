@@ -1038,7 +1038,6 @@ export function ProjectsPage() {
             </div>
             <p className="mt-1 max-w-[68ch] text-sm text-muted-foreground">{t("projects.intro")}</p>
           </div>
-          <NewProjectButton />
         </header>
         <div className="flex min-h-[calc(100dvh-14rem)] items-center justify-center py-10">
           <div className="max-w-xl text-center">
@@ -1054,6 +1053,10 @@ export function ProjectsPage() {
               {t("projects.empty.exportAfter")}
             </p>
             <p className="mx-auto mt-3 max-w-md text-xs leading-5 text-muted-foreground">{t("projects.empty.hint")}</p>
+            <div className="mt-5 flex flex-col items-center gap-2">
+              <NewProjectButton />
+              <p className="text-xs text-muted-foreground">{t("projects.empty.manual")}</p>
+            </div>
           </div>
         </div>
       </Page>
