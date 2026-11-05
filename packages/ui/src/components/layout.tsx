@@ -25,7 +25,7 @@ import { Tooltip } from "@/components/motion/tooltip";
 import { PAGE_GUTTERS } from "@/components/page";
 import { type TranslationKey, useI18n } from "@/i18n";
 import { isAgentRunActive, useAgentRunStatus } from "@/lib/agent-run";
-import { isDesktop, isMacos } from "@/lib/desktop";
+import { isDesktop, isMacos, modChord } from "@/lib/desktop";
 import { PALETTE_SEARCH_EVENT, useDesktopShell } from "@/lib/desktop-shell";
 import { EASE_OUT } from "@/lib/ease";
 import { useHealth, useInbox } from "@/lib/queries";
@@ -131,7 +131,7 @@ export function Layout() {
   // native title bar, find bar and reload. `isDesktop()` never changes for a page.
   const desktop = useMemo(() => isDesktop(), []);
   const mac = useMemo(() => desktop && isMacos(), [desktop]);
-  const settingsKey = useMemo(() => (isMacos() ? "⌘," : "Ctrl+,"), []);
+  const settingsKey = useMemo(() => modChord(","), []);
 
   useGlobalShortcuts();
   // No browser behaviour in the app: Ctrl+F searches here, reload/print/source/zoom/…
@@ -259,7 +259,7 @@ export function Layout() {
       </main>
 
       <nav aria-label={t("nav.primary")} className={cn("fixed bottom-4 left-1/2 z-40 -translate-x-1/2", desktop && "select-none")}>
-        <span className="sr-only">{t("shortcuts.help")}</span>
+        <span className="sr-only">{t("shortcuts.help", { combo: modChord("K") })}</span>
         <Dock className="shadow-[0_8px_30px_rgba(0,0,0,0.25)]">
           {dockLinks.map((item) => {
             const Icon = item.icon;
@@ -322,7 +322,7 @@ export function Layout() {
                   <span className="flex items-center gap-2">
                     <span>{t("nav.palette")}</span>
                     <kbd className="rounded-full border border-border px-1.5 font-mono text-[10px] text-muted-foreground">
-                      {t("shortcuts.palette")}
+                      {t("shortcuts.palette", { combo: modChord("K") })}
                     </kbd>
                   </span>
                   <span className="max-w-56 text-[11px] leading-4 font-normal text-muted-foreground">{t("nav.palette.purpose")}</span>

@@ -38,6 +38,11 @@ export function isMacos(): boolean {
   return typeof navigator !== "undefined" && /Mac/i.test(navigator.userAgent);
 }
 
+/** A shortcut chord: `⌘K` on macOS, `Ctrl+K` everywhere else. */
+export function modChord(key: string): string {
+  return isMacos() ? `⌘${key}` : `Ctrl+${key}`;
+}
+
 export async function minimizeWindow(): Promise<void> {
   try {
     await (await appWindow()).minimize();

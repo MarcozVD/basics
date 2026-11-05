@@ -1,6 +1,6 @@
 import type { Candidate, ExportFile, Recommendation } from "@marcozvd/basics-core";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Ban, Check, Copy, FileDown, type LucideIcon, MessageSquareText, Plus, Sparkles, Star, X } from "lucide-react";
+import { AlertTriangle, Ban, Check, Copy, FileDown, Info, type LucideIcon, MessageSquareText, Plus, Sparkles, Star, X } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -27,6 +27,7 @@ import { Button as LinkButton } from "@/components/ui/button";
 import { type TranslationKey, useT } from "@/i18n";
 import { resetAgentRun } from "@/lib/agent-run";
 import { enableEmbeddings, exportStack, recommend } from "@/lib/api";
+import { modChord } from "@/lib/desktop";
 import { EASE_OUT, SPRING_PANEL } from "@/lib/ease";
 import { useEmbeddingsProgress } from "@/lib/events";
 import { queryKeys, useEmbeddings, useLayers, useStats } from "@/lib/queries";
@@ -578,7 +579,7 @@ export function RecommendPage() {
           }
           leadingAction={
             <kbd className="ml-2 rounded-full border border-border px-1.5 font-mono text-[10px] leading-4 text-muted-foreground">
-              {t("recommend.shortcut")}
+              {t("recommend.shortcut", { combo: modChord("↵") })}
             </kbd>
           }
         />
@@ -614,8 +615,17 @@ export function RecommendPage() {
           </fieldset>
 
           <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground" aria-hidden="true">
-              {t("recommend.perLayer")}
+            <span className="flex items-center gap-1 text-xs text-muted-foreground">
+              <span aria-hidden="true">{t("recommend.perLayer")}</span>
+              <Tooltip content={t("recommend.perLayer.hint")}>
+                <button
+                  type="button"
+                  aria-label={t("recommend.perLayer.hint")}
+                  className="grid size-3.5 cursor-help place-items-center rounded-full text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                >
+                  <Info className="size-3" aria-hidden="true" />
+                </button>
+              </Tooltip>
             </span>
             {/* The stepper's liquid geometry is drawn at 48px; scaled to the 32px filter row. */}
             <div className="h-8 w-36">
@@ -680,7 +690,6 @@ export function RecommendPage() {
             </div>
           ) : (
             <div className="flex flex-col gap-3 pt-2">
-              <p className="max-w-[72ch] text-sm text-muted-foreground">{t("recommend.empty.description")}</p>
               <div className="flex flex-wrap items-center gap-1.5">
                 <span className="mr-1 text-xs text-muted-foreground">{t("recommend.examples")}</span>
                 {EXAMPLES.map((key) => (

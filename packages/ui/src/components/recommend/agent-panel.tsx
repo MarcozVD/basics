@@ -148,6 +148,8 @@ export function AgentPanel({ description, layers, onSelectTechs, onClose }: Agen
         </button>
       </div>
 
+      <p className="max-w-[72ch] text-xs text-muted-foreground">{t("recommend.agent.vs")}</p>
+
       {agents.length === 0 ? (
         <p className="max-w-[72ch] text-xs text-muted-foreground">{t("recommend.agent.noAgents")}</p>
       ) : (

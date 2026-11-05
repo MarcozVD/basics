@@ -327,7 +327,7 @@ function ProjectListRow({
   onOpen: () => void;
   onChangeStatus: (status: ProjectStatus) => void;
 }) {
-  const { t, language } = useI18n();
+  const { language } = useI18n();
   const path = row.project.path;
 
   return (
@@ -376,12 +376,16 @@ function ProjectListRow({
         <StatusMenu status={row.project.status} title={row.title} onChange={onChangeStatus} />
       </span>
 
-      <span className="relative z-10 flex min-w-0 items-center gap-2">
-        <span className="min-w-0 flex-1 truncate font-mono text-[10.5px] text-muted-foreground" title={path ?? t("projects.noPath")}>
-          {path ? middleTruncate(path) : t("projects.noPath")}
+      {path || row.project.profile ? (
+        <span className="relative z-10 flex min-w-0 items-center gap-2">
+          {path ? (
+            <span className="min-w-0 flex-1 truncate font-mono text-[10.5px] text-muted-foreground" title={path}>
+              {middleTruncate(path)}
+            </span>
+          ) : null}
+          {row.project.profile ? <ProfileChip id={row.project.profile} /> : null}
         </span>
-        {row.project.profile ? <ProfileChip id={row.project.profile} /> : null}
-      </span>
+      ) : null}
 
       <span className="relative z-10 flex min-w-0 items-center gap-2">
         <StackSummary project={row.project} layerTitles={layerTitles} />
@@ -497,7 +501,7 @@ function ProjectDetail({
           <div className="flex flex-wrap items-start gap-x-4 gap-y-3">
             <div className="min-w-0 flex-1">
               <div className="flex min-w-0 flex-wrap items-center gap-2">
-                <h2 className="min-w-0 text-[22px] font-semibold tracking-tight">{project.title}</h2>
+                <h2 className="min-w-0 text-lg font-semibold tracking-tight">{project.title}</h2>
                 <StatusChip status={data.status} />
               </div>
 

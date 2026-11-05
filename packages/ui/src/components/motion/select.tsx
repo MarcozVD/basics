@@ -280,10 +280,12 @@ export interface SelectTriggerProps {
   className?: string;
   /** Accessible name when the trigger's own text is not the label (e.g. a value). */
   "aria-label"?: string;
+  /** Hover hint shown while the trigger's own text is just a value. */
+  title?: string;
   children: ReactNode;
 }
 
-export function SelectTrigger({ className, "aria-label": ariaLabel, children }: SelectTriggerProps) {
+export function SelectTrigger({ className, "aria-label": ariaLabel, title, children }: SelectTriggerProps) {
   const ctx = useSelectContext("SelectTrigger");
   const isTop = ctx.placement === "top";
   // The edge facing the panel flattens while the panel is attached to it and
@@ -304,6 +306,7 @@ export function SelectTrigger({ className, "aria-label": ariaLabel, children }: 
       ref={ctx.triggerRef}
       disabled={ctx.disabled}
       aria-label={ariaLabel}
+      title={title}
       aria-haspopup="listbox"
       aria-expanded={ctx.open}
       aria-controls={ctx.listId}

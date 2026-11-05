@@ -1,7 +1,7 @@
 import type { NoteType } from "@marcozvd/basics-core";
 import { ArrowDownUp, Layers, LayoutGrid, LayoutList, Package, Plus, Search, SearchX } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
+import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router";
 import { AnimatedNumber } from "@/components/motion/animated-number";
 import { Button } from "@/components/motion/button/base";
@@ -15,6 +15,7 @@ import { PAGE_SECTIONS, Page } from "@/components/page";
 import { ErrorState, Loading } from "@/components/state";
 import { Button as LinkButton } from "@/components/ui/button";
 import { type TranslationKey, useT } from "@/i18n";
+import { modChord } from "@/lib/desktop";
 import { EASE_OUT, SPRING_LAYOUT, SPRING_PRESS } from "@/lib/ease";
 import { useLayers, useNotes, useSearch, useStats } from "@/lib/queries";
 import { formatCompactRelativeTime } from "@/lib/relative-time";
@@ -32,6 +33,8 @@ const DEFAULT_VIEW: View = "list";
 const STAGGER_LIMIT = 10;
 const STAGGER_STEP = 0.02;
 const MAX_TAGS = 3;
+/** Layer chips shown per row before a `+n`; a chip only truncates when a name is very long. */
+const MAX_LAYERS = 2;
 /** Dense list columns; wide-only columns are hidden with their matching cell. */
 const LIST_GRID =
   "grid grid-cols-[16px_minmax(0,1fr)_minmax(0,0.8fr)_auto] items-center gap-2 min-[900px]:grid-cols-[16px_minmax(0,1.2fr)_minmax(0,0.8fr)_minmax(0,1fr)_auto] min-[900px]:gap-3 min-[1280px]:grid-cols-[16px_minmax(0,1.4fr)_130px_minmax(0,1fr)_150px_240px_110px_88px]";
@@ -350,10 +353,10 @@ export function ExplorePage() {
               leftIcon={<Search />}
               rightIcon={
                 <kbd
-                  title={t("explore.searchShortcut", { key: "⌘F" })}
+                  title={t("explore.searchShortcut", { key: modChord("F") })}
                   className="mr-2.5 rounded-full border border-border px-1.5 font-mono text-[10px] leading-4 text-muted-foreground"
                 >
-                  ⌘F
+                  {modChord("F")}
                 </kbd>
               }
               className="w-full sm:w-64"
@@ -572,10 +575,84 @@ interface ItemProps {
   onOpen: () => void;
 }
 
-function LayerChip({ id, title }: { id: string; title?: string }) {
+function LayerChip({ id, title, flexible = false }: { id: string; title?: string; flexible?: boolean }) {
+  const label = title ?? id;
   return (
-    <span className="inline-flex h-5 items-center rounded-full border border-border px-2 font-mono text-[10.5px] text-muted-foreground">
-      {title ?? id}
+    <span
+      title={label}
+      className={cn(
+        "inline-flex h-5 max-w-40 items-center rounded-full border border-border px-2 font-mono text-[10.5px] text-muted-foreground",
+        flexible ? "min-w-0" : "shrink-0",
+      )}
+    >
+      <span className="truncate">{label}</span>
+    </span>
+  );
+}
+
+/**
+ * Layer pills for one entry. Chips keep their natural width: a short layer name must never
+ * be cut ("Infra" must not read "Inf…"). When a nowrap row runs out of space it shows one
+ * chip fewer and folds the rest into the `+n` count, so the first pill always reads whole.
+ */
+function LayerChips({
+  layers,
+  layerTitles,
+  className,
+  wrap = false,
+}: {
+  layers: string[];
+  layerTitles: Map<string, string>;
+  className: string;
+  wrap?: boolean;
+}) {
+  const t = useT();
+  const max = Math.min(MAX_LAYERS, layers.length);
+  const layerKey = layers.join("\u0000");
+  const ref = useRef<HTMLSpanElement>(null);
+  const [count, setCount] = useState(max);
+
+  // A new set of layers starts from as many pills as the row can take.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `layerKey` is the layer list identity
+  useLayoutEffect(() => {
+    setCount(max);
+  }, [max, layerKey]);
+
+  // Overflowing pills drop to one chip (plus `+n`) instead of being clipped or truncated.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `layerKey` re-measures on a new layer list
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el || wrap || count <= 1) return;
+    if (el.scrollWidth > el.clientWidth + 1) setCount(count - 1);
+  }, [count, wrap, layerKey]);
+
+  // A wider column can fit the other pill again.
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el || wrap) return;
+    let previous = el.clientWidth;
+    const observer = new ResizeObserver(() => {
+      const width = el.clientWidth;
+      if (Math.abs(width - previous) < 1) return;
+      previous = width;
+      setCount(max);
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [max, wrap]);
+
+  const extra = layers.length - count;
+  const hidden = layers.slice(count).map((id) => layerTitles.get(id) ?? id);
+  return (
+    <span ref={ref} className={className}>
+      {layers.slice(0, count).map((id) => (
+        <LayerChip key={id} id={id} title={layerTitles.get(id)} flexible={count === 1} />
+      ))}
+      {extra > 0 && (
+        <span title={hidden.join(", ")} className="shrink-0 font-mono text-[10px] text-muted-foreground">
+          {t("explore.moreLayers", { count: extra })}
+        </span>
+      )}
     </span>
   );
 }
@@ -701,11 +778,7 @@ function ListRow({ row, index, selected, reduce, layerTitles, onHover, onOpen }:
       <span className="relative min-w-0 truncate text-[13px] font-medium">{row.title}</span>
       <span className="relative min-w-0 truncate font-mono text-[11px] text-muted-foreground">{row.id}</span>
       <span className="relative hidden min-w-0 truncate text-[12px] text-muted-foreground min-[900px]:block">{row.excerpt}</span>
-      <span className="relative flex min-w-0 items-center gap-1 overflow-hidden">
-        {row.layers.map((id) => (
-          <LayerChip key={id} id={id} title={layerTitles.get(id)} />
-        ))}
-      </span>
+      <LayerChips layers={row.layers} layerTitles={layerTitles} className="relative flex min-w-0 items-center gap-1 overflow-hidden" />
       <span className="relative hidden min-w-0 items-center gap-1 overflow-hidden min-[1280px]:flex">
         {row.tags.slice(0, MAX_TAGS).map((tag) => (
           <span
@@ -736,6 +809,8 @@ function ListRow({ row, index, selected, reduce, layerTitles, onHover, onOpen }:
 function GridCard({ row, index, selected, reduce, layerTitles, onHover, onOpen }: ItemProps) {
   const t = useT();
   const extraTags = row.tags.length - MAX_TAGS;
+  const extraLayers = row.layers.length - MAX_LAYERS;
+  const hiddenLayers = row.layers.slice(MAX_LAYERS).map((id) => layerTitles.get(id) ?? id);
   return (
     <motion.div whileHover={reduce ? undefined : { y: -2 }} transition={SPRING_PRESS} className="h-full">
       <Card
@@ -778,9 +853,14 @@ function GridCard({ row, index, selected, reduce, layerTitles, onHover, onOpen }
         </CardContent>
         {(row.layers.length > 0 || row.tags.length > 0) && (
           <CardFooter className="mt-auto flex-wrap gap-1">
-            {row.layers.map((id) => (
+            {row.layers.slice(0, MAX_LAYERS).map((id) => (
               <LayerChip key={id} id={id} title={layerTitles.get(id)} />
             ))}
+            {extraLayers > 0 && (
+              <span title={hiddenLayers.join(", ")} className="font-mono text-[10.5px] text-muted-foreground">
+                {t("explore.moreLayers", { count: extraLayers })}
+              </span>
+            )}
             {row.tags.slice(0, MAX_TAGS).map((tag) => (
               <span
                 key={tag}

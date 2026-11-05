@@ -18,6 +18,7 @@ import { TypeChip } from "@/components/note-form/note-preview";
 import { ErrorState, Loading } from "@/components/state";
 import { Button as LinkButton } from "@/components/ui/button";
 import { type TranslationKey, useT } from "@/i18n";
+import { modChord } from "@/lib/desktop";
 import { EASE_OUT, SPRING_PRESS } from "@/lib/ease";
 import { useGraph, useHealth, useLayers, useNote, useNotes, useStats } from "@/lib/queries";
 import { cn } from "@/lib/utils";
@@ -347,7 +348,7 @@ export function GraphPage() {
                 </span>
               ) : (
                 <kbd className="mr-2.5 rounded-full border border-border px-1.5 font-mono text-[10px] leading-4 text-muted-foreground">
-                  ⌘F
+                  {modChord("F")}
                 </kbd>
               )
             }
