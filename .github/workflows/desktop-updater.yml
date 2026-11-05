@@ -50,6 +50,14 @@ jobs:
             echo "::error::latest.json has no platform entries" >&2
             exit 1
           fi
+          # Every platform must be present: a missing one would leave its installed apps
+          # with no update, and the desktop jobs pass even when they skip the manifest.
+          for platform in windows-x86_64 linux-x86_64 darwin-x86_64 darwin-aarch64; do
+            if ! jq -e --arg platform "$platform" '.platforms[$platform]' "$manifest" >/dev/null; then
+              echo "::error::latest.json has no $platform entry (found: $platforms)" >&2
+              exit 1
+            fi
+          done
           echo "publishing Basics $version for: $platforms"
           {
             echo "### Desktop $version"

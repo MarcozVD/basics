@@ -147,6 +147,22 @@ mod tests {
     }
 
     #[test]
+    fn every_platform_has_an_updater_target() {
+        let config: serde_json::Value = serde_json::from_str(CONFIG).unwrap();
+        let targets = config
+            .pointer("/bundle/targets")
+            .and_then(|value| value.as_array())
+            .expect("bundle.targets must be a list");
+        // A .dmg cannot update an installed app: macOS updates come from the "app" target.
+        for target in ["nsis", "appimage", "app"] {
+            assert!(
+                targets.iter().any(|value| value == target),
+                "bundle.targets must include {target}, or that platform gets no update"
+            );
+        }
+    }
+
+    #[test]
     fn progress_events_have_the_shape_the_page_reads() {
         let download = serde_json::to_value(UpdateProgress::Download {
             downloaded: 512,
