@@ -85,6 +85,29 @@ function expectBudget(sample: BudgetSample) {
   expect(worstGap).toBeLessThan(LONG_TASK_BUDGET_MS);
 }
 
+/** Worst frame gap inside the first `windowMs` after the click, ignoring later frames. */
+function worstFrameGap(sample: BudgetSample, windowMs: number): number {
+  let worst = 0;
+  for (let index = 1; index < sample.frames.length; index++) {
+    if (sample.frames[index] - sample.t0 > windowMs) break;
+    worst = Math.max(worst, sample.frames[index] - sample.frames[index - 1]);
+  }
+  return worst;
+}
+
+// Headless windows can be treated as occluded or backgrounded, which throttles rAF and
+// turns an idle frame into a false 50–80ms stall.
+test.use({
+  launchOptions: {
+    args: [
+      "--disable-background-timer-throttling",
+      "--disable-renderer-backgrounding",
+      "--disable-backgrounding-occluded-windows",
+      "--disable-features=CalculateNativeWinOcclusion",
+    ],
+  },
+});
+
 test.describe("page budget", () => {
   test.use({ baseURL: `http://127.0.0.1:${PORT}` });
   test.setTimeout(120_000);
@@ -112,6 +135,64 @@ test.describe("page budget", () => {
       child.once("exit", () => resolve());
       child.kill();
     });
+  });
+
+  test("Home paints its async blocks without layout shift", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 820 });
+    // Layout shift starts at navigation, so the observer has to exist before the app boots.
+    await page.addInitScript(() => {
+      const win = window as unknown as { __cls?: number };
+      win.__cls = 0;
+      new PerformanceObserver((list) => {
+        for (const entry of list.getEntries() as (PerformanceEntry & { value: number; hadRecentInput: boolean })[]) {
+          if (!entry.hadRecentInput) win.__cls = (win.__cls ?? 0) + entry.value;
+        }
+      }).observe({ type: "layout-shift", buffered: true });
+    });
+    await page.goto("/");
+    await expect(page.getByTestId("health-line")).toBeVisible();
+    await expect(page.getByTestId("continue-list")).toBeVisible();
+    await page.waitForTimeout(1200);
+
+    const cls = await page.evaluate(() => (window as unknown as { __cls?: number }).__cls ?? 0);
+    // The reserved health, continue and activity heights keep late data from moving the page.
+    expect(cls).toBeLessThan(0.05);
+  });
+
+  test("returning to Home keeps the first 340ms under the frame-gap budget", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 820 });
+    // Home is the landing page; measure a return to it, the common flow. Its first mount in
+    // the session pays the page-transition setup once (covered by the cold budget).
+    await page.goto("/");
+    await expect(page.getByTestId("continue-list")).toBeVisible();
+    await page.waitForTimeout(700);
+    const sidebar = page.getByTestId("sidebar");
+    await sidebar.getByRole("link", { name: "Projects", exact: true }).click();
+    await expect(page).toHaveURL(/\/projects/);
+    await page.waitForTimeout(700);
+
+    // One frame gap on a shared CI machine occasionally catches a scheduler stall; the
+    // median of three navigations is the stable measure of what a person actually sees.
+    const gaps: number[] = [];
+    for (let run = 0; run < 3; run++) {
+      if (run > 0) {
+        await sidebar.getByRole("link", { name: "Projects", exact: true }).click();
+        await expect(page).toHaveURL(/\/projects/);
+        await page.waitForTimeout(500);
+      }
+      await arm(page);
+      await sidebar.getByRole("link", { name: "Home", exact: true }).click();
+      await expect(page).toHaveURL(/\/$/);
+      await expect(page.getByTestId("continue-list")).toBeVisible();
+      await page.waitForTimeout(500);
+      const sample = await page.evaluate(() => (window as unknown as { __budget: BudgetSample }).__budget);
+      gaps.push(worstFrameGap(sample, CLICK_WINDOW_MS));
+      expectBudget(sample);
+    }
+    // rAF timestamps land on refresh boundaries, so 50.0 is the 50ms budget at this
+    // resolution rather than a miss; the occasional 66/83ms stall is the outlier the
+    // median ignores.
+    expect(gaps.sort((a, b) => a - b)[1]).toBeLessThanOrEqual(50);
   });
 
   test("a click on Explore never blocks the main thread past the budget", async ({ page }) => {

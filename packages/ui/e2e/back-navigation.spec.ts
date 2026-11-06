@@ -1,9 +1,46 @@
+import fs from "node:fs";
+import path from "node:path";
 import { expect, type Page, test } from "@playwright/test";
+import { vaultPath } from "./helpers";
 
 const ROWS = "[role='listbox'] [data-note-row]";
 
 /** The editor's back control names its destination, so the label is stable. */
 const BACK_TO_EXPLORE = "Back to Explore";
+
+/** Write a pending proposal into the shared temp vault; returns a cleanup. */
+function writeProposal(id: string, title: string, body: string): () => void {
+  const vault = vaultPath();
+  const inboxFile = path.join(vault, "inbox", `${id}.md`);
+  fs.rmSync(path.join(vault, "tech", `${id}.md`), { force: true });
+  fs.mkdirSync(path.dirname(inboxFile), { recursive: true });
+  fs.writeFileSync(
+    inboxFile,
+    [
+      "---",
+      "type: tech",
+      "kind: framework",
+      `title: ${title}`,
+      "layer: backend",
+      "tags: []",
+      "source: agent:e2e",
+      "proposal:",
+      "  action: create",
+      "  proposed_by: e2e",
+      "  reason: test",
+      `  created: "${new Date().toISOString()}"`,
+      "---",
+      `# ${title}`,
+      "",
+      body,
+      "",
+    ].join("\n"),
+  );
+  return () => {
+    fs.rmSync(inboxFile, { force: true });
+    fs.rmSync(path.join(vault, "tech", `${id}.md`), { force: true });
+  };
+}
 
 // The desktop app and a browser load the same bundle: only Tauri's injected internals tell
 // them apart (see lib/desktop.ts). Stub them before the page boots to exercise the app path.
@@ -123,4 +160,37 @@ test("Alt+Left stays inside the app in the desktop shell too", async ({ page }) 
 
   await page.keyboard.press("Alt+ArrowLeft");
   await expect(page).toHaveURL(/\/explore\?type=check$/);
+});
+
+test("the proposal back control returns to the Inbox it came from", async ({ page }) => {
+  const cleanup = writeProposal("t3-proposal-back", "T3 proposal back", "Back from the proposal route.");
+  try {
+    await page.goto("/inbox");
+    await expect(page.getByRole("button", { name: /T3 proposal back/i })).toBeVisible();
+    await page.getByRole("button", { name: /T3 proposal back/i }).click();
+    await expect(page).toHaveURL(/\/inbox\?p=t3-proposal-back$/);
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(/\/inbox\/t3-proposal-back$/);
+
+    const back = page.getByRole("button", { name: "Back to Inbox" });
+    await expect(back).toBeVisible();
+    await back.click();
+    await expect(page).toHaveURL(/\/inbox(\?p=t3-proposal-back)?$/);
+  } finally {
+    cleanup();
+  }
+});
+
+test("a deep link to a proposal falls back to the Inbox", async ({ page }) => {
+  const cleanup = writeProposal("t3-proposal-deep", "T3 proposal deep", "Deep link fallback.");
+  try {
+    // A full reload makes this the only in-app entry: there is nothing to pop.
+    await page.goto("/inbox/t3-proposal-deep");
+    const back = page.getByRole("button", { name: "Back to Inbox" });
+    await expect(back).toBeVisible();
+    await back.click();
+    await expect(page).toHaveURL(/\/inbox$/);
+  } finally {
+    cleanup();
+  }
 });

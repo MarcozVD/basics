@@ -31,7 +31,7 @@ import { useOnOpen } from "@/lib/hooks/use-on-open";
 import { useRowCursor } from "@/lib/hooks/use-row-cursor";
 import { PresenceGate } from "@/lib/presence-gate";
 import { useHealth, useInbox, useNotes } from "@/lib/queries";
-import { readRecentNotes } from "@/lib/recent-notes";
+import { readRecentItems } from "@/lib/recent-notes";
 import { useReturnFocus } from "@/lib/return-focus";
 import { useTheme } from "@/lib/theme";
 import { toast } from "@/lib/toast";
@@ -116,7 +116,7 @@ export function AppCommandPalette() {
   }, []);
 
   useEffect(() => {
-    if (open) setRecent(readRecentNotes());
+    if (open) setRecent(readRecentItems().map((item) => item.id));
   }, [open]);
 
   const copy = useCallback(

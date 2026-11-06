@@ -1,9 +1,10 @@
 import { expect, test } from "@playwright/test";
+import { openRecommendLayers } from "./helpers";
 
 test("recommends fastapi and exports the project files", async ({ page }) => {
   await page.goto("/recommend");
   // The layer filter only renders once /api/layers resolves; submit needs those ids.
-  await expect(page.getByRole("button", { name: "Backend", exact: true })).toBeVisible();
+  await openRecommendLayers(page);
 
   await page.getByLabel("Describe the project", { exact: true }).fill("API REST para servir modelos de machine learning");
   await page.getByRole("button", { name: "Recommend", exact: true }).click();
@@ -30,7 +31,7 @@ test("recommends fastapi and exports the project files", async ({ page }) => {
 
 test("recommend keeps its state across navigation and clears it", async ({ page }) => {
   await page.goto("/recommend");
-  await expect(page.getByRole("button", { name: "Backend", exact: true })).toBeVisible();
+  await openRecommendLayers(page);
 
   const description = "API REST para servir modelos de machine learning";
   await page.getByLabel("Describe the project", { exact: true }).fill(description);
@@ -52,7 +53,7 @@ test("recommend keeps its state across navigation and clears it", async ({ page 
 
 test("a layer with no matching candidate is not rendered", async ({ page }) => {
   await page.goto("/recommend");
-  await expect(page.getByRole("button", { name: "Backend", exact: true })).toBeVisible();
+  await openRecommendLayers(page);
 
   // Only data + testing are asked for; this description has nothing to match in testing.
   for (const layer of ["Backend", "Frontend", "Infra"]) {
@@ -71,7 +72,7 @@ test("a layer with no matching candidate is not rendered", async ({ page }) => {
 
 test("shows one quiet message when every requested layer is empty", async ({ page }) => {
   await page.goto("/recommend");
-  await expect(page.getByRole("button", { name: "Backend", exact: true })).toBeVisible();
+  await openRecommendLayers(page);
 
   // Leave only Testing selected, which the description has nothing to match.
   for (const layer of ["Backend", "Data", "Frontend", "Infra"]) {
@@ -96,7 +97,7 @@ test("the semantic-matching action shows a clear error when the runtime is absen
   );
 
   await page.goto("/recommend");
-  await expect(page.getByRole("button", { name: "Backend", exact: true })).toBeVisible();
+  await openRecommendLayers(page);
 
   await page.getByLabel("Describe the project", { exact: true }).fill("API REST para servir modelos de machine learning");
   await page.getByRole("button", { name: "Recommend", exact: true }).click();
@@ -118,7 +119,7 @@ test("creates a project from the recommendation and merges its stack on repeat",
     await page.goto("/recommend");
     const clear = page.getByRole("button", { name: "Clear", exact: true });
     if ((await clear.count()) > 0) await clear.click();
-    await expect(page.getByRole("button", { name: "Backend", exact: true })).toBeVisible();
+    await openRecommendLayers(page);
     await page.getByLabel("Describe the project", { exact: true }).fill(description);
     await page.getByRole("button", { name: "Recommend", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Backend", exact: true })).toBeVisible();

@@ -24,3 +24,19 @@ test("filters by layer, edits a note title and persists it", async ({ page }) =>
   await page.reload();
   await expect(page.getByLabel("Title", { exact: true })).toHaveValue("Vitest E2E");
 });
+
+test("the note title stays one line: Enter and pasted breaks never add a newline", async ({ page }) => {
+  await page.goto("/notes/vitest");
+  const title = page.getByLabel("Title", { exact: true });
+  await expect(title).toBeVisible();
+
+  await title.fill("Line one");
+  await title.press("End");
+  await title.press("Enter");
+  await title.pressSequentially("x");
+  await expect(title).toHaveValue("Line onex");
+
+  // A paste with line breaks collapses to spaces, like the old single-line input.
+  await title.fill("Line a\nLine b");
+  await expect(title).toHaveValue("Line a Line b");
+});
