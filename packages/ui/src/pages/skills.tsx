@@ -7,6 +7,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Input } from "@/components/motion/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/motion/select";
 import { PAGE_SECTIONS, Page, Reveal } from "@/components/page";
+import { PageHeader } from "@/components/page-header";
 import { ErrorState, Loading } from "@/components/state";
 import { type TranslationKey, useT } from "@/i18n";
 import { agentColor } from "@/lib/agent-color";
@@ -598,12 +599,7 @@ export function SkillsPage() {
   return (
     <Page className={PAGE_SECTIONS}>
       <Reveal index={0}>
-        <div className="flex flex-col gap-3">
-          <div className="flex flex-col gap-1">
-            <h1 className="text-xl font-semibold tracking-tight">{t("page.skills.title")}</h1>
-            <p className="max-w-[68ch] text-sm text-muted-foreground">{t("skills.description")}</p>
-          </div>
-
+        <PageHeader title={t("page.skills.title")} description={t("skills.description")}>
           <div className="flex flex-col gap-2">
             <div className="flex flex-wrap items-center gap-2">
               <fieldset
@@ -669,7 +665,7 @@ export function SkillsPage() {
           <p role="status" aria-live="polite" className="sr-only">
             {t("skills.results", { count: filtered.length })}
           </p>
-        </div>
+        </PageHeader>
       </Reveal>
 
       <Reveal index={1}>{body()}</Reveal>

@@ -27,6 +27,8 @@ export const en = {
   "nav.collapse": "Collapse sidebar",
   "nav.expand": "Expand sidebar",
   "nav.settings": "Settings",
+  "nav.back": "Back to {page}",
+  "nav.hint": "Help",
   "nav.style.title": "Navigation",
   "nav.style.description": "Use the sidebar or a floating bar you can move to any edge.",
   "nav.style.sidebar": "Sidebar",

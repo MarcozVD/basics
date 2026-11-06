@@ -20,11 +20,23 @@ import { AnimatedToastStack } from "@/components/motion/animated-toast-stack";
 import { Drawer } from "@/components/motion/drawer";
 import { useI18n } from "@/i18n";
 import { isAgentRunActive, useAgentRunStatus } from "@/lib/agent-run";
+import { recordNavigation, saveScroll, scrollFor, useHistoryShortcuts } from "@/lib/app-history";
 import { isDesktop, isMacos } from "@/lib/desktop";
 import { useDesktopShell } from "@/lib/desktop-shell";
 import { EASE_IN, EASE_OUT } from "@/lib/ease";
 import { DOCK_SPACE, DOCK_SPACE_VERTICAL, DOCK_VERTICAL_MIN, type DockEdge, setDockEdge, useNavigation } from "@/lib/navigation";
-import { PAGE_ENTER_MS, PAGE_ENTER_OFFSET, PAGE_EXIT_MS, PAGE_EXIT_OFFSET, PAGE_REDUCED_MS, pageDirection } from "@/lib/page-transition";
+import {
+  bumpNavigationEpoch,
+  markBackNavigation,
+  markNavigated,
+  PAGE_ENTER_MS,
+  PAGE_ENTER_OFFSET,
+  PAGE_EXIT_MS,
+  PAGE_EXIT_OFFSET,
+  PAGE_REDUCED_MS,
+  pageDirection,
+  takeNextDirection,
+} from "@/lib/page-transition";
 import { useGlobalShortcuts } from "@/lib/shortcuts";
 import { dismissToast, toast, useToasts } from "@/lib/toast";
 import { startUpdater } from "@/lib/updater";
@@ -124,15 +136,30 @@ export function Layout() {
   // Navigation direction is derived during render, before the new page mounts, so the
   // entering page and the outgoing page resolve their variants from the same value.
   const lastPathRef = useRef(location.pathname);
+  // The in-app history mirror records every entry, including query-only changes, so a back
+  // restores its filters and scroll. It runs before the page renders, so `useBackTarget`
+  // reads the previous entry of the navigation that is about to paint.
+  const lastKeyRef = useRef<string | null>(null);
   const directionRef = useRef<1 | -1>(1);
   // Returning to a route that is still exiting reuses its motion wrapper, so the page
   // component is remounted with this epoch to run its route-entry effects again.
   // Query-only changes keep the same epoch and do not replay the page transition.
   const pageEpochRef = useRef(0);
-  if (location.pathname !== lastPathRef.current) {
-    pageEpochRef.current += 1;
-    directionRef.current = pageDirection(lastPathRef.current, location.pathname, navigationType);
-    lastPathRef.current = location.pathname;
+  if (location.key !== lastKeyRef.current) {
+    if (location.pathname !== lastPathRef.current) {
+      // A pathname change invalidates any deferred boot the page it leaves is still running.
+      // Query-only changes keep the same page (and its canvas), so they must not bump it.
+      bumpNavigationEpoch();
+      pageEpochRef.current += 1;
+      const forced = takeNextDirection(location.pathname);
+      markBackNavigation(forced !== null && forced < 0);
+      directionRef.current = forced ?? pageDirection(lastPathRef.current, location.pathname, navigationType);
+      lastPathRef.current = location.pathname;
+    }
+    // The first record is the tab's own load, not a navigation the page header should react to.
+    if (lastKeyRef.current !== null) markNavigated();
+    recordNavigation(location.key, location.pathname, location.search, navigationType);
+    lastKeyRef.current = location.key;
   }
   const pageKey = location.pathname;
   const transitionCustom: PageTransitionCustom = {
@@ -186,6 +213,8 @@ export function Layout() {
   const mac = useMemo(() => desktop && isMacos(), [desktop]);
 
   useGlobalShortcuts();
+  // Alt+Left/Right and mouse back/forward stay inside the app, in the browser and the desktop.
+  useHistoryShortcuts();
   // No browser behaviour in the app: Ctrl+F searches here, reload/print/source/zoom/...
   // are swallowed, and the native context menu only survives in editable fields.
   useDesktopShell(desktop);
@@ -215,6 +244,18 @@ export function Layout() {
     if (!mobile) setMenuOpen(false);
   }, [mobile]);
 
+  // Keep the mirror's copy of the current offset fresh as the user scrolls. This runs in the
+  // layout phase, before the reset below, so a navigation swaps the listener to the new entry
+  // first: the reset's own scroll event then lands on the new entry, not the one being left.
+  useLayoutEffect(() => {
+    const main = scrollRef.current;
+    if (!main) return;
+    const key = location.key;
+    const onScroll = () => saveScroll(key, main.scrollTop);
+    main.addEventListener("scroll", onScroll, { passive: true });
+    return () => main.removeEventListener("scroll", onScroll);
+  }, [location.key]);
+
   // Every route starts at the top of the panel. The outgoing page is popped out of the
   // scroll flow by `AnimatePresence`, so this reset never moves content still on screen.
   // biome-ignore lint/correctness/useExhaustiveDependencies: the reset is keyed by route, not by the ref
@@ -222,6 +263,35 @@ export function Layout() {
     const main = scrollRef.current;
     if (main && main.scrollTop !== 0) main.scrollTop = 0;
   }, [location.pathname]);
+
+  // A back or forward puts the panel where the entry left it, before paint on a cached page.
+  // When the page is still filling in, a ResizeObserver re-applies the offset as the content
+  // grows (and gives up after a short window), so nothing visibly jumps and a slow route still
+  // lands in the right place.
+  useLayoutEffect(() => {
+    const main = scrollRef.current;
+    if (!main || navigationType !== "POP") return;
+    const container = main;
+    const target = scrollFor(location.key);
+    if (target <= 0) return;
+    let timer = 0;
+    const observer = new ResizeObserver(() => apply());
+    const stop = () => {
+      observer.disconnect();
+      window.clearTimeout(timer);
+    };
+    function apply() {
+      const max = container.scrollHeight - container.clientHeight;
+      const wanted = Math.min(target, Math.max(0, max));
+      if (container.scrollTop !== wanted) container.scrollTop = wanted;
+      if (max >= target) stop();
+    }
+    observer.observe(container);
+    for (const child of Array.from(container.children)) observer.observe(child);
+    timer = window.setTimeout(stop, 2000);
+    apply();
+    return stop;
+  }, [location.key, navigationType]);
 
   return (
     <div className="flex h-dvh overflow-hidden bg-shell text-foreground">

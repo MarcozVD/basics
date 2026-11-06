@@ -8,6 +8,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Switch } from "@/components/motion/switch";
 import { Tabs, TabsList, TabsTrigger } from "@/components/motion/tabs";
 import { PAGE_SECTIONS, Page, Reveal } from "@/components/page";
+import { PageHeader } from "@/components/page-header";
 import { ErrorState, Loading } from "@/components/state";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { type TranslationKey, useI18n, useT } from "@/i18n";
@@ -1114,10 +1115,7 @@ export function SettingsPage() {
   return (
     <Page className={PAGE_SECTIONS}>
       <Reveal index={0}>
-        <div className="flex flex-col gap-1">
-          <h1 className="text-xl font-semibold tracking-tight">{t("settings.title")}</h1>
-          <p className="max-w-[68ch] text-sm text-muted-foreground">{t("settings.description")}</p>
-        </div>
+        <PageHeader title={t("settings.title")} description={t("settings.description")} />
       </Reveal>
 
       <Reveal index={1}>

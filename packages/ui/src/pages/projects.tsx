@@ -19,6 +19,7 @@ import { Input } from "@/components/motion/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/motion/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/motion/tabs";
 import { PAGE_SECTIONS, Page, Reveal } from "@/components/page";
+import { PageHeader } from "@/components/page-header";
 import { ErrorState, Loading } from "@/components/state";
 import { type TranslationKey, useI18n } from "@/i18n";
 import { exportStack, getNote, saveNote } from "@/lib/api";
@@ -1085,65 +1086,65 @@ export function ProjectsPage() {
   return (
     <Page className={`min-h-0 ${PAGE_SECTIONS}`}>
       <Reveal index={0}>
-        <header className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
-          <div className="min-w-0">
-            <div className="flex items-baseline gap-2">
-              <h1 className="text-xl font-semibold tracking-tight">{t("page.projects.title")}</h1>
-              <span className="text-xs text-muted-foreground">{t("projects.total", { count: rows.length })}</span>
+        <PageHeader
+          title={t("page.projects.title")}
+          meta={<span className="text-xs text-muted-foreground">{t("projects.total", { count: rows.length })}</span>}
+          description={t("projects.intro")}
+          action={
+            <div className="flex min-w-0 flex-wrap items-center gap-2 max-[640px]:w-full">
+              <NewProjectButton />
+              <Tabs
+                value={prefs.status}
+                onValueChange={(value) => {
+                  setPrefs((currentPrefs) => ({ ...currentPrefs, status: value as StatusFilter }));
+                  setSelected(0);
+                }}
+                variant="segment"
+              >
+                <TabsList aria-label={t("projects.statusFilter")}>
+                  {STATUS_FILTERS.map((status) => (
+                    <TabsTrigger key={status} value={status} className="gap-1.5 px-2.5 py-1 text-xs">
+                      {statusLabel(status, t)}
+                      <span className="font-mono text-[11px]">{counts[status]}</span>
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </Tabs>
+
+              <Input
+                ref={searchRef}
+                aria-label={t("projects.searchPlaceholder")}
+                value={searchText}
+                onChange={(value) => {
+                  setSearchText(value);
+                  setSelected(0);
+                }}
+                onKeyDown={onSearchKeyDown}
+                placeholder={t("projects.searchPlaceholder")}
+                leftIcon={<Search className="size-3.5" aria-hidden="true" />}
+                className="w-full min-[640px]:w-56"
+                classNames={{ field: "h-9" }}
+              />
+
+              <div className="flex h-9 items-center gap-1.5 rounded-xl border border-border bg-muted/50 px-2.5 text-xs text-muted-foreground">
+                <ArrowDownUp className="size-3.5" aria-hidden="true" />
+                <span className="sr-only">{t("projects.sort")}</span>
+                <Select
+                  value={prefs.sort}
+                  onValueChange={(value) => setPrefs((currentPrefs) => ({ ...currentPrefs, sort: value as Sort }))}
+                >
+                  <SelectTrigger className="min-w-32 border-0 bg-transparent px-0 text-xs shadow-none">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="updated">{t("projects.sort.updated")}</SelectItem>
+                    <SelectItem value="title">{t("projects.sort.title")}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-            <p className="mt-1 max-w-[68ch] text-sm text-muted-foreground">{t("projects.intro")}</p>
-          </div>
-
-          <div className="flex min-w-0 flex-wrap items-center gap-2 max-[640px]:w-full">
-            <NewProjectButton />
-            <Tabs
-              value={prefs.status}
-              onValueChange={(value) => {
-                setPrefs((currentPrefs) => ({ ...currentPrefs, status: value as StatusFilter }));
-                setSelected(0);
-              }}
-              variant="segment"
-            >
-              <TabsList aria-label={t("projects.statusFilter")}>
-                {STATUS_FILTERS.map((status) => (
-                  <TabsTrigger key={status} value={status} className="gap-1.5 px-2.5 py-1 text-xs">
-                    {statusLabel(status, t)}
-                    <span className="font-mono text-[11px]">{counts[status]}</span>
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-            </Tabs>
-
-            <Input
-              ref={searchRef}
-              aria-label={t("projects.searchPlaceholder")}
-              value={searchText}
-              onChange={(value) => {
-                setSearchText(value);
-                setSelected(0);
-              }}
-              onKeyDown={onSearchKeyDown}
-              placeholder={t("projects.searchPlaceholder")}
-              leftIcon={<Search className="size-3.5" aria-hidden="true" />}
-              className="w-full min-[640px]:w-56"
-              classNames={{ field: "h-9" }}
-            />
-
-            <div className="flex h-9 items-center gap-1.5 rounded-xl border border-border bg-muted/50 px-2.5 text-xs text-muted-foreground">
-              <ArrowDownUp className="size-3.5" aria-hidden="true" />
-              <span className="sr-only">{t("projects.sort")}</span>
-              <Select value={prefs.sort} onValueChange={(value) => setPrefs((currentPrefs) => ({ ...currentPrefs, sort: value as Sort }))}>
-                <SelectTrigger className="min-w-32 border-0 bg-transparent px-0 text-xs shadow-none">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="updated">{t("projects.sort.updated")}</SelectItem>
-                  <SelectItem value="title">{t("projects.sort.title")}</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </header>
+          }
+        />
       </Reveal>
 
       <Reveal index={1} className="flex min-h-0 flex-col min-[1280px]:flex-1">

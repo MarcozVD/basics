@@ -79,6 +79,14 @@ function readGraph(page: Page): Promise<GraphState | null> {
   });
 }
 
+/** Nodes marked hidden by the toolbar's type filter. */
+async function goneCount(page: Page): Promise<number> {
+  return page.evaluate(() => {
+    const cy = (window as unknown as { __basicsCy?: CyHandle }).__basicsCy;
+    return cy ? cy.nodes(".gone").length : -1;
+  });
+}
+
 /** Pairs of boxes whose rectangles intersect. */
 function overlaps(boxes: { id: string; box: CyBox }[]): string[] {
   const hits: string[] = [];
@@ -235,6 +243,26 @@ test("coming back to the graph re-attaches the canvas with the same positions, n
   });
   await expect.poll(() => canvasSignature(page), { timeout: 10_000 }).not.toBe(paintedBefore);
   expect(await paintedPixels(page)).toBeGreaterThan(0);
+});
+
+test("clicking Graph while already on Graph never freezes the canvas", async ({ page }) => {
+  await page.goto("/graph");
+  const graphLink = page.getByTestId("sidebar").getByRole("link", { name: "Graph", exact: true });
+
+  // A same-pathname click during boot pushes a new history key without changing the route. It
+  // must not invalidate the canvas this page is about to paint.
+  await graphLink.click();
+  await expect(page.getByTestId("graph-canvas").locator("canvas").first()).toBeVisible();
+  await expect.poll(async () => (await readGraph(page))?.fastapiParent).toBe("backend");
+
+  // A second same-pathname click after the boot settled keeps the mounted canvas alive.
+  await graphLink.click();
+  await expect.poll(async () => (await readGraph(page))?.fastapiParent).toBe("backend");
+
+  // And the canvas still reacts to a filter: hiding a type marks its nodes gone.
+  const before = await goneCount(page);
+  await page.getByTestId("graph-type-tech").click();
+  await expect.poll(() => goneCount(page)).toBeGreaterThan(before);
 });
 
 test("reloading the graph restores the cached positions without running a layout", async ({ page }) => {

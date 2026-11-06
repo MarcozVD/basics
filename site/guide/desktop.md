@@ -91,15 +91,18 @@ files directly, or open URLs through the app. Everything else keeps the limits d
 ## Keyboard and browser behaviour
 
 The app window is an application, not a browser tab, so the browser's own keys and menus are turned off inside it.
-A browser running the same UI (`basics ui`) keeps all of them.
+A browser running the same UI (`basics ui`) keeps all of them, except that Alt+Left and Alt+Right and the mouse side
+buttons go back and forward in the app in both.
 
 - **Ctrl+F** / **⌘F** opens the command palette in search mode, with the field empty and focused. Pressing it again
   while the palette is open clears the query. It does not open the browser find bar, and on Explore and Graph it opens
   the palette instead of their own filter field.
 - **Ctrl+S** / **⌘S** saves the note in the editor and does nothing else.
 - Off: reload (F5, Ctrl+R, Ctrl+Shift+R), print (Ctrl+P), view source (Ctrl+U), downloads (Ctrl+J), history (Ctrl+H),
-  find next (F3, Ctrl+G), caret browsing (F7), zoom (Ctrl and `+`, `-`, `0`, Ctrl+mouse wheel, trackpad pinch) and back / forward
-  (Alt+Left, Alt+Right) on a page.
+  find next (F3, Ctrl+G), caret browsing (F7), zoom (Ctrl and `+`, `-`, `0`, Ctrl+mouse wheel, trackpad pinch) on a page.
+- **Back and forward** (Alt+Left, Alt+Right, and mouse buttons 3 and 4, the side buttons) move through the pages you
+  visited in the app. They never leave the app: at the start or end of the history they do nothing. Each page returns
+  with its scroll position and Explore's filters restored. In a text field the keys keep their usual caret behaviour.
 - Inside a text field, the editing keys keep working: copy, paste, cut, select all and undo. On macOS, Ctrl keeps its
   caret movement keys inside fields.
 - Right-click shows no browser menu, except in fields (inputs and the note editor), where you get copy and paste.

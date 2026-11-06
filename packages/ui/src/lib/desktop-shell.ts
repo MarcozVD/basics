@@ -92,8 +92,9 @@ export function desktopKeyAction(event: DesktopKeyEvent, options: { macos?: bool
   if (BLOCKED_FUNCTION_KEYS.has(key)) return "block";
 
   if (event.altKey && !primary && (key === "ArrowLeft" || key === "ArrowRight")) {
-    // Browser history in a page, word-wise caret movement in a field (Option+Arrow on macOS).
-    return editable ? null : "block";
+    // Alt+Left/Right are the app's own history shortcuts now (see `lib/app-history`), so the
+    // shell leaves them alone in the desktop app too; a field keeps Option+Arrow caret movement.
+    return null;
   }
 
   // Every remaining rule needs the primary modifier and no Alt (AltGr types characters).
