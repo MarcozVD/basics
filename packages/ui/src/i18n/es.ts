@@ -31,6 +31,8 @@ export const es: typeof en = {
   "nav.collapse": "Contraer barra lateral",
   "nav.expand": "Expandir barra lateral",
   "nav.settings": "Configuración",
+  "nav.back": "Volver a {page}",
+  "nav.hint": "Ayuda",
   "nav.style.title": "Navegación",
   "nav.style.description": "Usa la barra lateral o una barra flotante que puedes mover a cualquier borde.",
   "nav.style.sidebar": "Barra lateral",

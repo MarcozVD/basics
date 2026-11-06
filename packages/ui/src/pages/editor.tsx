@@ -5,18 +5,10 @@ import CodeMirror, { EditorView } from "@uiw/react-codemirror";
 import { Check, ChevronDown, MoreHorizontal, Trash2 } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { useBlocker, useNavigate, useParams } from "react-router";
+import { Link, useBlocker, useNavigate, useParams } from "react-router";
 import { LocalGraph } from "@/components/graph/local-graph";
 import { ActionSwapButton } from "@/components/motion/action-swap";
 import { Alert, AlertAction, AlertContent, AlertDescription, AlertIcon, AlertTitle } from "@/components/motion/alert";
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from "@/components/motion/breadcrumb";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/motion/collapsible";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/motion/popover";
 import { Tabs, TabsList, TabsTrigger } from "@/components/motion/tabs";
@@ -26,10 +18,12 @@ import { NoteForm } from "@/components/note-form/note-form";
 import { NotePreview, TypeChip, TypeDot } from "@/components/note-form/note-preview";
 import { wikilinkExtensions } from "@/components/note-form/wikilink-editor";
 import { Page } from "@/components/page";
+import { PageHeader } from "@/components/page-header";
 import { ErrorState, Loading } from "@/components/state";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { type TranslationKey, useI18n } from "@/i18n";
 import { ApiRequestError, deleteNote as deleteNoteApi, saveNote } from "@/lib/api";
+import { useBackTarget } from "@/lib/app-history";
 import { SPRING_SWAP } from "@/lib/ease";
 import { type CheckTone, lastCheckChips, tailLines } from "@/lib/last-checks";
 import { queryKeys, useActivity, useNote, useNotes } from "@/lib/queries";
@@ -203,6 +197,7 @@ export function EditorPage() {
   const queryClient = useQueryClient();
   const reduce = useReducedMotion() ?? false;
   const wide = useWideEditor();
+  const back = useBackTarget();
   const noteQuery = useNote(id);
   const allNotes = useNotes();
   const noteActivity = useActivity({ noteId: id, limit: 100 });
@@ -425,124 +420,108 @@ export function EditorPage() {
   );
 
   const header = (
-    <header className="sticky top-[var(--nav-top,0px)] z-30 flex items-center gap-2 border-b border-border/60 bg-card py-2">
-      <Breadcrumb className="min-w-0 flex-1">
-        <BreadcrumbList maxItems={Number.POSITIVE_INFINITY} className="flex-nowrap gap-x-0.5 text-xs">
-          <BreadcrumbItem key="explore">
-            <BreadcrumbLink
-              render={(props) => <a {...props} href="/explore" />}
-              onClick={(event) => {
-                event.preventDefault();
-                navigate("/explore");
-              }}
-            >
-              {t("nav.explore")}
-            </BreadcrumbLink>
-          </BreadcrumbItem>
-          <BreadcrumbItem key="type">
-            <BreadcrumbSeparator />
-            <BreadcrumbLink
-              render={(props) => <a {...props} href={`/explore?type=${note.type}`} />}
-              onClick={(event) => {
-                event.preventDefault();
-                navigate(`/explore?type=${note.type}`);
-              }}
-            >
-              {typeLabel}
-            </BreadcrumbLink>
-          </BreadcrumbItem>
-          <BreadcrumbItem key="title">
-            <BreadcrumbSeparator />
-            <BreadcrumbPage className="max-w-[42vw] truncate">{title}</BreadcrumbPage>
-          </BreadcrumbItem>
-        </BreadcrumbList>
-      </Breadcrumb>
+    <PageHeader
+      compact
+      back={back}
+      title={title}
+      meta={
+        <Link
+          to={`/explore?type=${note.type}`}
+          className="shrink-0 rounded-full text-xs text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        >
+          {typeLabel}
+        </Link>
+      }
+      className="sticky top-[var(--nav-top,0px)] z-30 border-b border-border/60 bg-card py-2"
+      action={
+        <>
+          <AnimatePresence initial={false}>
+            {dirty ? (
+              <motion.span
+                key="dirty"
+                role="img"
+                aria-label={t("editor.unsaved")}
+                title={t("editor.unsaved")}
+                initial={{ scale: 0, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0, opacity: 0 }}
+                transition={reduce ? { duration: 0 } : SPRING_SWAP}
+                className="size-2 shrink-0 rounded-full bg-amber-500"
+              />
+            ) : null}
+          </AnimatePresence>
 
-      <AnimatePresence initial={false}>
-        {dirty ? (
-          <motion.span
-            key="dirty"
-            role="img"
-            aria-label={t("editor.unsaved")}
-            title={t("editor.unsaved")}
-            initial={{ scale: 0, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0, opacity: 0 }}
-            transition={reduce ? { duration: 0 } : SPRING_SWAP}
-            className="size-2 shrink-0 rounded-full bg-amber-500"
+          <ActionSwapButton
+            items={[
+              { id: "save", label: t("editor.save") },
+              { id: "saved", label: <Check className="size-4" aria-hidden="true" />, ariaLabel: t("editor.saved") },
+            ]}
+            value={saved ? "saved" : "save"}
+            cycle={false}
+            variant="primary"
+            size="sm"
+            animation="blur"
+            onClick={() => void save()}
+            disabled={saving}
           />
-        ) : null}
-      </AnimatePresence>
 
-      <ActionSwapButton
-        items={[
-          { id: "save", label: t("editor.save") },
-          { id: "saved", label: <Check className="size-4" aria-hidden="true" />, ariaLabel: t("editor.saved") },
-        ]}
-        value={saved ? "saved" : "save"}
-        cycle={false}
-        variant="primary"
-        size="sm"
-        animation="blur"
-        onClick={() => void save()}
-        disabled={saving}
-      />
-
-      <Popover
-        side="bottom"
-        align="end"
-        sideOffset={8}
-        panelRadius={14}
-        className="shrink-0"
-        onOpenChange={(open) => !open && setConfirmDelete(false)}
-      >
-        <PopoverTrigger>
-          <button
-            type="button"
-            aria-label={t("editor.more")}
-            title={t("editor.more")}
-            className="grid size-8 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
+          <Popover
+            side="bottom"
+            align="end"
+            sideOffset={8}
+            panelRadius={14}
+            className="shrink-0"
+            onOpenChange={(open) => !open && setConfirmDelete(false)}
           >
-            <MoreHorizontal className="size-4" aria-hidden="true" />
-          </button>
-        </PopoverTrigger>
-        <PopoverContent className="w-60 p-1.5">
-          {confirmDelete ? (
-            <div className="flex flex-col gap-2 p-1.5">
-              <p className="text-sm font-medium">{t("editor.delete.title")}</p>
-              <p className="text-xs leading-relaxed text-muted-foreground">{t("editor.delete.description", { id: note.id })}</p>
-              <div className="flex justify-end gap-1.5">
+            <PopoverTrigger>
+              <button
+                type="button"
+                aria-label={t("editor.more")}
+                title={t("editor.more")}
+                className="grid size-8 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
+              >
+                <MoreHorizontal className="size-4" aria-hidden="true" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-60 p-1.5">
+              {confirmDelete ? (
+                <div className="flex flex-col gap-2 p-1.5">
+                  <p className="text-sm font-medium">{t("editor.delete.title")}</p>
+                  <p className="text-xs leading-relaxed text-muted-foreground">{t("editor.delete.description", { id: note.id })}</p>
+                  <div className="flex justify-end gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setConfirmDelete(false)}
+                      className="rounded-full px-3 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                    >
+                      {t("editor.cancel")}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={remove.isPending}
+                      onClick={() => remove.mutate()}
+                      className="rounded-full bg-destructive/15 px-3 py-1 text-xs font-medium text-destructive-text transition-colors hover:bg-destructive/25 disabled:opacity-50"
+                    >
+                      {t("editor.delete")}
+                    </button>
+                  </div>
+                </div>
+              ) : (
                 <button
                   type="button"
-                  onClick={() => setConfirmDelete(false)}
-                  className="rounded-full px-3 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  role="menuitem"
+                  onClick={() => setConfirmDelete(true)}
+                  className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-sm text-destructive-text transition-colors hover:bg-destructive/10"
                 >
-                  {t("editor.cancel")}
-                </button>
-                <button
-                  type="button"
-                  disabled={remove.isPending}
-                  onClick={() => remove.mutate()}
-                  className="rounded-full bg-destructive/15 px-3 py-1 text-xs font-medium text-destructive-text transition-colors hover:bg-destructive/25 disabled:opacity-50"
-                >
+                  <Trash2 className="size-3.5" aria-hidden="true" />
                   {t("editor.delete")}
                 </button>
-              </div>
-            </div>
-          ) : (
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => setConfirmDelete(true)}
-              className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-sm text-destructive-text transition-colors hover:bg-destructive/10"
-            >
-              <Trash2 className="size-3.5" aria-hidden="true" />
-              {t("editor.delete")}
-            </button>
-          )}
-        </PopoverContent>
-      </Popover>
-    </header>
+              )}
+            </PopoverContent>
+          </Popover>
+        </>
+      }
+    />
   );
 
   const conflictAlert = (

@@ -19,6 +19,7 @@ import { Checkbox } from "@/components/motion/checkbox";
 import { Loader } from "@/components/motion/loader";
 import { Tooltip } from "@/components/motion/tooltip";
 import { PAGE_SECTIONS, Page, Reveal } from "@/components/page";
+import { PageHeader } from "@/components/page-header";
 import { AgentPanel } from "@/components/recommend/agent-panel";
 import { CreateProjectDialog } from "@/components/recommend/create-project-dialog";
 import { ErrorState } from "@/components/state";
@@ -485,34 +486,37 @@ export function RecommendPage() {
     <div className="min-h-full">
       <Page className={cn(PAGE_SECTIONS, selected.size > 0 && "pb-16")}>
         <Reveal index={0}>
-          <div className="flex flex-col gap-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-xl font-semibold tracking-tight">{t("page.recommend.title")}</h1>
-              {recommendation ? <ModeIndicator mode={recommendation.mode} /> : null}
-              {recommendation?.mode === "keywords" ? (
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  pressScale={0.97}
-                  className="h-7 px-2.5"
-                  disabled={enableSemantic.isPending}
-                  onClick={() => enableSemantic.mutate()}
-                >
-                  {enableSemantic.isPending ? (
-                    <Loader variant="spinner" size={14} label={t("recommend.enableHybrid.working")} />
-                  ) : (
-                    <Sparkles className="size-3.5" aria-hidden="true" />
-                  )}
-                  {t("recommend.enableHybrid")}
-                </Button>
-              ) : null}
-              {(description.trim() || recommendation) && (
-                <Button variant="ghost" size="sm" pressScale={0.97} className="h-7 px-2.5" onClick={clear}>
-                  {t("recommend.reset")}
-                </Button>
-              )}
-            </div>
-            <p className="max-w-[68ch] text-sm text-muted-foreground">{t("recommend.intro")}</p>
+          <PageHeader
+            title={t("page.recommend.title")}
+            meta={recommendation ? <ModeIndicator mode={recommendation.mode} /> : null}
+            description={t("recommend.intro")}
+            action={
+              <>
+                {recommendation?.mode === "keywords" ? (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    pressScale={0.97}
+                    className="h-7 px-2.5"
+                    disabled={enableSemantic.isPending}
+                    onClick={() => enableSemantic.mutate()}
+                  >
+                    {enableSemantic.isPending ? (
+                      <Loader variant="spinner" size={14} label={t("recommend.enableHybrid.working")} />
+                    ) : (
+                      <Sparkles className="size-3.5" aria-hidden="true" />
+                    )}
+                    {t("recommend.enableHybrid")}
+                  </Button>
+                ) : null}
+                {(description.trim() || recommendation) && (
+                  <Button variant="ghost" size="sm" pressScale={0.97} className="h-7 px-2.5" onClick={clear}>
+                    {t("recommend.reset")}
+                  </Button>
+                )}
+              </>
+            }
+          >
             {recommendation?.mode === "keywords" ? (
               <div className="flex flex-col gap-1 text-xs text-muted-foreground">
                 {embeddings.data ? (
@@ -548,7 +552,7 @@ export function RecommendPage() {
                 </button>
               </div>
             ) : null}
-          </div>
+          </PageHeader>
         </Reveal>
 
         <Reveal index={1}>

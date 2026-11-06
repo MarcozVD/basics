@@ -39,12 +39,21 @@ There are no page sidebars; secondary panels are overlays closed with `Esc`. You
 | **Skills** | Every skill installed for your coding agents, grouped by area: filter by agent or area, search by name and description, change a skill's area, and expand a row for its path and version. |
 | **Recommend** | Project description and layers → profiles and per-layer candidates with `use_when`, `performs_best` and `avoid_when`, selection, and the export modal with **STACK.md / AGENTS.md / CLAUDE.md / Cursor** tabs, each with copy or download. Shows whether the mode is **Keywords** or **Hybrid** and the score breakdown. On an empty vault it asks you to install the starter packs first. An **Ask an agent** run is kept per browser tab: it keeps going when you leave the page, and the Recommend item in the navigation (sidebar or floating bar) shows its progress. |
 
+## Going back
+
+A note and a proposal have a **Back** control that names the page you came from. Alt+Left, Alt+Right and the mouse side
+buttons also move back and forward through the pages you visited in this session, and each page returns with its scroll
+position and Explore's filters restored. A note or proposal opened directly, with no earlier page, goes back to Explore or
+Inbox. Home, Explore, Projects, Graph, Inbox, Recommend, Skills and Settings have no back control; you reach them from the
+navigation. If a note has unsaved changes, going back asks you first.
+
 ## Shortcuts
 
 | Keys | Action |
 | --- | --- |
 | `Ctrl`/`⌘+K` | Command palette: search notes and proposals, jump to any screen, run actions (including copying the MCP command) |
 | `Ctrl`/`⌘+,` | Open Settings |
+| `Alt`+`←` / `Alt`+`→`, mouse buttons 3 and 4 | Back / forward through the pages you visited, with scroll and filters restored |
 | `Ctrl`/`⌘+B` | Show or hide the sidebar's labels (full sidebar or icon rail); no effect in Floating style |
 | `g` then `h` / `e` / `p` / `g` / `i` / `r` / `k` | Go to Home / Explore / Projects / Graph / Inbox / Recommend / Skills |
 | `Ctrl`/`⌘+S` | Save the note in the editor |

@@ -75,9 +75,9 @@ describe("desktopKeyAction", () => {
     expect(desktopKeyAction(key({ key: "s", ctrlKey: true, target: editor }))).toBeNull();
   });
 
-  it("blocks Alt+Left/Right history but keeps Option+Arrow caret movement in a field", () => {
-    expect(desktopKeyAction(key({ key: "ArrowLeft", altKey: true, target: page }))).toBe("block");
-    expect(desktopKeyAction(key({ key: "ArrowRight", altKey: true, target: page }))).toBe("block");
+  it("leaves Alt+Left/Right to the app's history shortcuts, in a page and in a field", () => {
+    expect(desktopKeyAction(key({ key: "ArrowLeft", altKey: true, target: page }))).toBeNull();
+    expect(desktopKeyAction(key({ key: "ArrowRight", altKey: true, target: page }))).toBeNull();
     expect(desktopKeyAction(key({ key: "ArrowLeft", altKey: true, target: input }))).toBeNull();
     expect(desktopKeyAction(key({ key: "ArrowLeft", metaKey: true, target: page }))).toBeNull();
   });

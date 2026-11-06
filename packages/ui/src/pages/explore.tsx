@@ -12,6 +12,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/motion/tabs";
 import { Tooltip } from "@/components/motion/tooltip";
 import { TypeChip } from "@/components/note-form/note-preview";
 import { PAGE_SECTIONS, Page, Reveal } from "@/components/page";
+import { PageHeader } from "@/components/page-header";
 import { ErrorState, Loading } from "@/components/state";
 import { Button as LinkButton } from "@/components/ui/button";
 import { type TranslationKey, useT } from "@/i18n";
@@ -249,7 +250,14 @@ export function ExplorePage() {
     if (selected >= rows.length) setSelected(Math.max(0, rows.length - 1));
   }, [rows.length, selected]);
 
+  // Keep the keyboard-selected row on screen when the selection changes, but never on mount:
+  // coming back from a note, the layout has already restored the scroll offset and this would
+  // jump the list to the top. Comparing against the last value (instead of a "first run" flag)
+  // survives StrictMode's double effect invocation.
+  const visibleSelection = useRef(selected);
   useEffect(() => {
+    if (visibleSelection.current === selected) return;
+    visibleSelection.current = selected;
     document.getElementById(`note-row-${selected}`)?.scrollIntoView({ block: "nearest" });
   }, [selected]);
 
@@ -342,147 +350,147 @@ export function ExplorePage() {
   return (
     <Page className={cn("pt-0", PAGE_SECTIONS)}>
       <Reveal index={0} className="mx-page-gutter sticky top-[var(--nav-top,0px)] z-20 bg-card px-page-gutter pt-4 pb-0">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-baseline gap-2">
-            <h1 className="text-xl font-semibold tracking-tight">{t("page.explore.title")}</h1>
+        <PageHeader
+          title={t("page.explore.title")}
+          meta={
             <span className="font-mono text-sm text-muted-foreground">
               <AnimatedNumber value={rows.length} startOnView={false} duration={0.6} />
             </span>
-          </div>
+          }
+          description={t("explore.intro")}
+          action={
+            <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+              <Input
+                ref={searchRef}
+                type="search"
+                value={searchText}
+                onChange={setSearchText}
+                onKeyDown={handleKeyDown}
+                placeholder={t("explore.searchPlaceholder")}
+                aria-label={t("explore.searchPlaceholder")}
+                aria-keyshortcuts="Meta+F Control+F"
+                leftIcon={<Search />}
+                rightIcon={
+                  <kbd
+                    title={t("explore.searchShortcut", { key: modChord("F") })}
+                    className="mr-2.5 rounded-full border border-border px-1.5 font-mono text-[10px] leading-4 text-muted-foreground"
+                  >
+                    {modChord("F")}
+                  </kbd>
+                }
+                className="w-full sm:w-64"
+                classNames={{
+                  field: "h-8 bg-muted/60",
+                  input: "text-[13px] [&::-webkit-search-cancel-button]:hidden",
+                  leftIcon: "left-2.5",
+                }}
+              />
 
-          <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
-            <Input
-              ref={searchRef}
-              type="search"
-              value={searchText}
-              onChange={setSearchText}
-              onKeyDown={handleKeyDown}
-              placeholder={t("explore.searchPlaceholder")}
-              aria-label={t("explore.searchPlaceholder")}
-              aria-keyshortcuts="Meta+F Control+F"
-              leftIcon={<Search />}
-              rightIcon={
-                <kbd
-                  title={t("explore.searchShortcut", { key: modChord("F") })}
-                  className="mr-2.5 rounded-full border border-border px-1.5 font-mono text-[10px] leading-4 text-muted-foreground"
-                >
-                  {modChord("F")}
-                </kbd>
-              }
-              className="w-full sm:w-64"
-              classNames={{
-                field: "h-8 bg-muted/60",
-                input: "text-[13px] [&::-webkit-search-cancel-button]:hidden",
-                leftIcon: "left-2.5",
-              }}
-            />
+              <Tabs value={view} onValueChange={(value) => updateParams({ view: value === DEFAULT_VIEW ? null : value })} variant="segment">
+                <TabsList aria-label={t("explore.view")}>
+                  <TabsTrigger
+                    value="list"
+                    icon={<LayoutList className="size-3.5" aria-hidden="true" />}
+                    className="gap-1.5 px-2.5 py-1 text-[12px]"
+                  >
+                    {t("explore.view.list")}
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="grid"
+                    icon={<LayoutGrid className="size-3.5" aria-hidden="true" />}
+                    className="gap-1.5 px-2.5 py-1 text-[12px]"
+                  >
+                    {t("explore.view.grid")}
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
 
-            <Tabs value={view} onValueChange={(value) => updateParams({ view: value === DEFAULT_VIEW ? null : value })} variant="segment">
-              <TabsList aria-label={t("explore.view")}>
-                <TabsTrigger
-                  value="list"
-                  icon={<LayoutList className="size-3.5" aria-hidden="true" />}
-                  className="gap-1.5 px-2.5 py-1 text-[12px]"
-                >
-                  {t("explore.view.list")}
+              <Button
+                size="sm"
+                onClick={() => window.dispatchEvent(new CustomEvent("basics:new-note", { detail: { type } }))}
+                pressScale={0.97}
+              >
+                <Plus className="size-3.5" aria-hidden="true" />
+                {t("explore.newNote")}
+              </Button>
+            </div>
+          }
+        >
+          <fieldset aria-label={t("explore.filters")} className="m-0 min-w-0 border-0 p-0 flex flex-wrap items-center gap-2">
+            <Tabs
+              value={type ?? "all"}
+              onValueChange={(value) => updateParams({ type: value === "all" ? null : value })}
+              className="min-w-0 flex-auto"
+              variant="pill"
+            >
+              <TabsList aria-label={t("explore.typeFilter")} className="bg-transparent p-0">
+                <TabsTrigger value="all" className="gap-1.5 px-3 py-1 text-[12px]">
+                  {t("type.all")}
+                  <span className="font-mono text-[11px]">{allInLayer.data?.length ?? 0}</span>
                 </TabsTrigger>
-                <TabsTrigger
-                  value="grid"
-                  icon={<LayoutGrid className="size-3.5" aria-hidden="true" />}
-                  className="gap-1.5 px-2.5 py-1 text-[12px]"
-                >
-                  {t("explore.view.grid")}
-                </TabsTrigger>
+                {TYPE_ORDER.map((item) => (
+                  <Tooltip key={item} content={t(`type.${item}.hint` as TranslationKey)} side="bottom">
+                    <TabsTrigger value={item} className="gap-1.5 px-3 py-1 text-[12px]">
+                      <span
+                        aria-hidden="true"
+                        className="size-1.5 shrink-0 rounded-full ring-1 ring-black/10 dark:ring-white/20"
+                        style={{ backgroundColor: typeColor(item) }}
+                      />
+                      {typeLabel(item)}
+                      <span className="font-mono text-[11px]">{counts.get(item) ?? 0}</span>
+                    </TabsTrigger>
+                  </Tooltip>
+                ))}
               </TabsList>
             </Tabs>
 
-            <Button
-              size="sm"
-              onClick={() => window.dispatchEvent(new CustomEvent("basics:new-note", { detail: { type } }))}
-              pressScale={0.97}
-            >
-              <Plus className="size-3.5" aria-hidden="true" />
-              {t("explore.newNote")}
-            </Button>
-          </div>
-        </div>
+            <div className="ml-auto flex w-full items-center gap-2 sm:w-auto">
+              <Select
+                value={layer ?? "all"}
+                onValueChange={(value) => updateParams({ layer: value === "all" ? null : value })}
+                className="min-w-0 flex-1 sm:w-44 sm:flex-none"
+              >
+                <SelectTrigger className="h-8 rounded-full border-border bg-muted/60 px-3 py-0 text-[13px]">
+                  <span className="flex min-w-0 items-center gap-2">
+                    <Layers className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+                    <SelectValue className="truncate" />
+                  </span>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t("explore.allLayers")}</SelectItem>
+                  {(layers.data ?? []).map((item) => (
+                    <SelectItem key={item.id} value={item.id}>
+                      {item.title || item.id}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
 
-        <p className="mt-1 max-w-[68ch] text-sm text-muted-foreground">{t("explore.intro")}</p>
+              <Select
+                value={sort}
+                onValueChange={(value) => updateParams({ sort: value === DEFAULT_SORT ? null : value })}
+                className="min-w-0 flex-1 sm:w-48 sm:flex-none"
+              >
+                <SelectTrigger className="h-8 rounded-full border-border bg-muted/60 px-3 py-0 text-[13px]">
+                  <span className="flex min-w-0 items-center gap-2">
+                    <ArrowDownUp className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+                    <span className="sr-only">{t("explore.sort")}: </span>
+                    <SelectValue className="truncate" />
+                  </span>
+                </SelectTrigger>
+                <SelectContent>
+                  {SORTS.map((item) => (
+                    <SelectItem key={item} value={item}>
+                      {t(`explore.sort.${item}` as TranslationKey)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </fieldset>
 
-        <fieldset aria-label={t("explore.filters")} className="m-0 mt-3 min-w-0 border-0 p-0 flex flex-wrap items-center gap-2">
-          <Tabs
-            value={type ?? "all"}
-            onValueChange={(value) => updateParams({ type: value === "all" ? null : value })}
-            className="min-w-0 flex-auto"
-            variant="pill"
-          >
-            <TabsList aria-label={t("explore.typeFilter")} className="bg-transparent p-0">
-              <TabsTrigger value="all" className="gap-1.5 px-3 py-1 text-[12px]">
-                {t("type.all")}
-                <span className="font-mono text-[11px]">{allInLayer.data?.length ?? 0}</span>
-              </TabsTrigger>
-              {TYPE_ORDER.map((item) => (
-                <Tooltip key={item} content={t(`type.${item}.hint` as TranslationKey)} side="bottom">
-                  <TabsTrigger value={item} className="gap-1.5 px-3 py-1 text-[12px]">
-                    <span
-                      aria-hidden="true"
-                      className="size-1.5 shrink-0 rounded-full ring-1 ring-black/10 dark:ring-white/20"
-                      style={{ backgroundColor: typeColor(item) }}
-                    />
-                    {typeLabel(item)}
-                    <span className="font-mono text-[11px]">{counts.get(item) ?? 0}</span>
-                  </TabsTrigger>
-                </Tooltip>
-              ))}
-            </TabsList>
-          </Tabs>
-
-          <div className="ml-auto flex w-full items-center gap-2 sm:w-auto">
-            <Select
-              value={layer ?? "all"}
-              onValueChange={(value) => updateParams({ layer: value === "all" ? null : value })}
-              className="min-w-0 flex-1 sm:w-44 sm:flex-none"
-            >
-              <SelectTrigger className="h-8 rounded-full border-border bg-muted/60 px-3 py-0 text-[13px]">
-                <span className="flex min-w-0 items-center gap-2">
-                  <Layers className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-                  <SelectValue className="truncate" />
-                </span>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">{t("explore.allLayers")}</SelectItem>
-                {(layers.data ?? []).map((item) => (
-                  <SelectItem key={item.id} value={item.id}>
-                    {item.title || item.id}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Select
-              value={sort}
-              onValueChange={(value) => updateParams({ sort: value === DEFAULT_SORT ? null : value })}
-              className="min-w-0 flex-1 sm:w-48 sm:flex-none"
-            >
-              <SelectTrigger className="h-8 rounded-full border-border bg-muted/60 px-3 py-0 text-[13px]">
-                <span className="flex min-w-0 items-center gap-2">
-                  <ArrowDownUp className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-                  <span className="sr-only">{t("explore.sort")}: </span>
-                  <SelectValue className="truncate" />
-                </span>
-              </SelectTrigger>
-              <SelectContent>
-                {SORTS.map((item) => (
-                  <SelectItem key={item} value={item}>
-                    {t(`explore.sort.${item}` as TranslationKey)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </fieldset>
-
-        {view === "list" && rows.length > 0 ? <ListHeader sort={sort} onSort={setSort} /> : null}
+          {view === "list" && rows.length > 0 ? <ListHeader sort={sort} onSort={setSort} /> : null}
+        </PageHeader>
       </Reveal>
 
       <div className="pt-1">

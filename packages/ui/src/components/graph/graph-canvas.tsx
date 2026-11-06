@@ -5,6 +5,7 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { type Dispatch, type Ref, type SetStateAction, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { type TranslationKey, useT } from "@/i18n";
 import { EASE_OUT } from "@/lib/ease";
+import { currentNavigationEpoch } from "@/lib/page-transition";
 import { cn } from "@/lib/utils";
 import { type GraphCacheScope, type GraphPosition, recallGraph, rememberCamera, rememberGraph } from "./graph-cache";
 import { type GraphLayoutPosition, type GraphLayoutRun, type GraphLayoutStageOptions, startGraphLayout } from "./graph-layout";
@@ -926,6 +927,8 @@ export default function GraphCanvas({
   const containerRef = useRef<HTMLDivElement>(null);
   const cyRef = useRef<Core | null>(null);
   const firstRun = useRef(true);
+  /** The navigation this mount belongs to; deferred boot steps bail if the shell has moved on. */
+  const mountEpoch = useRef(currentNavigationEpoch());
   /** The bridge this mount writes into; shared with the kept instance on a return. */
   const bridgeRef = useRef<CanvasBridge | null>(null);
   /** Per-mount timing record; null outside dev and the Playwright probe. */
@@ -1254,6 +1257,9 @@ export default function GraphCanvas({
     if (!elementsReady) return;
     const cy = cyRef.current;
     if (!cy) return;
+    // The shell left this page while the canvas was still booting: skip the heavy sync so it
+    // cannot land in the next page's frame. The camera was kept by the cleanup; a return rebuilds.
+    if (mode === "full" && currentNavigationEpoch() !== mountEpoch.current) return;
     const effectStart = performance.now();
     const titles = { top: t("graph.bandProfiles"), bottom: t("graph.bandCrossLayer") };
     // What the grouped picture depends on besides the data itself.

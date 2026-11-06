@@ -14,6 +14,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/motion/tabs";
 import { TextReveal } from "@/components/motion/text-reveal";
 import { Tooltip } from "@/components/motion/tooltip";
 import { PAGE_SECTIONS, Page, Reveal } from "@/components/page";
+import { PageHeader } from "@/components/page-header";
 import { ErrorState, Loading } from "@/components/state";
 import { type TranslationKey, useI18n } from "@/i18n";
 import { agentColor, agentInitial } from "@/lib/agent-color";
@@ -1179,24 +1180,15 @@ export function HomePage() {
   return (
     <Page className={`${PAGE_SECTIONS} min-[1024px]:pb-0`}>
       <Reveal index={0}>
-        <header>
-          {reveal ? (
-            <TextReveal
-              as="h1"
-              text={t("home.title")}
-              className="text-xl font-semibold tracking-tight"
-              stagger={0.06}
-              blur={8}
-              yOffset="30%"
-            />
-          ) : (
-            <h1 className="text-xl font-semibold tracking-tight">{t("home.title")}</h1>
-          )}
-          <p className="mt-1 max-w-[68ch] text-sm text-muted-foreground">{t("home.intro")}</p>
-          <p className="mt-1 font-mono text-[11px] text-muted-foreground">
-            {t("home.summary", { total, inbox: pending, agents: agentsToday })}
-          </p>
-        </header>
+        <PageHeader
+          title={reveal ? <TextReveal text={t("home.title")} stagger={0.06} blur={8} yOffset="30%" /> : t("home.title")}
+          description={
+            <>
+              <p>{t("home.intro")}</p>
+              <p className="font-mono text-[11px]">{t("home.summary", { total, inbox: pending, agents: agentsToday })}</p>
+            </>
+          }
+        />
       </Reveal>
 
       {showSteps ? (

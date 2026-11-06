@@ -1,13 +1,14 @@
 import type { NoteData } from "@marcozvd/basics-core";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { Page } from "@/components/page";
+import { PageHeader } from "@/components/page-header";
 import { issuesToErrors, ProposalDetail, ProposalEditModal } from "@/components/proposal-detail";
 import { ErrorState, Loading } from "@/components/state";
 import { useI18n } from "@/i18n";
 import { ApiRequestError, approveProposal, rejectProposal } from "@/lib/api";
+import { useBackTarget } from "@/lib/app-history";
 import { useProposal } from "@/lib/queries";
 import { useReturnFocus } from "@/lib/return-focus";
 import { toast } from "@/lib/toast";
@@ -39,6 +40,7 @@ export function ProposalPage() {
   const queryClient = useQueryClient();
   const proposalQuery = useProposal(id);
   const proposal = proposalQuery.data;
+  const back = useBackTarget();
 
   const [gone, setGone] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -182,13 +184,7 @@ export function ProposalPage() {
 
   return (
     <Page className="pb-28">
-      <Link
-        to="/inbox"
-        className="inline-flex items-center gap-1 rounded-full text-xs text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-      >
-        <ArrowLeft className="size-3.5" aria-hidden="true" />
-        {t("nav.inbox")}
-      </Link>
+      <PageHeader back={back} />
 
       <ProposalDetail
         proposal={proposal}
