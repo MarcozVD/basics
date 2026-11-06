@@ -177,7 +177,7 @@ export function DiffView({ before, after, file }: { before: string | null; after
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-border bg-card">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-border bg-muted/30">
       <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border bg-muted/25 px-3 py-1.5">
         <div className="flex min-w-0 items-center gap-2">
           <span className="truncate font-mono text-[11px] text-muted-foreground">{file ?? t("diff.proposed")}</span>
@@ -201,7 +201,7 @@ export function DiffView({ before, after, file }: { before: string | null; after
           <UnifiedRows segments={segments} expanded={expanded} onToggle={toggle} />
         ) : (
           <>
-            <div className="sticky top-0 z-10 grid grid-cols-2 border-b border-border bg-muted/40 text-[11px] font-medium text-muted-foreground">
+            <div className="sticky top-[var(--nav-top,0px)] z-10 grid grid-cols-2 border-b border-border bg-muted/40 text-[11px] font-medium text-muted-foreground">
               <div className="border-r border-border/60 px-3 py-1.5">{t("diff.current")}</div>
               <div className="px-3 py-1.5">{t("diff.proposed")}</div>
             </div>

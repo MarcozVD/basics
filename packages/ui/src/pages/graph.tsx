@@ -1,12 +1,12 @@
 import type { GraphData, GraphNode, GraphNodeType, NoteType } from "@marcozvd/basics-core";
 import { Crosshair, FilePlus2, Layers, Scan, Search, SquareArrowOutUpRight, Waypoints, X } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
-import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { lazy, type KeyboardEvent as ReactKeyboardEvent, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { type GraphCacheScope, type GraphLayoutMode, graphCacheKey } from "@/components/graph/graph-cache";
-import GraphCanvas, { type GraphCanvasHandle, type Insets } from "@/components/graph/graph-canvas";
+import type { GraphCanvasHandle, Insets } from "@/components/graph/graph-canvas";
 import { GRAPH_TYPES, layerSlice, matchNodes, neighborhood } from "@/components/graph/graph-model";
-import { DOCK_SPACE } from "@/components/layout";
+import { GraphSkeleton } from "@/components/graph/graph-skeleton";
 import { AnimatedNumber } from "@/components/motion/animated-number";
 import { Button } from "@/components/motion/button/base";
 import { Drawer } from "@/components/motion/drawer";
@@ -15,17 +15,27 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/motion/switch";
 import { Tooltip } from "@/components/motion/tooltip";
 import { TypeChip } from "@/components/note-form/note-preview";
-import { ErrorState, Loading } from "@/components/state";
+import { DelayedMount, ErrorState } from "@/components/state";
 import { Button as LinkButton } from "@/components/ui/button";
 import { type TranslationKey, useT } from "@/i18n";
 import { modChord } from "@/lib/desktop";
 import { EASE_OUT, SPRING_PRESS } from "@/lib/ease";
+import { DOCK_SPACE, DOCK_SPACE_VERTICAL, useResolvedDockEdge } from "@/lib/navigation";
+import { PAGE_ENTER_MS, PAGE_REDUCED_MS } from "@/lib/page-transition";
 import { useGraph, useHealth, useLayers, useNote, useNotes, useStats } from "@/lib/queries";
 import { cn } from "@/lib/utils";
+
+// Cytoscape is the single heaviest dependency in the panel: load its chunk only when the
+// canvas is actually about to mount, after the page transition has finished.
+const GraphCanvas = lazy(() => import("@/components/graph/graph-canvas"));
 
 /** Drawer width plus its right gap, kept clear when centering a node beside it. */
 const DRAWER_SPACE = 372;
 const TOOLBAR_OFFSET = 12;
+/** Below this canvas width the toolbar drops its labels so it stays one row. */
+const COMPACT_BELOW = 1500;
+/** Below this the type chips may wrap inside the toolbar (phones and the rail). */
+const NARROW_BELOW = 1000;
 const GROUP_KEY = "basics:graph-group";
 
 /** Grouped by layer unless the reader turned the switch off once. */
@@ -43,9 +53,11 @@ export function GraphPage() {
   const t = useT();
   const navigate = useNavigate();
   const reduce = useReducedMotion() ?? false;
+  // The floating bar's edge decides where the toolbar, the fit area and the drawer sit.
+  const dockEdge = useResolvedDockEdge();
   const canvasRef = useRef<GraphCanvasHandle>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
-  const headerRef = useRef<HTMLDivElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
   const [broken, setBroken] = useState(false);
@@ -56,7 +68,10 @@ export function GraphPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [focusId, setFocusId] = useState<string | null>(null);
   const [toolbarHeight, setToolbarHeight] = useState(48);
-  const [headerHeight, setHeaderHeight] = useState(0);
+  const [rootWidth, setRootWidth] = useState(0);
+  // The canvas waits out the page's enter transition: cytoscape's chunk and its first layout
+  // are the heaviest work in the app, and the transition should own the first frames.
+  const [canvasReady, setCanvasReady] = useState(false);
 
   const graph = useGraph(broken);
   const layers = useLayers();
@@ -73,18 +88,25 @@ export function GraphPage() {
     return () => observer.disconnect();
   }, []);
 
-  // The page intro floats above the toolbar; the canvas starts below both.
+  // Holding the canvas back lets the enter transition finish before cytoscape boots.
+  useEffect(() => {
+    const timer = window.setTimeout(() => setCanvasReady(true), (reduce ? PAGE_REDUCED_MS : PAGE_ENTER_MS) + 40);
+    return () => window.clearTimeout(timer);
+  }, [reduce]);
+
+  // Labels are costly at 1280 with the expanded sidebar: measure the canvas
+  // width and fall back to icon-only controls before the toolbar has to wrap.
   useLayoutEffect(() => {
-    const header = headerRef.current;
-    if (!header) return;
-    const measure = () => setHeaderHeight(header.offsetHeight);
+    const root = rootRef.current;
+    if (!root) return;
+    const measure = () => setRootWidth(root.clientWidth);
     measure();
     const observer = new ResizeObserver(measure);
-    observer.observe(header);
+    observer.observe(root);
     return () => observer.disconnect();
   }, []);
 
-  const toolbarTop = TOOLBAR_OFFSET + headerHeight + 8;
+  const toolbarTop = TOOLBAR_OFFSET + (dockEdge === "top" ? DOCK_SPACE : 0);
 
   // ⌘F / Ctrl+F jumps to the node search, like Explore.
   useEffect(() => {
@@ -98,9 +120,35 @@ export function GraphPage() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
+  // The toolbar's measured height is part of the fit area, so no node can land
+  // under it. When the row count changes (resize, sidebar toggle) refit at once.
+  const lastToolbar = useRef(0);
+  useEffect(() => {
+    if (lastToolbar.current === 0) {
+      lastToolbar.current = toolbarHeight;
+      return;
+    }
+    if (lastToolbar.current === toolbarHeight) return;
+    lastToolbar.current = toolbarHeight;
+    canvasRef.current?.fit();
+  }, [toolbarHeight]);
+
+  // Refit when the bar changes edge: the fit area moved even if the toolbar did not.
+  const lastDockEdge = useRef(dockEdge);
+  useEffect(() => {
+    if (lastDockEdge.current === dockEdge) return;
+    lastDockEdge.current = dockEdge;
+    canvasRef.current?.fit();
+  }, [dockEdge]);
+
   const insets: Insets = useMemo(
-    () => ({ top: toolbarTop + toolbarHeight + 20, right: 32, bottom: DOCK_SPACE + 12, left: 32 }),
-    [toolbarTop, toolbarHeight],
+    () => ({
+      top: toolbarTop + toolbarHeight + 20,
+      right: 32 + (dockEdge === "right" ? DOCK_SPACE_VERTICAL : 0),
+      bottom: 24 + (dockEdge === "bottom" ? DOCK_SPACE : 0),
+      left: 32 + (dockEdge === "left" ? DOCK_SPACE_VERTICAL : 0),
+    }),
+    [toolbarTop, toolbarHeight, dockEdge],
   );
 
   const byId = useMemo(() => new Map((data?.nodes ?? []).map((node) => [node.id, node])), [data]);
@@ -218,21 +266,15 @@ export function GraphPage() {
 
   const types = GRAPH_TYPES.filter((type) => type !== "missing" || broken);
   const focused = focusId ? byId.get(focusId) : undefined;
+  const compact = rootWidth > 0 && rootWidth < COMPACT_BELOW;
+  const narrow = rootWidth > 0 && rootWidth < NARROW_BELOW;
 
   return (
-    <div className="relative" style={{ height: "calc(100dvh - 3rem)", marginBottom: -DOCK_SPACE }}>
-      <div
-        ref={headerRef}
-        className="pointer-events-none absolute top-3 left-3 z-10 max-w-[min(calc(100%_-_24px),30rem)] rounded-2xl border border-border bg-background/75 px-3 py-2 shadow-[0_8px_30px_rgba(0,0,0,0.18)] backdrop-blur-xl dark:shadow-[0_8px_30px_rgba(0,0,0,0.35)]"
-      >
-        <h1 className="text-base font-semibold tracking-tight">{t("page.graph.title")}</h1>
-        <p className="mt-0.5 text-xs leading-4 text-muted-foreground">{t("graph.intro")}</p>
-      </div>
-
+    <div ref={rootRef} className="relative min-h-0 flex-1">
       {graph.isPending || (health.isPending && !health.data) ? (
-        <div className="grid h-full place-items-center">
-          <Loading />
-        </div>
+        <DelayedMount>
+          <GraphSkeleton className="absolute inset-0" label={t("state.loading")} />
+        </DelayedMount>
       ) : graph.error ? (
         <div className="mx-auto max-w-xl px-6 pt-24">
           <ErrorState error={graph.error} />
@@ -240,20 +282,26 @@ export function GraphPage() {
       ) : data && data.nodes.length === 0 ? (
         <EmptyGraph vaultEmpty={vaultEmpty} />
       ) : data ? (
-        <GraphCanvas
-          ref={canvasRef}
-          data={data}
-          mode="full"
-          cacheScope={cacheScope}
-          visibleIds={visibleIds}
-          query={search}
-          grouped={grouped && !focusId}
-          selectedId={selectedId}
-          insets={insets}
-          onNodeClick={setSelectedId}
-          onBackgroundClick={() => setSelectedId(null)}
-          className="absolute inset-0"
-        />
+        canvasReady ? (
+          <Suspense fallback={<GraphSkeleton className="absolute inset-0" label={t("state.loading")} />}>
+            <GraphCanvas
+              ref={canvasRef}
+              data={data}
+              mode="full"
+              cacheScope={cacheScope}
+              visibleIds={visibleIds}
+              query={search}
+              grouped={grouped && !focusId}
+              selectedId={selectedId}
+              insets={insets}
+              onNodeClick={setSelectedId}
+              onBackgroundClick={() => setSelectedId(null)}
+              className="absolute inset-0"
+            />
+          </Suspense>
+        ) : (
+          <GraphSkeleton className="absolute inset-0" label={t("state.loading")} />
+        )
       ) : null}
 
       {(data?.nodes.length ?? 0) > 0 ? (
@@ -262,13 +310,27 @@ export function GraphPage() {
           role="toolbar"
           aria-label={t("graph.toolbar")}
           data-testid="graph-toolbar"
+          data-compact={compact || undefined}
           className={cn(
-            "absolute left-3 z-10 flex max-w-[calc(100%-24px)] flex-wrap items-center gap-1 rounded-[22px] border border-border p-1.5",
-            "bg-background/75 shadow-[0_8px_30px_rgba(0,0,0,0.18)] backdrop-blur-xl dark:shadow-[0_8px_30px_rgba(0,0,0,0.35)]",
+            "absolute left-3 z-10 flex max-w-[calc(100%-24px)] items-center gap-1 rounded-[22px] border border-border p-1.5",
+            narrow ? "flex-wrap" : "flex-nowrap",
+            "bg-card/85 shadow-[0_8px_30px_rgba(0,0,0,0.18)] backdrop-blur-xl dark:shadow-[0_8px_30px_rgba(0,0,0,0.35)]",
           )}
           style={{ top: toolbarTop }}
         >
-          <fieldset aria-label={t("graph.types")} className="m-0 flex min-w-0 flex-wrap items-center gap-0.5 border-0 p-0">
+          <div className="flex min-w-0 items-center gap-2 pr-1 pl-2">
+            <h1 className="shrink-0 text-[13px] font-semibold tracking-tight" title={t("graph.intro")}>
+              {t("page.graph.title")}
+            </h1>
+            <p className="sr-only">{t("graph.intro")}</p>
+          </div>
+
+          <ToolbarDivider />
+
+          <fieldset
+            aria-label={t("graph.types")}
+            className={cn("m-0 flex min-w-0 items-center gap-0.5 border-0 p-0", narrow ? "flex-wrap" : "flex-nowrap")}
+          >
             {types.map((type) => {
               const shown = !hiddenTypes.has(type);
               return (
@@ -281,7 +343,8 @@ export function GraphPage() {
                     whileTap={reduce ? undefined : { scale: 0.97 }}
                     transition={SPRING_PRESS}
                     className={cn(
-                      "inline-flex h-8 items-center gap-1.5 rounded-full px-2.5 text-[12px] font-medium transition-colors",
+                      "inline-flex h-8 items-center rounded-full text-[12px] font-medium transition-colors",
+                      compact ? "gap-1 px-1.5" : "gap-1.5 px-2.5",
                       "focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring",
                       shown ? "text-foreground hover:bg-muted/70" : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
                     )}
@@ -298,7 +361,7 @@ export function GraphPage() {
                     <span className={cn(!shown && "line-through decoration-muted-foreground/50")}>
                       {t(`type.${type}` as TranslationKey)}
                     </span>
-                    <span className="font-mono text-[10.5px]">{counts.get(type) ?? 0}</span>
+                    <span className={cn("font-mono text-[10.5px]", compact && "sr-only")}>{counts.get(type) ?? 0}</span>
                   </motion.button>
                 </Tooltip>
               );
@@ -308,8 +371,8 @@ export function GraphPage() {
           <ToolbarDivider />
 
           <div data-testid="graph-layer">
-            <Select value={layer} onValueChange={setLayer} className="w-40">
-              <SelectTrigger className="h-8 rounded-full border-border bg-card px-3 py-0 text-[12px]">
+            <Select value={layer} onValueChange={setLayer} className={compact ? "w-32" : "w-40"}>
+              <SelectTrigger className="h-8 rounded-full border-border bg-muted/60 px-3 py-0 text-[12px]">
                 <span className="flex min-w-0 items-center gap-2">
                   <Layers className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
                   <SelectValue className="truncate" />
@@ -346,15 +409,17 @@ export function GraphPage() {
                 >
                   {matches.length}
                 </span>
-              ) : (
+              ) : compact ? null : (
+                // At the compact width the field is too narrow for both the placeholder and the
+                // chord; the shortcut stays on the input's title and aria-keyshortcuts.
                 <kbd className="mr-2.5 rounded-full border border-border px-1.5 font-mono text-[10px] leading-4 text-muted-foreground">
                   {modChord("F")}
                 </kbd>
               )
             }
-            className="w-48"
+            className={compact ? "w-36" : "w-48"}
             classNames={{
-              field: "h-8 rounded-full bg-card",
+              field: "h-8 rounded-full bg-muted/60",
               input: "text-[12px] [&::-webkit-search-cancel-button]:hidden",
               leftIcon: "left-2.5",
             }}
@@ -362,31 +427,41 @@ export function GraphPage() {
 
           <ToolbarDivider />
 
-          <ToolbarDivider />
+          <Tooltip content={t("graph.groupByLayer")} side="bottom" disabled={!compact}>
+            <span data-testid="graph-group" className="inline-flex h-8 items-center gap-2 pr-1 pl-1.5">
+              <Switch checked={grouped} onCheckedChange={toggleGrouped} ariaLabel={t("graph.groupByLayer")} />
+              <button
+                type="button"
+                tabIndex={-1}
+                aria-hidden="true"
+                onClick={() => toggleGrouped(!grouped)}
+                className={cn(
+                  "text-[12px] font-medium whitespace-nowrap text-muted-foreground hover:text-foreground",
+                  compact && "sr-only",
+                )}
+              >
+                {t("graph.groupByLayer")}
+              </button>
+            </span>
+          </Tooltip>
 
-          <span data-testid="graph-group" className="inline-flex h-8 items-center gap-2 pr-1 pl-1.5">
-            <Switch checked={grouped} onCheckedChange={toggleGrouped} ariaLabel={t("graph.groupByLayer")} />
-            <button
-              type="button"
-              tabIndex={-1}
-              onClick={() => toggleGrouped(!grouped)}
-              className="text-[12px] font-medium whitespace-nowrap text-muted-foreground hover:text-foreground"
-            >
-              {t("graph.groupByLayer")}
-            </button>
-          </span>
-
-          <span data-testid="graph-broken" className="inline-flex h-8 items-center gap-2 pr-1 pl-1.5">
-            <Switch checked={broken} onCheckedChange={toggleBroken} ariaLabel={t("graph.showBroken")} />
-            <button
-              type="button"
-              tabIndex={-1}
-              onClick={() => toggleBroken(!broken)}
-              className="text-[12px] font-medium whitespace-nowrap text-muted-foreground hover:text-foreground"
-            >
-              {t("graph.showBroken")}
-            </button>
-          </span>
+          <Tooltip content={t("graph.showBroken")} side="bottom" disabled={!compact}>
+            <span data-testid="graph-broken" className="inline-flex h-8 items-center gap-2 pr-1 pl-1.5">
+              <Switch checked={broken} onCheckedChange={toggleBroken} ariaLabel={t("graph.showBroken")} />
+              <button
+                type="button"
+                tabIndex={-1}
+                aria-hidden="true"
+                onClick={() => toggleBroken(!broken)}
+                className={cn(
+                  "text-[12px] font-medium whitespace-nowrap text-muted-foreground hover:text-foreground",
+                  compact && "sr-only",
+                )}
+              >
+                {t("graph.showBroken")}
+              </button>
+            </span>
+          </Tooltip>
 
           <Tooltip content={t("graph.fit")} side="bottom">
             <motion.button
@@ -434,7 +509,9 @@ export function GraphPage() {
         ariaLabel={t("graph.drawer")}
         backdropClassName="bg-transparent backdrop-blur-none"
         className={cn(
-          "top-[60px] right-3 bottom-[86px] w-[360px] rounded-2xl border border-border",
+          "right-3 bottom-[86px] w-[360px] rounded-2xl border border-border",
+          dockEdge === "top" ? "top-[142px]" : "top-[60px]",
+          dockEdge === "right" && "right-[94px]",
           "bg-popover/90 shadow-[0_8px_30px_rgba(0,0,0,0.25)] backdrop-blur-xl",
         )}
       >
@@ -561,7 +638,7 @@ function NodeDetails({ node, data, onClose, onOpen, onFocus }: NodeDetailsProps)
 
 function Stat({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-xl border border-border bg-card/60 px-3 py-2">
+    <div className="rounded-xl border border-border bg-muted/50 px-3 py-2">
       <dt className="text-[11px] font-medium text-muted-foreground">{label}</dt>
       <dd className="font-mono text-lg font-semibold tabular-nums">
         <AnimatedNumber value={value} startOnView={false} duration={0.5} />

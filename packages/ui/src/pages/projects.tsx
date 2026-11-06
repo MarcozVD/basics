@@ -18,11 +18,12 @@ import { Button } from "@/components/motion/button/base";
 import { Input } from "@/components/motion/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/motion/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/motion/tabs";
-import { PAGE_SECTIONS, Page } from "@/components/page";
+import { PAGE_SECTIONS, Page, Reveal } from "@/components/page";
 import { ErrorState, Loading } from "@/components/state";
 import { type TranslationKey, useI18n } from "@/i18n";
 import { exportStack, getNote, saveNote } from "@/lib/api";
 import { EASE_OUT, SPRING_LAYOUT } from "@/lib/ease";
+import { useFirstPaint, useProgressiveCount } from "@/lib/progressive";
 import { queryKeys, useNotes } from "@/lib/queries";
 import { formatCompactRelativeTime, formatFullDateTime, formatRelativeTime } from "@/lib/relative-time";
 import { useReturnFocus } from "@/lib/return-focus";
@@ -160,7 +161,7 @@ function StatusChip({ status, className }: { status: ProjectStatus; className?: 
     <span
       className={cn(
         "inline-flex h-5 shrink-0 items-center gap-1.5 rounded-full border px-2 text-[10px] font-medium",
-        status === "done" ? DONE_TONE : "border-border bg-background/60 text-muted-foreground",
+        status === "done" ? DONE_TONE : "border-border bg-muted/60 text-muted-foreground",
         className,
       )}
     >
@@ -445,7 +446,7 @@ function LinkList({ ids, noteById, empty }: { ids: string[]; noteById: Map<strin
             key={id}
             to={`/notes/${encodeURIComponent(id)}`}
             title={id}
-            className="inline-flex h-6 max-w-full items-center rounded-full border border-border bg-card/50 px-2 text-[10.5px] text-foreground transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            className="inline-flex h-6 max-w-full items-center rounded-full border border-border bg-muted/50 px-2 text-[10.5px] text-foreground transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
           >
             <span className="truncate">{label}</span>
           </Link>
@@ -494,7 +495,7 @@ function ProjectDetail({
   return (
     <aside
       aria-label={t("projects.detail")}
-      className="hidden min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-border bg-card/20 min-[1280px]:flex"
+      className="hidden min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-border bg-muted/25 min-[1280px]:flex"
     >
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
         <header className="border-b border-border/70 p-5">
@@ -813,6 +814,16 @@ export function ProjectsPage() {
   const doneRows = useMemo(() => visible.flatMap((row, index) => (row.project.status === "done" ? [{ row, index }] : [])), [visible]);
   const grouped = prefs.status === "all" && searchText.trim().length === 0 && doneRows.length > 0;
   const showDone = !grouped || prefs.done;
+  // A long project list mounts the first screenful, then fills in idle slices.
+  const firstPaint = useFirstPaint();
+  const renderLimit = useProgressiveCount(mainRows.length + doneRows.length, `${prefs.status}|${prefs.sort}|${searchText}`, {
+    active: firstPaint,
+    initial: 8,
+    chunk: 14,
+  });
+  const visibleLimit = firstPaint ? Math.max(renderLimit, selected + 1) : 0;
+  const shownMain = mainRows.filter((entry) => entry.index < visibleLimit);
+  const shownDone = doneRows.filter((entry) => entry.index < visibleLimit);
   /** Indices the keyboard can reach: hidden rows are skipped. */
   const reachable = useMemo(
     () => (showDone ? visible.map((_, index) => index) : mainRows.map((entry) => entry.index)),
@@ -1034,193 +1045,201 @@ export function ProjectsPage() {
   if (projectEmpty) {
     return (
       <Page className={`min-h-0 ${PAGE_SECTIONS}`}>
-        <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
-          <div className="min-w-0">
-            <div className="flex items-baseline gap-2">
-              <h1 className="text-xl font-semibold tracking-tight">{t("page.projects.title")}</h1>
-              <span className="text-xs text-muted-foreground">{t("projects.total", { count: 0 })}</span>
+        <Reveal index={0}>
+          <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+            <div className="min-w-0">
+              <div className="flex items-baseline gap-2">
+                <h1 className="text-xl font-semibold tracking-tight">{t("page.projects.title")}</h1>
+                <span className="text-xs text-muted-foreground">{t("projects.total", { count: 0 })}</span>
+              </div>
+              <p className="mt-1 max-w-[68ch] text-sm text-muted-foreground">{t("projects.intro")}</p>
             </div>
-            <p className="mt-1 max-w-[68ch] text-sm text-muted-foreground">{t("projects.intro")}</p>
-          </div>
-        </header>
-        <div className="flex min-h-[calc(100dvh-14rem)] items-center justify-center py-10">
-          <div className="max-w-xl text-center">
-            <span className="mx-auto grid size-12 place-items-center rounded-2xl bg-muted/60 text-muted-foreground">
-              <FolderKanban className="size-5" aria-hidden="true" />
-            </span>
-            <h2 className="mt-4 text-2xl font-semibold tracking-tight">{t("projects.empty.title")}</h2>
-            <p className="mt-3 text-sm leading-6 text-muted-foreground">
-              {t("projects.empty.agentBefore")} <code className="font-mono text-[12px] text-foreground">record_project_outcome</code>.
-            </p>
-            <p className="mt-1 text-sm leading-6 text-muted-foreground">
-              {t("projects.empty.exportBefore")} <code className="font-mono text-[12px] text-foreground">basics export</code>{" "}
-              {t("projects.empty.exportAfter")}
-            </p>
-            <p className="mx-auto mt-3 max-w-md text-xs leading-5 text-muted-foreground">{t("projects.empty.hint")}</p>
-            <div className="mt-5 flex flex-col items-center gap-2">
-              <NewProjectButton />
-              <p className="text-xs text-muted-foreground">{t("projects.empty.manual")}</p>
+          </header>
+        </Reveal>
+        <Reveal index={1} className="flex min-h-0 flex-1 flex-col">
+          <div className="flex min-h-0 flex-1 items-center justify-center py-10">
+            <div className="max-w-xl text-center">
+              <span className="mx-auto grid size-12 place-items-center rounded-2xl bg-muted/60 text-muted-foreground">
+                <FolderKanban className="size-5" aria-hidden="true" />
+              </span>
+              <h2 className="mt-4 text-2xl font-semibold tracking-tight">{t("projects.empty.title")}</h2>
+              <p className="mt-3 text-sm leading-6 text-muted-foreground">
+                {t("projects.empty.agentBefore")} <code className="font-mono text-[12px] text-foreground">record_project_outcome</code>.
+              </p>
+              <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                {t("projects.empty.exportBefore")} <code className="font-mono text-[12px] text-foreground">basics export</code>{" "}
+                {t("projects.empty.exportAfter")}
+              </p>
+              <p className="mx-auto mt-3 max-w-md text-xs leading-5 text-muted-foreground">{t("projects.empty.hint")}</p>
+              <div className="mt-5 flex flex-col items-center gap-2">
+                <NewProjectButton />
+                <p className="text-xs text-muted-foreground">{t("projects.empty.manual")}</p>
+              </div>
             </div>
           </div>
-        </div>
+        </Reveal>
       </Page>
     );
   }
 
   return (
     <Page className={`min-h-0 ${PAGE_SECTIONS}`}>
-      <header className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
-        <div className="min-w-0">
-          <div className="flex items-baseline gap-2">
-            <h1 className="text-xl font-semibold tracking-tight">{t("page.projects.title")}</h1>
-            <span className="text-xs text-muted-foreground">{t("projects.total", { count: rows.length })}</span>
+      <Reveal index={0}>
+        <header className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
+          <div className="min-w-0">
+            <div className="flex items-baseline gap-2">
+              <h1 className="text-xl font-semibold tracking-tight">{t("page.projects.title")}</h1>
+              <span className="text-xs text-muted-foreground">{t("projects.total", { count: rows.length })}</span>
+            </div>
+            <p className="mt-1 max-w-[68ch] text-sm text-muted-foreground">{t("projects.intro")}</p>
           </div>
-          <p className="mt-1 max-w-[68ch] text-sm text-muted-foreground">{t("projects.intro")}</p>
-        </div>
 
-        <div className="flex min-w-0 flex-wrap items-center gap-2 max-[640px]:w-full">
-          <NewProjectButton />
-          <Tabs
-            value={prefs.status}
-            onValueChange={(value) => {
-              setPrefs((currentPrefs) => ({ ...currentPrefs, status: value as StatusFilter }));
-              setSelected(0);
-            }}
-            variant="segment"
-          >
-            <TabsList aria-label={t("projects.statusFilter")}>
-              {STATUS_FILTERS.map((status) => (
-                <TabsTrigger key={status} value={status} className="gap-1.5 px-2.5 py-1 text-xs">
-                  {statusLabel(status, t)}
-                  <span className="font-mono text-[11px]">{counts[status]}</span>
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          </Tabs>
+          <div className="flex min-w-0 flex-wrap items-center gap-2 max-[640px]:w-full">
+            <NewProjectButton />
+            <Tabs
+              value={prefs.status}
+              onValueChange={(value) => {
+                setPrefs((currentPrefs) => ({ ...currentPrefs, status: value as StatusFilter }));
+                setSelected(0);
+              }}
+              variant="segment"
+            >
+              <TabsList aria-label={t("projects.statusFilter")}>
+                {STATUS_FILTERS.map((status) => (
+                  <TabsTrigger key={status} value={status} className="gap-1.5 px-2.5 py-1 text-xs">
+                    {statusLabel(status, t)}
+                    <span className="font-mono text-[11px]">{counts[status]}</span>
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
 
-          <Input
-            ref={searchRef}
-            aria-label={t("projects.searchPlaceholder")}
-            value={searchText}
-            onChange={(value) => {
-              setSearchText(value);
-              setSelected(0);
-            }}
-            onKeyDown={onSearchKeyDown}
-            placeholder={t("projects.searchPlaceholder")}
-            leftIcon={<Search className="size-3.5" aria-hidden="true" />}
-            className="w-full min-[640px]:w-56"
-            classNames={{ field: "h-9" }}
-          />
+            <Input
+              ref={searchRef}
+              aria-label={t("projects.searchPlaceholder")}
+              value={searchText}
+              onChange={(value) => {
+                setSearchText(value);
+                setSelected(0);
+              }}
+              onKeyDown={onSearchKeyDown}
+              placeholder={t("projects.searchPlaceholder")}
+              leftIcon={<Search className="size-3.5" aria-hidden="true" />}
+              className="w-full min-[640px]:w-56"
+              classNames={{ field: "h-9" }}
+            />
 
-          <div className="flex h-9 items-center gap-1.5 rounded-xl border border-border bg-background px-2.5 text-xs text-muted-foreground">
-            <ArrowDownUp className="size-3.5" aria-hidden="true" />
-            <span className="sr-only">{t("projects.sort")}</span>
-            <Select value={prefs.sort} onValueChange={(value) => setPrefs((currentPrefs) => ({ ...currentPrefs, sort: value as Sort }))}>
-              <SelectTrigger className="min-w-32 border-0 bg-transparent px-0 text-xs shadow-none">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="updated">{t("projects.sort.updated")}</SelectItem>
-                <SelectItem value="title">{t("projects.sort.title")}</SelectItem>
-              </SelectContent>
-            </Select>
+            <div className="flex h-9 items-center gap-1.5 rounded-xl border border-border bg-muted/50 px-2.5 text-xs text-muted-foreground">
+              <ArrowDownUp className="size-3.5" aria-hidden="true" />
+              <span className="sr-only">{t("projects.sort")}</span>
+              <Select value={prefs.sort} onValueChange={(value) => setPrefs((currentPrefs) => ({ ...currentPrefs, sort: value as Sort }))}>
+                <SelectTrigger className="min-w-32 border-0 bg-transparent px-0 text-xs shadow-none">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="updated">{t("projects.sort.updated")}</SelectItem>
+                  <SelectItem value="title">{t("projects.sort.title")}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
-        </div>
-      </header>
+        </header>
+      </Reveal>
 
-      <div className="grid min-h-0 gap-4 min-[1280px]:h-[calc(100dvh-16rem)] min-[1280px]:grid-cols-[420px_minmax(0,1fr)]">
-        <div className="flex min-h-0 min-w-0 flex-col">
-          <div
-            data-project-scroll
-            // Inset the scroll box so the selected row's rounded highlight is not cut at the edges.
-            className="min-h-0 flex-1 min-[1280px]:-m-1.5 min-[1280px]:overflow-y-auto min-[1280px]:overscroll-contain min-[1280px]:p-1.5"
-          >
-            {notes.isPending ? (
-              <div className="py-10">
-                <Loading />
-              </div>
-            ) : notes.error ? (
-              <div className="py-10">
-                <ErrorState error={notes.error} />
-              </div>
-            ) : filteredEmpty ? (
-              <div className="flex min-h-64 flex-col items-center justify-center gap-2 px-4 py-10 text-center min-[1280px]:min-h-full">
-                <span className="grid size-10 place-items-center rounded-full bg-muted/60 text-muted-foreground">
-                  <SearchX className="size-4" aria-hidden="true" />
-                </span>
-                <p className="text-sm font-medium">{t("projects.filtered.title")}</p>
-                <p className="max-w-xs text-xs text-muted-foreground">{t("projects.filtered.description")}</p>
-                <Button variant="secondary" size="sm" pressScale={0.97} className="mt-1" onClick={clearFilters}>
-                  {t("projects.clearFilters")}
-                </Button>
-              </div>
-            ) : (
-              <div className="flex flex-col">
-                <div
-                  role="listbox"
-                  aria-label={t("projects.list")}
-                  aria-activedescendant={listActiveId}
-                  tabIndex={-1}
-                  className="flex flex-col"
-                >
-                  {mainRows.map(renderRow)}
-                  {grouped ? null : doneRows.map(renderRow)}
+      <Reveal index={1} className="flex min-h-0 flex-col min-[1280px]:flex-1">
+        <div className="grid min-h-0 gap-4 min-[1280px]:flex-1 min-[1280px]:grid-cols-[420px_minmax(0,1fr)]">
+          <div className="flex min-h-0 min-w-0 flex-col">
+            <div
+              data-project-scroll
+              // Inset the scroll box so the selected row's rounded highlight is not cut at the edges.
+              className="min-h-0 flex-1 min-[1280px]:-m-1.5 min-[1280px]:overflow-y-auto min-[1280px]:overscroll-contain min-[1280px]:p-1.5"
+            >
+              {notes.isPending ? (
+                <div className="py-10">
+                  <Loading />
                 </div>
-
-                {grouped ? (
-                  <details
-                    open={prefs.done}
-                    onToggle={(event) => {
-                      const next = event.currentTarget.open;
-                      setPrefs((value) => (value.done === next ? value : { ...value, done: next }));
-                    }}
-                    className="group flex flex-col"
+              ) : notes.error ? (
+                <div className="py-10">
+                  <ErrorState error={notes.error} />
+                </div>
+              ) : filteredEmpty ? (
+                <div className="flex min-h-64 flex-col items-center justify-center gap-2 px-4 py-10 text-center min-[1280px]:min-h-full">
+                  <span className="grid size-10 place-items-center rounded-full bg-muted/60 text-muted-foreground">
+                    <SearchX className="size-4" aria-hidden="true" />
+                  </span>
+                  <p className="text-sm font-medium">{t("projects.filtered.title")}</p>
+                  <p className="max-w-xs text-xs text-muted-foreground">{t("projects.filtered.description")}</p>
+                  <Button variant="secondary" size="sm" pressScale={0.97} className="mt-1" onClick={clearFilters}>
+                    {t("projects.clearFilters")}
+                  </Button>
+                </div>
+              ) : !firstPaint ? null : (
+                <div className="flex flex-col">
+                  <div
+                    role="listbox"
+                    aria-label={t("projects.list")}
+                    aria-activedescendant={listActiveId}
+                    tabIndex={-1}
+                    className="flex flex-col"
                   >
-                    <summary className="flex cursor-pointer list-none items-center gap-1.5 border-b border-border/60 px-3 py-2 text-[11px] font-semibold tracking-[0.05em] text-muted-foreground uppercase transition-colors hover:bg-muted/35 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
-                      <ChevronDown
-                        aria-hidden="true"
-                        className={cn("size-3.5 -rotate-90 group-open:rotate-0", !reduce && "transition-transform duration-200")}
-                      />
-                      {t("projects.doneGroup", { count: doneRows.length })}
-                    </summary>
-                    <div
-                      role="listbox"
-                      aria-label={t("projects.doneList")}
-                      aria-activedescendant={doneActiveId}
-                      tabIndex={-1}
-                      className="flex flex-col"
-                    >
-                      {doneRows.map(renderRow)}
-                    </div>
-                  </details>
-                ) : null}
-              </div>
-            )}
-          </div>
-        </div>
+                    {shownMain.map(renderRow)}
+                    {grouped ? null : shownDone.map(renderRow)}
+                  </div>
 
-        {current ? (
-          <ProjectDetail
-            project={current}
-            layerTitles={layerTitles}
-            noteById={noteById}
-            techDetails={techDetails}
-            linksPending={linksPending}
-            exportPending={exportFiles.isPending}
-            exportButtonRef={exportButtonRef}
-            onOpenNote={() => openNote(current)}
-            onExport={handleExport}
-          />
-        ) : (
-          <aside
-            aria-label={t("projects.detail")}
-            className="hidden min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-border bg-card/20 min-[1280px]:flex"
-          >
-            <p className="m-auto max-w-sm px-6 text-center text-sm text-muted-foreground">{t("projects.filtered.title")}</p>
-          </aside>
-        )}
-      </div>
+                  {grouped ? (
+                    <details
+                      open={prefs.done}
+                      onToggle={(event) => {
+                        const next = event.currentTarget.open;
+                        setPrefs((value) => (value.done === next ? value : { ...value, done: next }));
+                      }}
+                      className="group flex flex-col"
+                    >
+                      <summary className="flex cursor-pointer list-none items-center gap-1.5 border-b border-border/60 px-3 py-2 text-[11px] font-semibold tracking-[0.05em] text-muted-foreground uppercase transition-colors hover:bg-muted/35 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+                        <ChevronDown
+                          aria-hidden="true"
+                          className={cn("size-3.5 -rotate-90 group-open:rotate-0", !reduce && "transition-transform duration-200")}
+                        />
+                        {t("projects.doneGroup", { count: doneRows.length })}
+                      </summary>
+                      <div
+                        role="listbox"
+                        aria-label={t("projects.doneList")}
+                        aria-activedescendant={doneActiveId}
+                        tabIndex={-1}
+                        className="flex flex-col"
+                      >
+                        {shownDone.map(renderRow)}
+                      </div>
+                    </details>
+                  ) : null}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {current && firstPaint ? (
+            <ProjectDetail
+              project={current}
+              layerTitles={layerTitles}
+              noteById={noteById}
+              techDetails={techDetails}
+              linksPending={linksPending}
+              exportPending={exportFiles.isPending}
+              exportButtonRef={exportButtonRef}
+              onOpenNote={() => openNote(current)}
+              onExport={handleExport}
+            />
+          ) : (
+            <aside
+              aria-label={t("projects.detail")}
+              className="hidden min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-border bg-muted/25 min-[1280px]:flex"
+            >
+              <p className="m-auto max-w-sm px-6 text-center text-sm text-muted-foreground">{t("projects.filtered.title")}</p>
+            </aside>
+          )}
+        </div>
+      </Reveal>
 
       <ExportModal open={exportOpen} onOpenChange={setExportOpen} files={files} stackIds={exportStackIds} />
     </Page>

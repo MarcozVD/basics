@@ -7,7 +7,7 @@ import { Button } from "@/components/motion/button/base";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/motion/collapsible";
 import { Switch } from "@/components/motion/switch";
 import { Tabs, TabsList, TabsTrigger } from "@/components/motion/tabs";
-import { PAGE_SECTIONS, Page } from "@/components/page";
+import { PAGE_SECTIONS, Page, Reveal } from "@/components/page";
 import { ErrorState, Loading } from "@/components/state";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { type TranslationKey, useI18n, useT } from "@/i18n";
@@ -24,6 +24,7 @@ import {
   writeDesktopSettings,
 } from "@/lib/desktop";
 import { useEmbeddingsProgress } from "@/lib/events";
+import { type DockEdge, type NavigationStyle, setDockEdge, setNavigationStyle, useNavigation } from "@/lib/navigation";
 import { queryKeys, useConnectStatus, useEmbeddings, useHealth } from "@/lib/queries";
 import { type Theme, useTheme } from "@/lib/theme";
 import { toast } from "@/lib/toast";
@@ -153,7 +154,9 @@ function Section({ id, title, description, children }: { id: SectionId; title: s
 
 /** One group of rows: a single card with hairline separators, like the rest of the app. */
 function Rows({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={cn("divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card", className)}>{children}</div>;
+  return (
+    <div className={cn("divide-y divide-border overflow-hidden rounded-2xl border border-border bg-muted/30", className)}>{children}</div>
+  );
 }
 
 function Row({
@@ -255,10 +258,13 @@ function GeneralSection() {
   const t = useT();
   const { language, setLanguage } = useI18n();
   const { theme, setTheme } = useTheme();
+  const navigation = useNavigation();
   const health = useHealth();
   const desktop = useMemo(() => isDesktop(), []);
   const [savedLanguage, flashLanguage] = useSavedFlash();
   const [savedTheme, flashTheme] = useSavedFlash();
+  const [savedNavigation, flashNavigation] = useSavedFlash();
+  const [savedEdge, flashEdge] = useSavedFlash();
   const [languageError, setLanguageError] = useState(false);
   // Vault actions exist only in the desktop app; in a browser the CLI hint below is all.
   const [confirmChange, setConfirmChange] = useState(false);
@@ -352,6 +358,43 @@ function GeneralSection() {
             </Tabs>
           </fieldset>
         </Row>
+        <Row
+          title={t("nav.style.title")}
+          description={t("nav.style.description")}
+          status={<SavedHint visible={savedNavigation} />}
+          vertical
+        >
+          <ChoiceGroup<NavigationStyle>
+            label={t("nav.style.title")}
+            value={navigation.style}
+            onChange={(value) => {
+              setNavigationStyle(value);
+              flashNavigation();
+            }}
+            options={[
+              { value: "sidebar", label: t("nav.style.sidebar") },
+              { value: "floating", label: t("nav.style.floating") },
+            ]}
+          />
+        </Row>
+        {navigation.style === "floating" ? (
+          <Row title={t("nav.edge.title")} description={t("nav.edge.description")} status={<SavedHint visible={savedEdge} />} vertical>
+            <ChoiceGroup<DockEdge>
+              label={t("nav.edge.title")}
+              value={navigation.edge}
+              onChange={(value) => {
+                setDockEdge(value);
+                flashEdge();
+              }}
+              options={[
+                { value: "bottom", label: t("nav.edge.bottom") },
+                { value: "top", label: t("nav.edge.top") },
+                { value: "left", label: t("nav.edge.left") },
+                { value: "right", label: t("nav.edge.right") },
+              ]}
+            />
+          </Row>
+        ) : null}
         <Row title={t("settings.vault.title")} description={t("settings.vault.description")} vertical={desktop}>
           <div className="flex min-w-0 items-center gap-2">
             <span title={vault} className="max-w-[42ch] truncate font-mono text-[11px] text-muted-foreground max-sm:max-w-[52vw]">
@@ -430,7 +473,7 @@ function DesktopOnlySection({ id, description, body }: { id: SectionId; descript
   const desktop = useMemo(() => isDesktop(), []);
   return (
     <Section id={id} title={t(`settings.${id}.title`)} description={description}>
-      <div className="flex flex-col gap-3 rounded-2xl border border-border bg-card px-4 py-4">
+      <div className="flex flex-col gap-3 rounded-2xl border border-border bg-muted/30 px-4 py-4">
         <div className="flex items-center gap-2 text-muted-foreground">
           <MonitorSmartphone className="size-4 shrink-0" aria-hidden="true" />
           <p className="text-sm font-medium text-foreground">{t("settings.desktopOnly.title")}</p>
@@ -785,7 +828,7 @@ function AgentsSection() {
     <Section id="agents" title={t("settings.agents.title")} description={t("settings.agents.description")}>
       <p className="max-w-[72ch] text-sm text-muted-foreground">{t("settings.agents.explainer")}</p>
 
-      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card px-3 py-2">
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-muted/40 px-3 py-2">
         <span className="text-[11px] font-medium text-muted-foreground">{t("settings.agents.mcpUrl")}</span>
         <code className="min-w-0 flex-1 overflow-x-auto font-mono text-[11px] whitespace-nowrap">{mcpUrl}</code>
         <CopyButton value={mcpUrl} />
@@ -1070,57 +1113,61 @@ export function SettingsPage() {
 
   return (
     <Page className={PAGE_SECTIONS}>
-      <div className="flex flex-col gap-1">
-        <h1 className="text-xl font-semibold tracking-tight">{t("settings.title")}</h1>
-        <p className="max-w-[68ch] text-sm text-muted-foreground">{t("settings.description")}</p>
-      </div>
-
-      <div className="grid min-w-0 gap-6 lg:grid-cols-[180px_minmax(0,1fr)] lg:gap-10">
-        <nav aria-label={t("settings.sections")} className="lg:sticky lg:top-4 lg:self-start">
-          <ul className="flex gap-1 overflow-x-auto pb-1 lg:flex-col lg:overflow-visible lg:pb-0">
-            {SECTIONS.map((section, index) => {
-              const current = section === active;
-              return (
-                <li key={section} className="shrink-0">
-                  <button
-                    type="button"
-                    ref={(element) => {
-                      buttons.current[index] = element;
-                    }}
-                    aria-current={current ? "true" : undefined}
-                    onClick={() => select(section)}
-                    onKeyDown={(event) => onNavKeyDown(event, index)}
-                    className={cn(
-                      "w-full rounded-full px-3 py-1.5 text-left text-sm whitespace-nowrap transition-colors lg:whitespace-normal",
-                      "focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring",
-                      current ? "bg-muted font-medium text-foreground" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-                    )}
-                  >
-                    {t(SECTION_LABEL[section])}
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </nav>
-
-        <div className="min-w-0">
-          <motion.div
-            key={active}
-            initial={{ opacity: 0, y: reduce ? 0 : 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.15 }}
-            className="min-w-0"
-          >
-            {active === "general" ? <GeneralSection /> : null}
-            {active === "startup" ? <StartupSection /> : null}
-            {active === "agents" ? <AgentsSection /> : null}
-            {active === "search" ? <SearchSection /> : null}
-            {active === "updates" ? <UpdatesSection /> : null}
-            {active === "about" ? <AboutSection /> : null}
-          </motion.div>
+      <Reveal index={0}>
+        <div className="flex flex-col gap-1">
+          <h1 className="text-xl font-semibold tracking-tight">{t("settings.title")}</h1>
+          <p className="max-w-[68ch] text-sm text-muted-foreground">{t("settings.description")}</p>
         </div>
-      </div>
+      </Reveal>
+
+      <Reveal index={1}>
+        <div className="grid min-w-0 gap-6 lg:grid-cols-[180px_minmax(0,1fr)] lg:gap-10">
+          <nav aria-label={t("settings.sections")} className="lg:sticky lg:top-[calc(var(--nav-top,0px)+1rem)] lg:self-start">
+            <ul className="flex gap-1 overflow-x-auto pb-1 lg:flex-col lg:overflow-visible lg:pb-0">
+              {SECTIONS.map((section, index) => {
+                const current = section === active;
+                return (
+                  <li key={section} className="shrink-0">
+                    <button
+                      type="button"
+                      ref={(element) => {
+                        buttons.current[index] = element;
+                      }}
+                      aria-current={current ? "true" : undefined}
+                      onClick={() => select(section)}
+                      onKeyDown={(event) => onNavKeyDown(event, index)}
+                      className={cn(
+                        "w-full rounded-full px-3 py-1.5 text-left text-sm whitespace-nowrap transition-colors lg:whitespace-normal",
+                        "focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring",
+                        current ? "bg-muted font-medium text-foreground" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                      )}
+                    >
+                      {t(SECTION_LABEL[section])}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </nav>
+
+          <div className="min-w-0">
+            <motion.div
+              key={active}
+              initial={{ opacity: 0, y: reduce ? 0 : 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.15 }}
+              className="min-w-0"
+            >
+              {active === "general" ? <GeneralSection /> : null}
+              {active === "startup" ? <StartupSection /> : null}
+              {active === "agents" ? <AgentsSection /> : null}
+              {active === "search" ? <SearchSection /> : null}
+              {active === "updates" ? <UpdatesSection /> : null}
+              {active === "about" ? <AboutSection /> : null}
+            </motion.div>
+          </div>
+        </div>
+      </Reveal>
     </Page>
   );
 }

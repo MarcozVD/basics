@@ -5,7 +5,6 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { type ReactNode, type RefObject, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { ApprovalCard } from "@/components/agents/approval-card";
-import { DOCK_SPACE } from "@/components/layout";
 import { AnimatedNumber } from "@/components/motion/animated-number";
 import { Button } from "@/components/motion/button/base";
 import { Checkbox } from "@/components/motion/checkbox";
@@ -14,7 +13,7 @@ import { MorphPopover, MorphPopoverContent, MorphPopoverTrigger } from "@/compon
 import { Tabs, TabsList, TabsTrigger } from "@/components/motion/tabs";
 import { TextReveal } from "@/components/motion/text-reveal";
 import { Tooltip } from "@/components/motion/tooltip";
-import { PAGE_SECTIONS, Page } from "@/components/page";
+import { PAGE_SECTIONS, Page, Reveal } from "@/components/page";
 import { ErrorState, Loading } from "@/components/state";
 import { type TranslationKey, useI18n } from "@/i18n";
 import { agentColor, agentInitial } from "@/lib/agent-color";
@@ -119,10 +118,10 @@ interface HomeLayoutSize {
 }
 
 /**
- * Size Home so nothing runs under the Dock.
+ * Size Home so nothing overflows the panel.
  *
  * At 1024 and up the grid (inbox strip excluded) fills the space `<main>` has
- * between the page header and the Dock clearance, and the activity panel fills
+ * between the page header and the panel's bottom edge, and the activity panel fills
  * its own column — measuring the grid keeps the title block, the inbox strip and
  * language-dependent wrapping out of the calculation. Below 1024 everything
  * stacks: the grid keeps its natural height and the activity panel is capped at
@@ -160,8 +159,8 @@ function useHomeLayoutSize(
         return;
       }
       const offset = activeGrid.getBoundingClientRect().top - main.getBoundingClientRect().top + main.scrollTop;
-      // `main.clientHeight` includes its bottom padding, which already reserves DOCK_SPACE.
-      const available = Math.round(main.clientHeight - DOCK_SPACE - offset - PAGE_BOTTOM_PX);
+      // `main.clientHeight` is the panel's inner height: the page brings its own bottom rhythm.
+      const available = Math.round(main.clientHeight - offset - PAGE_BOTTOM_PX);
       // Wide layout: the grid fills the remaining space, and the activity panel fills its column.
       apply(available > 0 ? { gridHeight: available } : { activityMaxHeight: cap });
     };
@@ -502,7 +501,7 @@ function StarterPacks({
               <div
                 key={id}
                 data-pack={community ? id : undefined}
-                className="relative flex h-full items-start gap-3 rounded-xl border border-border/70 bg-card/40 px-3 py-2.5"
+                className="relative flex h-full items-start gap-3 rounded-xl border border-border/70 bg-muted/30 px-3 py-2.5"
               >
                 {!pack.installed && !installing && !community ? (
                   <label htmlFor={`pack-${id}`} aria-label={id} className="absolute inset-0 cursor-pointer rounded-xl" />
@@ -571,7 +570,7 @@ function StarterPacks({
         <p className="mt-5 text-sm text-muted-foreground">{t("home.packs.none")}</p>
       )}
 
-      <div className="mt-4 rounded-xl border border-border/70 bg-card/40 p-3">
+      <div className="mt-4 rounded-xl border border-border/70 bg-muted/30 p-3">
         <label htmlFor="pack-add-repo" className="text-xs font-medium">
           {t("home.packs.addFromGithub")}
         </label>
@@ -588,7 +587,7 @@ function StarterPacks({
             disabled={add.isPending}
             spellCheck={false}
             autoComplete="off"
-            className="h-8 min-w-0 flex-1 rounded-lg border border-border bg-background px-2.5 font-mono text-xs focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            className="h-8 min-w-0 flex-1 rounded-lg border border-border bg-muted/50 px-2.5 font-mono text-xs focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
           />
           <Button
             size="sm"
@@ -612,7 +611,7 @@ function StarterPacks({
           </p>
         ) : null}
         {added ? (
-          <div data-testid="pack-add-result" className="mt-2 rounded-lg border border-border/60 bg-background/60 p-3">
+          <div data-testid="pack-add-result" className="mt-2 rounded-lg border border-border/60 bg-muted/50 p-3">
             <p className="text-xs font-medium">{t("home.packs.added", { name: added.name, version: added.version })}</p>
             <p className="mt-0.5 font-mono text-[10.5px] text-muted-foreground">
               {t("home.packs.summary", {
@@ -740,7 +739,7 @@ function GettingStarted({ notes, projects, packsVisible }: GettingStartedProps) 
     <section
       data-testid="home-getting-started"
       aria-label={t("home.steps.progress", { done })}
-      className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-border/60 bg-card/40 px-3 py-2"
+      className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-border/60 bg-muted/30 px-3 py-2"
     >
       <h2 className="shrink-0 text-xs font-semibold">{t("home.steps.title")}</h2>
       <ol className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
@@ -817,7 +816,7 @@ function InboxStrip({ proposals, total, isPending, error, armed, busyId, onAppro
       <section
         data-testid="inbox-strip"
         aria-label={t("home.waiting")}
-        className="flex min-h-11 min-w-0 items-center gap-2.5 rounded-xl border border-border/60 bg-card/40 px-3 py-1.5"
+        className="flex min-h-11 min-w-0 items-center gap-2.5 rounded-xl border border-border/60 bg-muted/30 px-3 py-1.5"
       >
         <span aria-hidden="true" className="grid size-6 shrink-0 place-items-center rounded-full bg-muted/60 text-muted-foreground">
           <Inbox className="size-3.5" />
@@ -986,7 +985,7 @@ export function HomePage() {
   const recentRef = useRef<HTMLElement>(null);
   const recentHeightRef = useRef(0);
   // At 1024-1439 Recently edited is the last block in the side column, so it shows
-  // only while it still fits above the Dock; below 1024 and from 1440 up it always shows.
+  // only while it still fits above the panel's bottom edge; below 1024 and from 1440 up it always shows.
   const [showRecent, setShowRecent] = useState(true);
   const [activityFade, setActivityFade] = useState<EdgeFade>({ top: false, bottom: false });
   const layoutSize = useHomeLayoutSize(gridRef, activityRef, groups.length + (showPacks ? 1000 : 0) + (showSteps ? 2000 : 0));
@@ -1179,41 +1178,49 @@ export function HomePage() {
 
   return (
     <Page className={`${PAGE_SECTIONS} min-[1024px]:pb-0`}>
-      <header>
-        {reveal ? (
-          <TextReveal
-            as="h1"
-            text={t("home.title")}
-            className="text-xl font-semibold tracking-tight"
-            stagger={0.06}
-            blur={8}
-            yOffset="30%"
-          />
-        ) : (
-          <h1 className="text-xl font-semibold tracking-tight">{t("home.title")}</h1>
-        )}
-        <p className="mt-1 max-w-[68ch] text-sm text-muted-foreground">{t("home.intro")}</p>
-        <p className="mt-1 font-mono text-[11px] text-muted-foreground">
-          {t("home.summary", { total, inbox: pending, agents: agentsToday })}
-        </p>
-      </header>
+      <Reveal index={0}>
+        <header>
+          {reveal ? (
+            <TextReveal
+              as="h1"
+              text={t("home.title")}
+              className="text-xl font-semibold tracking-tight"
+              stagger={0.06}
+              blur={8}
+              yOffset="30%"
+            />
+          ) : (
+            <h1 className="text-xl font-semibold tracking-tight">{t("home.title")}</h1>
+          )}
+          <p className="mt-1 max-w-[68ch] text-sm text-muted-foreground">{t("home.intro")}</p>
+          <p className="mt-1 font-mono text-[11px] text-muted-foreground">
+            {t("home.summary", { total, inbox: pending, agents: agentsToday })}
+          </p>
+        </header>
+      </Reveal>
 
-      {showSteps ? <GettingStarted notes={notesTotal} projects={projectsTotal} packsVisible={showPacks} /> : null}
+      {showSteps ? (
+        <Reveal index={1}>
+          <GettingStarted notes={notesTotal} projects={projectsTotal} packsVisible={showPacks} />
+        </Reveal>
+      ) : null}
 
       {showPacks ? (
-        <StarterPacks
-          packs={packs.data}
-          pending={packs.isPending}
-          error={packs.error}
-          language={language}
-          packLanguage={packLanguage}
-          selected={selectedPacks}
-          installing={install.isPending}
-          pendingPacks={pendingCommunityPacks}
-          onToggle={togglePack}
-          onLanguageChange={setPackLanguage}
-          onInstall={() => install.mutate([...selectedPacks])}
-        />
+        <Reveal index={1}>
+          <StarterPacks
+            packs={packs.data}
+            pending={packs.isPending}
+            error={packs.error}
+            language={language}
+            packLanguage={packLanguage}
+            selected={selectedPacks}
+            installing={install.isPending}
+            pendingPacks={pendingCommunityPacks}
+            onToggle={togglePack}
+            onLanguageChange={setPackLanguage}
+            onInstall={() => install.mutate([...selectedPacks])}
+          />
+        </Reveal>
       ) : (
         <>
           <InboxStrip

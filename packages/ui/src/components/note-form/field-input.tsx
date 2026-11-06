@@ -374,7 +374,7 @@ function TagsField({ id, field, value, onChange }: { id: string; field: Field; v
       {tags.map((tag) => (
         <span
           key={tag}
-          className="group inline-flex h-5 items-center gap-0.5 rounded-full border border-border bg-card px-2 font-mono transition-[padding] focus-within:pr-0.5 hover:pr-0.5 text-[12px] leading-none"
+          className="group inline-flex h-5 items-center gap-0.5 rounded-full border border-border bg-muted/60 px-2 font-mono transition-[padding] focus-within:pr-0.5 hover:pr-0.5 text-[12px] leading-none"
         >
           {tag}
           <button

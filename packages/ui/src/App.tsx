@@ -1,27 +1,17 @@
 import { lazy, type ReactNode, Suspense, useEffect } from "react";
 import { createBrowserRouter, RouterProvider } from "react-router";
+import { GraphSkeleton } from "@/components/graph/graph-skeleton";
 import { Layout } from "@/components/layout";
 import { Page } from "@/components/page";
-import { Loading } from "@/components/state";
+import { DelayedMount } from "@/components/state";
 import { useT } from "@/i18n";
 import { useVaultEvents } from "@/lib/events";
+// Home is the landing page and ships in the main chunk; every other route loads on first visit.
+// Route modules are also prefetched once the browser is idle (and on sidebar hover), so later
+// navigation stays instant.
+import { routeModules } from "@/lib/prefetch";
 import { HomePage } from "@/pages/home";
 import { NotFoundPage } from "@/pages/not-found";
-
-// Home is the landing page and ships in the main chunk; every other route loads on first visit.
-// Route modules are also prefetched once the browser is idle, so later navigation stays instant.
-const routeModules = {
-  explore: () => import("@/pages/explore"),
-  editor: () => import("@/pages/editor"),
-  // Cytoscape is heavy; the graph page and its canvas stay out of the main chunk.
-  graph: () => import("@/pages/graph"),
-  inbox: () => import("@/pages/inbox"),
-  projects: () => import("@/pages/projects"),
-  proposal: () => import("@/pages/proposal"),
-  recommend: () => import("@/pages/recommend"),
-  skills: () => import("@/pages/skills"),
-  settings: () => import("@/pages/settings"),
-};
 
 const ExplorePage = lazy(() => routeModules.explore().then((module) => ({ default: module.ExplorePage })));
 const EditorPage = lazy(() => routeModules.editor().then((module) => ({ default: module.EditorPage })));
@@ -33,36 +23,38 @@ const RecommendPage = lazy(() => routeModules.recommend().then((module) => ({ de
 const SkillsPage = lazy(() => routeModules.skills().then((module) => ({ default: module.SkillsPage })));
 const SettingsPage = lazy(() => routeModules.settings().then((module) => ({ default: module.SettingsPage })));
 
-/** Quiet placeholder shown only on a cold load of a route: a title bar and a few rows, no spinner jump. */
+/**
+ * Quiet placeholder shown only on a cold load of a route: the panel's own frame, a title bar
+ * and the first rows at their real heights, so turning it into content moves nothing.
+ */
 function RouteSkeleton() {
   const t = useT();
   return (
-    <Page role="status" aria-busy="true">
+    <Page role="status" aria-busy="true" className="pt-4">
       <span className="sr-only">{t("state.loading")}</span>
-      <div aria-hidden="true" className="flex flex-col gap-3 motion-safe:animate-pulse">
+      <div aria-hidden="true" className="flex w-full flex-col gap-3 motion-safe:animate-pulse">
         <div className="h-7 w-40 rounded-full bg-muted/70" />
-        <div className="h-8 w-full max-w-xl rounded-full bg-muted/50" />
+        <div className="h-4 w-full max-w-xl rounded-full bg-muted/50" />
+        <div className="mt-1 flex flex-wrap gap-2">
+          <div className="h-7 w-24 rounded-full bg-muted/50" />
+          <div className="h-7 w-20 rounded-full bg-muted/50" />
+          <div className="h-7 w-28 rounded-full bg-muted/50" />
+          <div className="ml-auto h-8 w-44 rounded-full bg-muted/40" />
+        </div>
         <div className="mt-2 flex flex-col gap-2">
-          <div className="h-11 rounded-xl bg-muted/40" />
-          <div className="h-11 rounded-xl bg-muted/40" />
-          <div className="h-11 rounded-xl bg-muted/40" />
+          {SKELETON_ROWS.map((key) => (
+            <div key={key} className="h-[52px] rounded-xl border border-border/50 bg-muted/30" />
+          ))}
         </div>
       </div>
     </Page>
   );
 }
 
-/** The graph fills the viewport; its fallback keeps the same box so nothing shifts when the canvas arrives. */
-function GraphSkeleton() {
-  return (
-    <div className="grid h-[calc(100dvh-3rem-78px)] place-items-center">
-      <Loading />
-    </div>
-  );
-}
+const SKELETON_ROWS = [0, 1, 2, 3, 4, 5];
 
 function Lazy({ children, fallback = <RouteSkeleton /> }: { children: ReactNode; fallback?: ReactNode }) {
-  return <Suspense fallback={fallback}>{children}</Suspense>;
+  return <Suspense fallback={<DelayedMount>{fallback}</DelayedMount>}>{children}</Suspense>;
 }
 
 const router = createBrowserRouter([

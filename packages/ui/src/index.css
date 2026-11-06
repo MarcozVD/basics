@@ -7,6 +7,8 @@
   --radius: 0.75rem;
 
   --background: #fafafa;
+  /* The window and the sidebar: one step below --background so the --card panel lifts. */
+  --shell: #eeeef0;
   --foreground: #111113;
   --card: #ffffff;
   --card-foreground: #111113;
@@ -47,6 +49,8 @@
 
 .dark {
   --background: #151515;
+  /* The window and the sidebar: one step below --background so the --card panel lifts. */
+  --shell: #0e0e10;
   --foreground: #f2f2f2;
   --card: #1c1c1e;
   --card-foreground: #f2f2f2;
@@ -92,6 +96,7 @@
 
 @theme inline {
   --color-background: var(--background);
+  --color-shell: var(--shell);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);

@@ -106,7 +106,7 @@ export function ApprovalCard({
       data-state={status}
       aria-busy={busy}
       transition={reduce ? { duration: 0 } : SPRING_LAYOUT}
-      className={cn("group/card relative rounded-2xl bg-card ring-1 ring-border/70 transition-colors", className)}
+      className={cn("group/card relative rounded-2xl bg-muted/30 ring-1 ring-border/70 transition-colors", className)}
     >
       {selected ? (
         <motion.span

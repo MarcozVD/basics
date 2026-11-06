@@ -8,7 +8,7 @@ import { neighborhood } from "./graph-model";
 // Loaded on demand so cytoscape stays out of the editor's bundle.
 const GraphCanvas = lazy(() => import("./graph-canvas"));
 
-const FRAME = "h-60 rounded-2xl border border-border bg-card";
+const FRAME = "h-60 rounded-2xl border border-border bg-muted/30";
 
 /** Depth-1 mini graph around a note; clicking a neighbour opens it. */
 export function LocalGraph({ id }: { id: string }) {

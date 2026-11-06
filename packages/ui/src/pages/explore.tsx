@@ -11,12 +11,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsList, TabsTrigger } from "@/components/motion/tabs";
 import { Tooltip } from "@/components/motion/tooltip";
 import { TypeChip } from "@/components/note-form/note-preview";
-import { PAGE_SECTIONS, Page } from "@/components/page";
+import { PAGE_SECTIONS, Page, Reveal } from "@/components/page";
 import { ErrorState, Loading } from "@/components/state";
 import { Button as LinkButton } from "@/components/ui/button";
 import { type TranslationKey, useT } from "@/i18n";
 import { modChord } from "@/lib/desktop";
 import { EASE_OUT, SPRING_LAYOUT, SPRING_PRESS } from "@/lib/ease";
+import { useFirstPaint, useProgressiveCount } from "@/lib/progressive";
 import { useLayers, useNotes, useSearch, useStats } from "@/lib/queries";
 import { formatCompactRelativeTime } from "@/lib/relative-time";
 import { cn } from "@/lib/utils";
@@ -37,7 +38,7 @@ const MAX_TAGS = 3;
 const MAX_LAYERS = 2;
 /** Dense list columns; wide-only columns are hidden with their matching cell. */
 const LIST_GRID =
-  "grid grid-cols-[16px_minmax(0,1fr)_minmax(0,0.8fr)_auto] items-center gap-2 min-[900px]:grid-cols-[16px_minmax(0,1.2fr)_minmax(0,0.8fr)_minmax(0,1fr)_auto] min-[900px]:gap-3 min-[1280px]:grid-cols-[16px_minmax(0,1.4fr)_130px_minmax(0,1fr)_150px_240px_110px_88px]";
+  "grid grid-cols-[16px_minmax(0,1fr)_minmax(0,0.8fr)_auto] items-center gap-2 min-[1280px]:gap-3 min-[1280px]:grid-cols-[16px_minmax(240px,1fr)_minmax(0,110px)_130px_120px_90px_88px] min-[1440px]:grid-cols-[16px_minmax(240px,1.4fr)_minmax(0,120px)_minmax(150px,1fr)_130px_120px_90px_88px]";
 
 interface Row {
   id: string;
@@ -209,6 +210,13 @@ export function ExplorePage() {
     return result;
   }, [grouped, rows]);
 
+  // Long lists mount the first screenful, then fill in idle slices instead of one big commit.
+  // The frame paints once before any row mounts, so the click's first frame is never the list.
+  const firstPaint = useFirstPaint();
+  const renderLimit = useProgressiveCount(rows.length, `${view}|${sort}|${type ?? ""}|${layer ?? ""}|${query}`, {
+    active: firstPaint,
+  });
+
   // Entering /explore without query params restores the saved controls; explicit params always win.
   useEffect(() => {
     const entering = previousPath.current !== "/explore" && pathname === "/explore";
@@ -234,6 +242,8 @@ export function ExplorePage() {
   }, [pathname, view, sort, type, layer]);
 
   const highlighted = Math.min(hovered ?? selected, Math.max(0, rows.length - 1));
+  // Keyboard navigation can reach past the mounted slice; keep the row it points at mounted.
+  const visibleRows = Math.max(renderLimit, highlighted + 1);
 
   useEffect(() => {
     if (selected >= rows.length) setSelected(Math.max(0, rows.length - 1));
@@ -331,7 +341,7 @@ export function ExplorePage() {
 
   return (
     <Page className={cn("pt-0", PAGE_SECTIONS)}>
-      <div className="mx-page-gutter sticky top-0 z-20 bg-background px-page-gutter pt-4 pb-0">
+      <Reveal index={0} className="mx-page-gutter sticky top-[var(--nav-top,0px)] z-20 bg-card px-page-gutter pt-4 pb-0">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-baseline gap-2">
             <h1 className="text-xl font-semibold tracking-tight">{t("page.explore.title")}</h1>
@@ -361,7 +371,7 @@ export function ExplorePage() {
               }
               className="w-full sm:w-64"
               classNames={{
-                field: "h-8 bg-card",
+                field: "h-8 bg-muted/60",
                 input: "text-[13px] [&::-webkit-search-cancel-button]:hidden",
                 leftIcon: "left-2.5",
               }}
@@ -433,7 +443,7 @@ export function ExplorePage() {
               onValueChange={(value) => updateParams({ layer: value === "all" ? null : value })}
               className="min-w-0 flex-1 sm:w-44 sm:flex-none"
             >
-              <SelectTrigger className="h-8 rounded-full border-border bg-card px-3 py-0 text-[13px]">
+              <SelectTrigger className="h-8 rounded-full border-border bg-muted/60 px-3 py-0 text-[13px]">
                 <span className="flex min-w-0 items-center gap-2">
                   <Layers className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
                   <SelectValue className="truncate" />
@@ -454,7 +464,7 @@ export function ExplorePage() {
               onValueChange={(value) => updateParams({ sort: value === DEFAULT_SORT ? null : value })}
               className="min-w-0 flex-1 sm:w-48 sm:flex-none"
             >
-              <SelectTrigger className="h-8 rounded-full border-border bg-card px-3 py-0 text-[13px]">
+              <SelectTrigger className="h-8 rounded-full border-border bg-muted/60 px-3 py-0 text-[13px]">
                 <span className="flex min-w-0 items-center gap-2">
                   <ArrowDownUp className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
                   <span className="sr-only">{t("explore.sort")}: </span>
@@ -473,10 +483,10 @@ export function ExplorePage() {
         </fieldset>
 
         {view === "list" && rows.length > 0 ? <ListHeader sort={sort} onSort={setSort} /> : null}
-      </div>
+      </Reveal>
 
       <div className="pt-1">
-        {listQuery.isPending ? (
+        {!firstPaint ? null : listQuery.isPending ? (
           <Loading />
         ) : listQuery.error ? (
           <ErrorState error={listQuery.error} />
@@ -535,11 +545,14 @@ export function ExplorePage() {
             className="flex flex-col gap-4 rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
           >
             {groups.map((group) => {
+              // A group only mounts once every row before it is mounted: headings below the
+              // fill line would otherwise jump down as earlier groups grow.
+              if (group.start >= visibleRows) return null;
               const headingId = group.type ? `explore-group-${group.type}` : undefined;
               const items = (
                 <div className={cn(view === "grid" ? "grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-2" : "flex flex-col")}>
                   <AnimatePresence mode="popLayout">
-                    {group.rows.map((row, offset) => renderItem(row, group.start + offset))}
+                    {group.rows.map((row, offset) => (group.start + offset < visibleRows ? renderItem(row, group.start + offset) : null))}
                   </AnimatePresence>
                 </div>
               );
@@ -738,7 +751,7 @@ function ListHeader({ sort, onSort }: { sort: Sort; onSort: (sort: Sort) => void
       </button>
       {sortButton("title", t("explore.sort.title"))}
       <span className="truncate">{t("explore.column.id")}</span>
-      <span className="hidden min-[900px]:block truncate">{t("explore.column.excerpt")}</span>
+      <span className="hidden min-[1440px]:block truncate">{t("explore.column.excerpt")}</span>
       <span className="truncate">{t("explore.column.layers")}</span>
       <span className="hidden min-[1280px]:block truncate">{t("explore.column.tags")}</span>
       <span className="hidden min-[1280px]:block truncate">{t("explore.column.source")}</span>
@@ -777,7 +790,7 @@ function ListRow({ row, index, selected, reduce, layerTitles, onHover, onOpen }:
       <span aria-hidden="true" className="relative h-5 w-[3px] rounded-full" style={{ backgroundColor: typeColor(row.type) }} />
       <span className="relative min-w-0 truncate text-[13px] font-medium">{row.title}</span>
       <span className="relative min-w-0 truncate font-mono text-[11px] text-muted-foreground">{row.id}</span>
-      <span className="relative hidden min-w-0 truncate text-[12px] text-muted-foreground min-[900px]:block">{row.excerpt}</span>
+      <span className="relative hidden min-w-0 truncate text-[12px] text-muted-foreground min-[1440px]:block">{row.excerpt}</span>
       <LayerChips layers={row.layers} layerTitles={layerTitles} className="relative flex min-w-0 items-center gap-1 overflow-hidden" />
       <span className="relative hidden min-w-0 items-center gap-1 overflow-hidden min-[1280px]:flex">
         {row.tags.slice(0, MAX_TAGS).map((tag) => (
@@ -818,7 +831,7 @@ function GridCard({ row, index, selected, reduce, layerTitles, onHover, onOpen }
         selected={selected}
         size="compact"
         onMouseEnter={onHover}
-        className="h-full gap-2.5 bg-card py-3.5 hover:border-foreground/20"
+        className="h-full gap-2.5 bg-muted/40 py-3.5 hover:border-foreground/20"
       >
         <CardHeader className="gap-1.5">
           <div className="flex min-w-0 items-center gap-1.5">

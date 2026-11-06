@@ -7,7 +7,6 @@ import { createPortal } from "react-dom";
 import { Link } from "react-router";
 import { PromptInput } from "@/components/agents/prompt-input";
 import { EXPORT_TARGETS, ExportModal } from "@/components/export-modal";
-import { DOCK_HEIGHT, DOCK_OFFSET } from "@/components/layout";
 import {
   AdaptiveStepper,
   AdaptiveStepperDecrement,
@@ -19,7 +18,7 @@ import { CARD_TARGET_CLASS, Card, CardContent, CardHeader } from "@/components/m
 import { Checkbox } from "@/components/motion/checkbox";
 import { Loader } from "@/components/motion/loader";
 import { Tooltip } from "@/components/motion/tooltip";
-import { PAGE_SECTIONS, Page } from "@/components/page";
+import { PAGE_SECTIONS, Page, Reveal } from "@/components/page";
 import { AgentPanel } from "@/components/recommend/agent-panel";
 import { CreateProjectDialog } from "@/components/recommend/create-project-dialog";
 import { ErrorState } from "@/components/state";
@@ -30,6 +29,7 @@ import { enableEmbeddings, exportStack, recommend } from "@/lib/api";
 import { modChord } from "@/lib/desktop";
 import { EASE_OUT, SPRING_PANEL } from "@/lib/ease";
 import { useEmbeddingsProgress } from "@/lib/events";
+import { DOCK_SPACE, useResolvedDockEdge } from "@/lib/navigation";
 import { queryKeys, useEmbeddings, useLayers, useStats } from "@/lib/queries";
 import { clearRecommend, updateAgent, updateRecommend, useRecommendStore } from "@/lib/recommend-store";
 import { useReturnFocus } from "@/lib/return-focus";
@@ -54,9 +54,8 @@ const PROFILE_COLUMNS = "grid gap-3 [grid-template-columns:repeat(auto-fill,minm
 /** Only the first cards of a column stagger in; the rest appear with them. */
 const STAGGER_LIMIT = 10;
 const STAGGER_STEP = 0.02;
-/** The Dock floats 16px off the bottom edge and is 54px tall; the selection pill sits 12px above it. */
-const DOCK_BOTTOM = DOCK_OFFSET;
-const BAR_GAP = 12;
+/** The selection pill floats 20px off the window's bottom edge, inside the content panel. */
+const BAR_BOTTOM = 20;
 
 const enter = (index: number, reduce: boolean) => ({
   initial: index < STAGGER_LIMIT ? { opacity: 0, y: reduce ? 0 : 6 } : false,
@@ -115,7 +114,7 @@ function ModeIndicator({ mode }: { mode: Recommendation["mode"] }) {
   const t = useT();
   const hybrid = mode === "hybrid";
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-2 py-0.5 font-mono text-[10.5px] text-muted-foreground">
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/60 px-2 py-0.5 font-mono text-[10.5px] text-muted-foreground">
       <span aria-hidden="true" className={cn("size-1.5 rounded-full", hybrid ? "bg-primary" : "bg-muted-foreground/60")} />
       {t(hybrid ? "recommend.mode.hybrid" : "recommend.mode.keywords")}
     </span>
@@ -168,7 +167,7 @@ function CandidateCard({ candidate, maxScore, selected, reduce, onToggle }: Cand
       selected={selected}
       size="compact"
       className={cn(
-        "gap-2.5 bg-card py-3 hover:border-foreground/20",
+        "gap-2.5 bg-muted/40 py-3 hover:border-foreground/20",
         avoid && "border-destructive/35 hover:border-destructive/50",
         (hybrid === undefined ? candidate.score <= 0 : hybrid <= 0) && "border-dashed bg-transparent",
       )}
@@ -239,7 +238,7 @@ function RecommendationResults({ recommendation, layerTitle, selected, reduce, o
           <div className={PROFILE_COLUMNS}>
             {recommendation.profiles.map((profile, index) => (
               <motion.div key={profile.id} {...enter(index, reduce)} className="min-w-0">
-                <Card size="compact" className="h-full gap-3 bg-card py-3.5">
+                <Card size="compact" className="h-full gap-3 bg-muted/40 py-3.5">
                   <CardHeader>
                     <div className="flex min-w-0 items-center gap-2">
                       <Link
@@ -313,7 +312,7 @@ function RecommendationResults({ recommendation, layerTitle, selected, reduce, o
 }
 
 function ResultsSkeleton({ layers, perLayer, label }: { layers: string[]; perLayer: number; label: string }) {
-  const block = "rounded-2xl border bg-card motion-safe:animate-pulse";
+  const block = "rounded-2xl border bg-muted/40 motion-safe:animate-pulse";
   return (
     <div role="status" aria-label={label} className="flex flex-col gap-6">
       <span className="sr-only">{label}</span>
@@ -344,6 +343,9 @@ function ResultsSkeleton({ layers, perLayer, label }: { layers: string[]; perLay
 export function RecommendPage() {
   const t = useT();
   const reduce = useReducedMotion() ?? false;
+  const dockEdge = useResolvedDockEdge();
+  // The selection pill sits above the floating bar when it rests on the bottom edge.
+  const barBottom = BAR_BOTTOM + (dockEdge === "bottom" ? DOCK_SPACE : 0);
   const layersQuery = useLayers();
   const stats = useStats();
   const vaultEmpty = stats.data?.total === 0;
@@ -482,171 +484,177 @@ export function RecommendPage() {
   return (
     <div className="min-h-full">
       <Page className={cn(PAGE_SECTIONS, selected.size > 0 && "pb-16")}>
-        <div className="flex flex-col gap-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-xl font-semibold tracking-tight">{t("page.recommend.title")}</h1>
-            {recommendation ? <ModeIndicator mode={recommendation.mode} /> : null}
+        <Reveal index={0}>
+          <div className="flex flex-col gap-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-xl font-semibold tracking-tight">{t("page.recommend.title")}</h1>
+              {recommendation ? <ModeIndicator mode={recommendation.mode} /> : null}
+              {recommendation?.mode === "keywords" ? (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  pressScale={0.97}
+                  className="h-7 px-2.5"
+                  disabled={enableSemantic.isPending}
+                  onClick={() => enableSemantic.mutate()}
+                >
+                  {enableSemantic.isPending ? (
+                    <Loader variant="spinner" size={14} label={t("recommend.enableHybrid.working")} />
+                  ) : (
+                    <Sparkles className="size-3.5" aria-hidden="true" />
+                  )}
+                  {t("recommend.enableHybrid")}
+                </Button>
+              ) : null}
+              {(description.trim() || recommendation) && (
+                <Button variant="ghost" size="sm" pressScale={0.97} className="h-7 px-2.5" onClick={clear}>
+                  {t("recommend.reset")}
+                </Button>
+              )}
+            </div>
+            <p className="max-w-[68ch] text-sm text-muted-foreground">{t("recommend.intro")}</p>
             {recommendation?.mode === "keywords" ? (
+              <div className="flex flex-col gap-1 text-xs text-muted-foreground">
+                {embeddings.data ? (
+                  <p>
+                    {t("recommend.enableHybrid.explain", {
+                      model: embeddings.data.model,
+                      size: formatBytes(embeddings.data.download.total),
+                    })}
+                  </p>
+                ) : null}
+                {enableSemantic.isPending ? (
+                  <p role="status" className="flex items-center gap-1.5">
+                    <Loader variant="spinner" size={12} label={t("recommend.enableHybrid.working")} />
+                    {enableProgress
+                      ? t("recommend.enableHybrid.progress", { done: enableProgress.done, total: enableProgress.total })
+                      : t("recommend.enableHybrid.working")}
+                  </p>
+                ) : null}
+                {enableSemantic.isError ? (
+                  <p role="alert" className="text-destructive">
+                    {enableSemantic.error instanceof Error ? enableSemantic.error.message : t("recommend.enableHybrid.failed")}
+                  </p>
+                ) : null}
+                <button
+                  type="button"
+                  aria-label={`${t("recommend.copyCli")}: ${EMBEDDINGS_CLI}`}
+                  title={t("recommend.copyCli")}
+                  onClick={() => void copyText(EMBEDDINGS_CLI)}
+                  className="mt-0.5 inline-flex h-6 max-w-full items-center gap-1.5 self-start rounded-md border border-border bg-muted/60 px-2 font-mono text-[10.5px] text-foreground transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                >
+                  <span className="truncate">{EMBEDDINGS_CLI}</span>
+                  <Copy className="size-3 shrink-0 text-muted-foreground" aria-hidden="true" />
+                </button>
+              </div>
+            ) : null}
+          </div>
+        </Reveal>
+
+        <Reveal index={1}>
+          <PromptInput
+            ref={inputRef}
+            value={description}
+            onValueChange={setDescription}
+            onSubmit={submit}
+            submitOn="mod-enter"
+            keepValueOnSubmit
+            loading={run.isPending}
+            loadingIndicator={<Loader variant="spinner" size={14} label={t("recommend.loading")} />}
+            submitLabel={t("recommend.submit")}
+            showSubmitLabel
+            aria-label={t("recommend.description")}
+            aria-keyshortcuts="Meta+Enter Control+Enter"
+            placeholder={t("recommend.placeholder")}
+            minRows={2}
+            maxRows={8}
+            className="bg-muted/50"
+            trailingAction={
               <Button
                 variant="secondary"
                 size="sm"
                 pressScale={0.97}
-                className="h-7 px-2.5"
-                disabled={enableSemantic.isPending}
-                onClick={() => enableSemantic.mutate()}
+                className="h-8"
+                aria-expanded={agentOpen}
+                onClick={() => setAgentOpen(!agentOpen)}
               >
-                {enableSemantic.isPending ? (
-                  <Loader variant="spinner" size={14} label={t("recommend.enableHybrid.working")} />
-                ) : (
-                  <Sparkles className="size-3.5" aria-hidden="true" />
-                )}
-                {t("recommend.enableHybrid")}
+                <MessageSquareText className="size-3.5" aria-hidden="true" />
+                {t("recommend.agent.open")}
               </Button>
-            ) : null}
-            {(description.trim() || recommendation) && (
-              <Button variant="ghost" size="sm" pressScale={0.97} className="h-7 px-2.5" onClick={clear}>
-                {t("recommend.reset")}
-              </Button>
-            )}
-          </div>
-          <p className="max-w-[68ch] text-sm text-muted-foreground">{t("recommend.intro")}</p>
-          {recommendation?.mode === "keywords" ? (
-            <div className="flex flex-col gap-1 text-xs text-muted-foreground">
-              {embeddings.data ? (
-                <p>
-                  {t("recommend.enableHybrid.explain", {
-                    model: embeddings.data.model,
-                    size: formatBytes(embeddings.data.download.total),
-                  })}
-                </p>
-              ) : null}
-              {enableSemantic.isPending ? (
-                <p role="status" className="flex items-center gap-1.5">
-                  <Loader variant="spinner" size={12} label={t("recommend.enableHybrid.working")} />
-                  {enableProgress
-                    ? t("recommend.enableHybrid.progress", { done: enableProgress.done, total: enableProgress.total })
-                    : t("recommend.enableHybrid.working")}
-                </p>
-              ) : null}
-              {enableSemantic.isError ? (
-                <p role="alert" className="text-destructive">
-                  {enableSemantic.error instanceof Error ? enableSemantic.error.message : t("recommend.enableHybrid.failed")}
-                </p>
-              ) : null}
-              <button
-                type="button"
-                aria-label={`${t("recommend.copyCli")}: ${EMBEDDINGS_CLI}`}
-                title={t("recommend.copyCli")}
-                onClick={() => void copyText(EMBEDDINGS_CLI)}
-                className="mt-0.5 inline-flex h-6 max-w-full items-center gap-1.5 self-start rounded-md border border-border bg-card px-2 font-mono text-[10.5px] text-foreground transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-              >
-                <span className="truncate">{EMBEDDINGS_CLI}</span>
-                <Copy className="size-3 shrink-0 text-muted-foreground" aria-hidden="true" />
-              </button>
-            </div>
-          ) : null}
-        </div>
+            }
+            leadingAction={
+              <kbd className="ml-2 rounded-full border border-border px-1.5 font-mono text-[10px] leading-4 text-muted-foreground">
+                {t("recommend.shortcut", { combo: modChord("↵") })}
+              </kbd>
+            }
+          />
+        </Reveal>
 
-        <PromptInput
-          ref={inputRef}
-          value={description}
-          onValueChange={setDescription}
-          onSubmit={submit}
-          submitOn="mod-enter"
-          keepValueOnSubmit
-          loading={run.isPending}
-          loadingIndicator={<Loader variant="spinner" size={14} label={t("recommend.loading")} />}
-          submitLabel={t("recommend.submit")}
-          showSubmitLabel
-          aria-label={t("recommend.description")}
-          aria-keyshortcuts="Meta+Enter Control+Enter"
-          placeholder={t("recommend.placeholder")}
-          minRows={2}
-          maxRows={8}
-          className="bg-card"
-          trailingAction={
-            <Button
-              variant="secondary"
-              size="sm"
-              pressScale={0.97}
-              className="h-8"
-              aria-expanded={agentOpen}
-              onClick={() => setAgentOpen(!agentOpen)}
+        <Reveal index={2}>
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+            <fieldset
+              aria-label={t("recommend.layers")}
+              className="m-0 flex min-w-0 flex-1 basis-80 flex-wrap items-center gap-1.5 border-0 p-0"
             >
-              <MessageSquareText className="size-3.5" aria-hidden="true" />
-              {t("recommend.agent.open")}
-            </Button>
-          }
-          leadingAction={
-            <kbd className="ml-2 rounded-full border border-border px-1.5 font-mono text-[10px] leading-4 text-muted-foreground">
-              {t("recommend.shortcut", { combo: modChord("↵") })}
-            </kbd>
-          }
-        />
+              <span className="mr-1 text-xs text-muted-foreground">{t("recommend.layers")}</span>
+              {(layersQuery.data ?? []).map((layer) => {
+                const active = activeLayers.includes(layer.id);
+                return (
+                  <motion.button
+                    key={layer.id}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => toggleLayer(layer.id)}
+                    whileTap={reduce ? undefined : { scale: 0.97 }}
+                    className={cn(
+                      "inline-flex h-7 items-center gap-1 rounded-full border px-3 text-[12px] font-medium transition-colors",
+                      "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+                      active
+                        ? "border-foreground/15 bg-foreground/[0.07] text-foreground"
+                        : "border-border text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {active && <Check className="size-3" aria-hidden="true" />}
+                    {layer.title || layer.id}
+                  </motion.button>
+                );
+              })}
+            </fieldset>
 
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-          <fieldset
-            aria-label={t("recommend.layers")}
-            className="m-0 flex min-w-0 flex-1 basis-80 flex-wrap items-center gap-1.5 border-0 p-0"
-          >
-            <span className="mr-1 text-xs text-muted-foreground">{t("recommend.layers")}</span>
-            {(layersQuery.data ?? []).map((layer) => {
-              const active = activeLayers.includes(layer.id);
-              return (
-                <motion.button
-                  key={layer.id}
-                  type="button"
-                  aria-pressed={active}
-                  onClick={() => toggleLayer(layer.id)}
-                  whileTap={reduce ? undefined : { scale: 0.97 }}
-                  className={cn(
-                    "inline-flex h-7 items-center gap-1 rounded-full border px-3 text-[12px] font-medium transition-colors",
-                    "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
-                    active
-                      ? "border-foreground/15 bg-foreground/[0.07] text-foreground"
-                      : "border-border text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  {active && <Check className="size-3" aria-hidden="true" />}
-                  {layer.title || layer.id}
-                </motion.button>
-              );
-            })}
-          </fieldset>
-
-          <div className="flex items-center gap-2">
-            <span className="flex items-center gap-1 text-xs text-muted-foreground">
-              <span aria-hidden="true">{t("recommend.perLayer")}</span>
-              <Tooltip content={t("recommend.perLayer.hint")}>
-                <button
-                  type="button"
-                  aria-label={t("recommend.perLayer.hint")}
-                  className="grid size-3.5 cursor-help place-items-center rounded-full text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-                >
-                  <Info className="size-3" aria-hidden="true" />
-                </button>
-              </Tooltip>
-            </span>
-            {/* The stepper's liquid geometry is drawn at 48px; scaled to the 32px filter row. */}
-            <div className="h-8 w-36">
-              <div className="w-[13.5rem] origin-top-left scale-[0.6667]">
-                <AdaptiveStepper
-                  value={perLayer}
-                  onValueChange={setPerLayer}
-                  min={1}
-                  max={10}
-                  fill="var(--muted)"
-                  aria-label={t("recommend.perLayer")}
-                  formatLegend={(valueText) => t("recommend.perLayerLegend", { value: valueText })}
-                >
-                  <AdaptiveStepperDecrement aria-label={t("recommend.decreasePerLayer")} />
-                  <AdaptiveStepperValue />
-                  <AdaptiveStepperIncrement aria-label={t("recommend.increasePerLayer")} />
-                </AdaptiveStepper>
+            <div className="flex items-center gap-2">
+              <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                <span aria-hidden="true">{t("recommend.perLayer")}</span>
+                <Tooltip content={t("recommend.perLayer.hint")}>
+                  <button
+                    type="button"
+                    aria-label={t("recommend.perLayer.hint")}
+                    className="grid size-3.5 cursor-help place-items-center rounded-full text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                  >
+                    <Info className="size-3" aria-hidden="true" />
+                  </button>
+                </Tooltip>
+              </span>
+              {/* The stepper's liquid geometry is drawn at 48px; scaled to the 32px filter row. */}
+              <div className="h-8 w-36">
+                <div className="w-[13.5rem] origin-top-left scale-[0.6667]">
+                  <AdaptiveStepper
+                    value={perLayer}
+                    onValueChange={setPerLayer}
+                    min={1}
+                    max={10}
+                    fill="var(--muted)"
+                    aria-label={t("recommend.perLayer")}
+                    formatLegend={(valueText) => t("recommend.perLayerLegend", { value: valueText })}
+                  >
+                    <AdaptiveStepperDecrement aria-label={t("recommend.decreasePerLayer")} />
+                    <AdaptiveStepperValue />
+                    <AdaptiveStepperIncrement aria-label={t("recommend.increasePerLayer")} />
+                  </AdaptiveStepper>
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        </Reveal>
 
         <AnimatePresence initial={false}>
           {agentOpen ? (
@@ -699,7 +707,7 @@ export function RecommendPage() {
                     onClick={() => fillExample(t(key))}
                     whileTap={reduce ? undefined : { scale: 0.97 }}
                     className={cn(
-                      "inline-flex h-7 max-w-full min-w-0 items-center rounded-full border border-border bg-card px-3 text-[12px] text-muted-foreground transition-colors",
+                      "inline-flex h-7 max-w-full min-w-0 items-center rounded-full border border-border bg-muted/60 px-3 text-[12px] text-muted-foreground transition-colors",
                       "hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
                     )}
                   >
@@ -724,8 +732,8 @@ export function RecommendPage() {
                   animate={{ opacity: 1, y: 0, x: "-50%" }}
                   exit={{ opacity: 0, y: reduce ? 0 : 8, x: "-50%", transition: { duration: 0.12, ease: EASE_OUT } }}
                   transition={reduce ? { duration: 0.12 } : SPRING_PANEL}
-                  style={{ bottom: DOCK_BOTTOM + DOCK_HEIGHT + BAR_GAP }}
-                  className="fixed left-1/2 z-40 flex items-center gap-1 rounded-full border bg-background/70 py-1 pr-1 pl-1 shadow-[0_8px_30px_rgba(0,0,0,0.25)] backdrop-blur-xl"
+                  style={{ bottom: barBottom }}
+                  className="fixed left-1/2 z-40 flex items-center gap-1 rounded-full border bg-card/85 py-1 pr-1 pl-1 shadow-[0_8px_30px_rgba(0,0,0,0.25)] backdrop-blur-xl"
                 >
                   <button
                     type="button"

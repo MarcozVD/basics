@@ -133,7 +133,7 @@ export function AgentPanel({ description, layers, onSelectTechs, onClose }: Agen
   };
 
   return (
-    <section aria-label={t("recommend.agent.title")} className="flex flex-col gap-3 rounded-2xl border bg-card p-4">
+    <section aria-label={t("recommend.agent.title")} className="flex flex-col gap-3 rounded-2xl border bg-muted/30 p-4">
       <div className="flex items-center gap-2">
         <MessageSquareText className="size-4 text-muted-foreground" aria-hidden="true" />
         <h2 className="text-sm font-semibold tracking-tight">{t("recommend.agent.title")}</h2>

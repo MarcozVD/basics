@@ -77,7 +77,7 @@ test("an empty vault installs the starter packs and Home shows counts", async ({
 
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Start with a starter pack" })).toBeVisible();
-  // The pack picker's language toggle is labelled, unlike the header one.
+  // The pack picker's language toggle is labelled; Settings > General owns the language choice.
   await expect(page.getByText("Notes language", { exact: true })).toBeVisible();
   // The first-run checklist explains the loop before the packs; step 1 is open.
   const steps = page.getByTestId("home-getting-started");

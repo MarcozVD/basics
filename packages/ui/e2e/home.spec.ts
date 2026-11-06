@@ -265,7 +265,7 @@ test("Home fits the desktop window with an empty inbox", async ({ page }) => {
         const panel = document.querySelector<HTMLElement>('[data-testid="activity-panel"]');
         const main = document.querySelector<HTMLElement>("main");
         const grid = document.querySelector<HTMLElement>('[data-testid="home-grid"]')?.getBoundingClientRect();
-        const dock = document.querySelector<HTMLElement>("nav")?.getBoundingClientRect();
+        const panelBox = document.querySelector<HTMLElement>('[data-testid="content-panel"]')?.getBoundingClientRect();
         return {
           viewport: window.innerHeight,
           documentHeight: document.scrollingElement?.scrollHeight ?? 0,
@@ -276,14 +276,14 @@ test("Home fits the desktop window with an empty inbox", async ({ page }) => {
           panelScrollHeight: panel?.scrollHeight ?? 0,
           panelClientHeight: panel?.clientHeight ?? 0,
           gridBottom: grid?.bottom ?? 0,
-          dockTop: dock?.top ?? 0,
+          panelBottom: panelBox?.bottom ?? 0,
         };
       });
 
-      // The page never scrolls and nothing runs under the Dock.
+      // The page never scrolls and nothing runs past the panel's bottom edge.
       expect(m.documentHeight).toBeLessThanOrEqual(m.viewport + 1);
       expect(m.mainScrollHeight).toBeLessThanOrEqual(m.mainClientHeight + 1);
-      expect(m.gridBottom).toBeLessThanOrEqual(m.dockTop);
+      expect(m.gridBottom).toBeLessThanOrEqual(m.panelBottom);
       // The empty inbox collapses to a single line.
       expect(m.stripHeight).toBeLessThanOrEqual(56);
       expect(m.stripText).toContain("Inbox is clear");
@@ -313,7 +313,7 @@ function seedLayers(count: number): () => void {
   };
 }
 
-test("Home shows every layer above the Dock with twelve layers", async ({ page }) => {
+test("Home shows every layer inside the panel with twelve layers", async ({ page }) => {
   // examples/vault ships five layers; add seven to reach the owner's twelve.
   const restoreLayers = seedLayers(7);
   const restoreInbox = clearInbox();
@@ -330,21 +330,21 @@ test("Home shows every layer above the Dock with twelve layers", async ({ page }
       await settle(page);
 
       const m = await page.evaluate(() => {
-        const dockTop = document.querySelector<HTMLElement>("nav")?.getBoundingClientRect().top ?? 0;
+        const panelBottom = document.querySelector<HTMLElement>('[data-testid="content-panel"]')?.getBoundingClientRect().bottom ?? 0;
         const rows = [...document.querySelectorAll<HTMLElement>('[data-stat^="layer-"]')].map((row) => {
           const rect = row.getBoundingClientRect();
           return { top: rect.top, bottom: rect.bottom, text: row.textContent ?? "", visible: row.checkVisibility() };
         });
-        return { dockTop, rows };
+        return { panelBottom, rows };
       });
 
-      // All twelve layers render and the last row clears the Dock at both sizes.
+      // All twelve layers render and the last row clears the panel's bottom edge at both sizes.
       expect(m.rows.length, `${width}x${height}`).toBe(12);
       for (const row of m.rows) {
         expect(row.text, `${width}x${height}`).not.toBe("");
         expect(row.visible, `${row.text} visible at ${width}x${height}`).toBe(true);
         expect(row.top, `${row.text} top at ${width}x${height}`).toBeGreaterThanOrEqual(0);
-        expect(row.bottom, `${row.text} bottom at ${width}x${height}`).toBeLessThanOrEqual(m.dockTop);
+        expect(row.bottom, `${row.text} bottom at ${width}x${height}`).toBeLessThanOrEqual(m.panelBottom);
       }
     }
   } finally {
@@ -375,7 +375,7 @@ test("Home keeps the stats, layers and recent notes in three columns from 1440",
         health: rect('[aria-label="Vault health & shape"]'),
         layers: rect('[aria-label="Layers"]'),
         recent: rect('[data-testid="recent-section"]'),
-        dockTop: document.querySelector<HTMLElement>("nav")?.getBoundingClientRect().top ?? 0,
+        panelBottom: document.querySelector<HTMLElement>('[data-testid="content-panel"]')?.getBoundingClientRect().bottom ?? 0,
       };
     });
 
@@ -392,7 +392,7 @@ test("Home keeps the stats, layers and recent notes in three columns from 1440",
     expect(m.layers.bottom).toBeLessThan(m.recent.bottom);
     expect(m.layers.right).toBeLessThan(m.recent.left);
     expect(m.recent.top).toBeCloseTo(m.health.top, 0);
-    expect(m.recent.bottom).toBeLessThanOrEqual(m.dockTop);
+    expect(m.recent.bottom).toBeLessThanOrEqual(m.panelBottom);
   } finally {
     restoreActivity();
   }

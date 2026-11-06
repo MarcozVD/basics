@@ -51,7 +51,7 @@ When the answer is done, **Select these (n)** adds the tech notes it cited with 
 yet, it proposes that note to the **Inbox**; the panel lists the proposed ids with a link, and nothing is applied until
 you approve it there.
 
-The run belongs to the browser tab, not to the panel. Leaving **Recommend** does not stop it: the Dock marks
+The run belongs to the browser tab, not to the panel. Leaving **Recommend** does not stop it: the sidebar marks
 Recommend with a pulsing dot while it streams, and a toast offers **Open Recommend** when it finishes elsewhere.
 The answer, the cited ids and the proposals stay when you come back and after a reload. A run cut short by a
 reload shows **Interrupted** with **Retry**, which runs the same prompt again. Each tab has at most one agent run;

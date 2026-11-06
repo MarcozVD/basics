@@ -36,7 +36,7 @@ test("an agent answer survives leaving Recommend, a reload, and Clear removes it
   await panel.getByRole("button", { name: "Run", exact: true }).click();
   await expect(panel.getByRole("status")).toContainText("Running Claude Code");
 
-  // Leave while it streams: the Dock marks the run and the answer is announced when it ends.
+  // Leave while it streams: the sidebar marks the run and the answer is announced when it ends.
   await page.getByRole("link", { name: "Explore", exact: true }).click();
   await expect(page).toHaveURL(/\/explore$/);
   await expect(page.getByText("Agent recommendation running", { exact: true })).toBeVisible();

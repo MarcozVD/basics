@@ -9,6 +9,7 @@ import { NoteForm } from "@/components/note-form/note-form";
 import { Textarea } from "@/components/ui/textarea";
 import { type TranslationKey, useI18n } from "@/i18n";
 import { agentColor, agentInitial } from "@/lib/agent-color";
+import { useResolvedDockEdge } from "@/lib/navigation";
 import { formatRelativeTime } from "@/lib/relative-time";
 import { cn } from "@/lib/utils";
 
@@ -107,6 +108,7 @@ export function ProposalDetail({
 }: ProposalDetailProps) {
   const { t, language } = useI18n();
   const panel = variant === "panel";
+  const dockEdge = useResolvedDockEdge();
   const title = proposal.data.title ?? proposal.id;
   const name = proposal.meta.proposed_by;
 
@@ -205,7 +207,8 @@ export function ProposalDetail({
           "flex items-center gap-1",
           panel
             ? "shrink-0 justify-end border-t border-border px-3 py-2"
-            : "fixed bottom-[82px] left-1/2 z-40 max-w-[calc(100vw-1rem)] -translate-x-1/2 overflow-x-auto rounded-full border border-border bg-card/80 p-1.5 shadow-[0_8px_30px_rgba(0,0,0,0.25)] backdrop-blur-xl [scrollbar-width:none]",
+            : "fixed bottom-5 left-1/2 z-40 max-w-[calc(100vw-1rem)] -translate-x-1/2 overflow-x-auto rounded-full border border-border bg-card/85 p-1.5 shadow-[0_8px_30px_rgba(0,0,0,0.25)] backdrop-blur-xl [scrollbar-width:none]",
+          !panel && dockEdge === "bottom" && "bottom-28",
         )}
       >
         {actions}
