@@ -81,7 +81,10 @@ async function openFirstRow(page: Page) {
 test("back from a filtered Explore note keeps its filter and its scroll", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 520 });
   await page.goto("/explore?type=tech");
-  await expect(page.getByRole("tab", { name: /^Tech/ })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("button", { name: "Filter by type" })).toContainText("Tech");
+  // Let the staggered row entrance finish before measuring: a row measured mid-stagger
+  // is 6px lower, so the saved offset would point at a different position on return.
+  await page.waitForTimeout(400);
 
   // Scroll to a row far enough down that the offset is real, then open a row that is already on
   // screen: clicking it must not move the scroll, so `before` is what a back has to restore.
@@ -97,7 +100,7 @@ test("back from a filtered Explore note keeps its filter and its scroll", async 
 
   await page.getByRole("button", { name: BACK_TO_EXPLORE }).click();
   await expect(page).toHaveURL(/\/explore\?type=tech$/);
-  await expect(page.getByRole("tab", { name: /^Tech/ })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("button", { name: "Filter by type" })).toContainText("Tech");
   await expect.poll(() => main.evaluate((element) => element.scrollTop)).toBe(before);
 });
 
@@ -123,7 +126,7 @@ test("Alt+Left navigates back inside the app", async ({ page }) => {
 
   await page.keyboard.press("Alt+ArrowLeft");
   await expect(page).toHaveURL(/\/explore\?type=check$/);
-  await expect(page.getByRole("tab", { name: /^Check/ })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("button", { name: "Filter by type" })).toContainText("Check");
 });
 
 test("the mouse back and forward buttons move exactly one entry each", async ({ page }) => {

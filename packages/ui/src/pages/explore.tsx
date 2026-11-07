@@ -9,15 +9,15 @@ import { CARD_TARGET_CLASS, Card, CardContent, CardFooter, CardHeader } from "@/
 import { Input } from "@/components/motion/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/motion/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/motion/tabs";
-import { Tooltip } from "@/components/motion/tooltip";
 import { TypeChip } from "@/components/note-form/note-preview";
-import { PAGE_SECTIONS, Page, Reveal } from "@/components/page";
+import { Page, Reveal } from "@/components/page";
 import { PageHeader } from "@/components/page-header";
 import { ErrorState, Loading } from "@/components/state";
 import { Button as LinkButton } from "@/components/ui/button";
 import { type TranslationKey, useT } from "@/i18n";
 import { modChord } from "@/lib/desktop";
 import { EASE_OUT, SPRING_LAYOUT, SPRING_PRESS } from "@/lib/ease";
+import { useIntro } from "@/lib/intro";
 import { useFirstPaint, useProgressiveCount } from "@/lib/progressive";
 import { useLayers, useNotes, useSearch, useStats } from "@/lib/queries";
 import { formatCompactRelativeTime } from "@/lib/relative-time";
@@ -37,9 +37,17 @@ const STAGGER_STEP = 0.02;
 const MAX_TAGS = 3;
 /** Layer chips shown per row before a `+n`; a chip only truncates when a name is very long. */
 const MAX_LAYERS = 2;
-/** Dense list columns; wide-only columns are hidden with their matching cell. */
-const LIST_GRID =
-  "grid grid-cols-[16px_minmax(0,1fr)_minmax(0,0.8fr)_auto] items-center gap-2 min-[1280px]:gap-3 min-[1280px]:grid-cols-[16px_minmax(240px,1fr)_minmax(0,110px)_130px_120px_90px_88px] min-[1440px]:grid-cols-[16px_minmax(240px,1.4fr)_minmax(0,120px)_minmax(150px,1fr)_130px_120px_90px_88px]";
+/**
+ * Dense list columns. Title, layers, tags and updated are the defaults; the source
+ * column only joins them when the vault actually holds more than one provenance.
+ */
+const LIST_GRID = "grid items-center gap-2 min-[1280px]:gap-3 grid-cols-[16px_minmax(0,1fr)_auto]";
+const LIST_GRID_COLUMNS =
+  "min-[1280px]:grid-cols-[16px_minmax(240px,1fr)_minmax(0,110px)_minmax(130px,1fr)_88px] min-[1440px]:grid-cols-[16px_minmax(240px,1.4fr)_minmax(0,120px)_minmax(150px,1fr)_90px]";
+const LIST_GRID_COLUMNS_SOURCE =
+  "min-[1280px]:grid-cols-[16px_minmax(240px,1fr)_minmax(0,110px)_minmax(130px,1fr)_78px_88px] min-[1440px]:grid-cols-[16px_minmax(240px,1.4fr)_minmax(0,120px)_minmax(150px,1fr)_86px_90px]";
+
+const listGrid = (showSource: boolean) => cn(LIST_GRID, showSource ? LIST_GRID_COLUMNS_SOURCE : LIST_GRID_COLUMNS);
 
 interface Row {
   id: string;
@@ -60,6 +68,13 @@ interface Group {
 }
 
 const typeColor = (type: NoteType) => `var(--type-${type})`;
+
+/** Provenance categories: comparing two agent ids is not a reason to show a Source column. */
+function sourceKind(source: string): "agent" | "pack" | "manual" {
+  if (source.startsWith("agent:")) return "agent";
+  if (source.startsWith("pack:")) return "pack";
+  return "manual";
+}
 
 function pick<T extends string>(value: string | null, options: readonly T[], fallback: T): T {
   return value && (options as readonly string[]).includes(value) ? (value as T) : fallback;
@@ -162,12 +177,16 @@ export function ExplorePage() {
   const filter = { type, layer };
   const layers = useLayers();
   const notes = useNotes(filter);
+  const allNotes = useNotes();
   const allInLayer = useNotes(layer ? { layer } : {});
   const hits = useSearch(query, filter);
   const stats = useStats();
   // An empty vault and a filter that matches nothing need different words and
   // different ways out: filter first, then check whether there is anything at all.
   const vaultEmpty = stats.data?.total === 0;
+  // The vault, not the filtered rows: a filter that matches nothing still sits on a page
+  // with data, so the intro belongs behind the `?` there.
+  const intro = useIntro("explore", stats.isSuccess ? (stats.data?.total ?? 0) > 0 : true);
   const listQuery = query ? hits : notes;
 
   const counts = useMemo(() => {
@@ -196,6 +215,20 @@ export function ExplorePage() {
       return summary ? toRow(summary) : { id: hit.id, type: hit.type, title: hit.title || hit.id, source: "", layers: [], tags: [] };
     });
   }, [query, notes.data, hits.data, sort]);
+
+  // Only a mix of provenances makes the Source column worth a column; a vault written
+  // by one agent (or only by hand) does not repeat the same badge on every row. Read
+  // the whole vault, not the current filter: narrowing to one source must not hide a
+  // column the vault has earned.
+  const showSource = useMemo(() => {
+    const kinds = new Set(
+      (allNotes.data ?? [])
+        .map((note) => note.source)
+        .filter(Boolean)
+        .map(sourceKind),
+    );
+    return kinds.size > 1;
+  }, [allNotes.data]);
 
   const grouped = !query && !type && sort === "type";
   const groups: Group[] = useMemo(() => {
@@ -337,6 +370,7 @@ export function ExplorePage() {
       selected: index === highlighted,
       reduce,
       layerTitles,
+      showSource,
       onHover: () => setHovered(index),
       onOpen: () => openNote(row.id),
     };
@@ -348,7 +382,7 @@ export function ExplorePage() {
   };
 
   return (
-    <Page className={cn("pt-0", PAGE_SECTIONS)}>
+    <Page className="pt-0">
       <Reveal index={0} className="mx-page-gutter sticky top-[var(--nav-top,0px)] z-20 bg-card px-page-gutter pt-4 pb-0">
         <PageHeader
           title={t("page.explore.title")}
@@ -357,98 +391,73 @@ export function ExplorePage() {
               <AnimatedNumber value={rows.length} startOnView={false} duration={0.6} />
             </span>
           }
-          description={t("explore.intro")}
-          action={
-            <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
-              <Input
-                ref={searchRef}
-                type="search"
-                value={searchText}
-                onChange={setSearchText}
-                onKeyDown={handleKeyDown}
-                placeholder={t("explore.searchPlaceholder")}
-                aria-label={t("explore.searchPlaceholder")}
-                aria-keyshortcuts="Meta+F Control+F"
-                leftIcon={<Search />}
-                rightIcon={
-                  <kbd
-                    title={t("explore.searchShortcut", { key: modChord("F") })}
-                    className="mr-2.5 rounded-full border border-border px-1.5 font-mono text-[10px] leading-4 text-muted-foreground"
-                  >
-                    {modChord("F")}
-                  </kbd>
-                }
-                className="w-full sm:w-64"
-                classNames={{
-                  field: "h-8 bg-muted/60",
-                  input: "text-[13px] [&::-webkit-search-cancel-button]:hidden",
-                  leftIcon: "left-2.5",
-                }}
-              />
-
-              <Tabs value={view} onValueChange={(value) => updateParams({ view: value === DEFAULT_VIEW ? null : value })} variant="segment">
-                <TabsList aria-label={t("explore.view")}>
-                  <TabsTrigger
-                    value="list"
-                    icon={<LayoutList className="size-3.5" aria-hidden="true" />}
-                    className="gap-1.5 px-2.5 py-1 text-[12px]"
-                  >
-                    {t("explore.view.list")}
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="grid"
-                    icon={<LayoutGrid className="size-3.5" aria-hidden="true" />}
-                    className="gap-1.5 px-2.5 py-1 text-[12px]"
-                  >
-                    {t("explore.view.grid")}
-                  </TabsTrigger>
-                </TabsList>
-              </Tabs>
-
-              <Button
-                size="sm"
-                onClick={() => window.dispatchEvent(new CustomEvent("basics:new-note", { detail: { type } }))}
-                pressScale={0.97}
-              >
-                <Plus className="size-3.5" aria-hidden="true" />
-                {t("explore.newNote")}
-              </Button>
-            </div>
-          }
+          description={intro.showIntro ? t("explore.intro") : undefined}
+          hint={intro.showIntro ? undefined : t("explore.intro")}
+          onDismissDescription={intro.showIntro ? intro.dismiss : undefined}
         >
-          <fieldset aria-label={t("explore.filters")} className="m-0 min-w-0 border-0 p-0 flex flex-wrap items-center gap-2">
-            <Tabs
+          {/* One toolbar at 1280px: search, type, layer, sort, view and the single action. */}
+          <fieldset
+            aria-label={t("explore.filters")}
+            className="m-0 flex min-w-0 flex-wrap items-center gap-2 border-0 p-0 min-[1280px]:flex-nowrap"
+          >
+            <Input
+              ref={searchRef}
+              type="search"
+              value={searchText}
+              onChange={setSearchText}
+              onKeyDown={handleKeyDown}
+              placeholder={t("explore.searchPlaceholder")}
+              aria-label={t("explore.searchPlaceholder")}
+              aria-keyshortcuts="Meta+F Control+F"
+              leftIcon={<Search />}
+              rightIcon={
+                <kbd
+                  title={t("explore.searchShortcut", { key: modChord("F") })}
+                  className="mr-2.5 hidden rounded-full border border-border px-1.5 font-mono text-[10px] leading-4 text-muted-foreground @min-[13rem]:inline"
+                >
+                  {modChord("F")}
+                </kbd>
+              }
+              className="w-full min-w-0 sm:w-60"
+              classNames={{
+                field: "h-8 bg-muted/60 @container",
+                input: "pr-[3.75rem] text-[13px] @max-[13rem]:pr-3.5 [&::-webkit-search-cancel-button]:hidden",
+                leftIcon: "left-2.5",
+              }}
+            />
+
+            <Select
               value={type ?? "all"}
               onValueChange={(value) => updateParams({ type: value === "all" ? null : value })}
-              className="min-w-0 flex-auto"
-              variant="pill"
+              className="w-[calc(50%-0.25rem)] min-w-0 sm:w-36 sm:flex-none"
             >
-              <TabsList aria-label={t("explore.typeFilter")} className="bg-transparent p-0">
-                <TabsTrigger value="all" className="gap-1.5 px-3 py-1 text-[12px]">
-                  {t("type.all")}
-                  <span className="font-mono text-[11px]">{allInLayer.data?.length ?? 0}</span>
-                </TabsTrigger>
+              <SelectTrigger
+                aria-label={t("explore.typeFilter")}
+                title={type ? t(`type.${type}.hint` as TranslationKey) : undefined}
+                className="h-8 rounded-full border-border bg-muted/60 px-3 py-0 text-[13px]"
+              >
+                <span className="flex min-w-0 items-center gap-2">
+                  <span
+                    aria-hidden="true"
+                    className="size-1.5 shrink-0 rounded-full ring-1 ring-black/10 dark:ring-white/20"
+                    style={{ backgroundColor: type ? typeColor(type) : "var(--muted-foreground)" }}
+                  />
+                  <span className="truncate">{type ? typeLabel(type) : t("explore.allTypes")}</span>
+                </span>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{`${t("explore.allTypes")} (${allInLayer.data?.length ?? 0})`}</SelectItem>
                 {TYPE_ORDER.map((item) => (
-                  <Tooltip key={item} content={t(`type.${item}.hint` as TranslationKey)} side="bottom">
-                    <TabsTrigger value={item} className="gap-1.5 px-3 py-1 text-[12px]">
-                      <span
-                        aria-hidden="true"
-                        className="size-1.5 shrink-0 rounded-full ring-1 ring-black/10 dark:ring-white/20"
-                        style={{ backgroundColor: typeColor(item) }}
-                      />
-                      {typeLabel(item)}
-                      <span className="font-mono text-[11px]">{counts.get(item) ?? 0}</span>
-                    </TabsTrigger>
-                  </Tooltip>
+                  <SelectItem key={item} value={item}>{`${typeLabel(item)} (${counts.get(item) ?? 0})`}</SelectItem>
                 ))}
-              </TabsList>
-            </Tabs>
+              </SelectContent>
+            </Select>
 
-            <div className="ml-auto flex w-full items-center gap-2 sm:w-auto">
+            {(layers.data?.length ?? 0) > 0 || layer ? (
               <Select
                 value={layer ?? "all"}
                 onValueChange={(value) => updateParams({ layer: value === "all" ? null : value })}
-                className="min-w-0 flex-1 sm:w-44 sm:flex-none"
+                className="w-[calc(50%-0.25rem)] min-w-0 sm:w-44 sm:flex-none"
               >
                 <SelectTrigger className="h-8 rounded-full border-border bg-muted/60 px-3 py-0 text-[13px]">
                   <span className="flex min-w-0 items-center gap-2">
@@ -465,31 +474,60 @@ export function ExplorePage() {
                   ))}
                 </SelectContent>
               </Select>
+            ) : null}
 
-              <Select
-                value={sort}
-                onValueChange={(value) => updateParams({ sort: value === DEFAULT_SORT ? null : value })}
-                className="min-w-0 flex-1 sm:w-48 sm:flex-none"
-              >
-                <SelectTrigger className="h-8 rounded-full border-border bg-muted/60 px-3 py-0 text-[13px]">
-                  <span className="flex min-w-0 items-center gap-2">
-                    <ArrowDownUp className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-                    <span className="sr-only">{t("explore.sort")}: </span>
-                    <SelectValue className="truncate" />
-                  </span>
-                </SelectTrigger>
-                <SelectContent>
-                  {SORTS.map((item) => (
-                    <SelectItem key={item} value={item}>
-                      {t(`explore.sort.${item}` as TranslationKey)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <Select
+              value={sort}
+              onValueChange={(value) => updateParams({ sort: value === DEFAULT_SORT ? null : value })}
+              className="w-[calc(50%-0.25rem)] min-w-0 sm:w-48 sm:flex-none"
+            >
+              <SelectTrigger className="h-8 rounded-full border-border bg-muted/60 px-3 py-0 text-[13px]">
+                <span className="flex min-w-0 items-center gap-2">
+                  <ArrowDownUp className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+                  <span className="sr-only">{t("explore.sort")}: </span>
+                  <SelectValue className="truncate" />
+                </span>
+              </SelectTrigger>
+              <SelectContent>
+                {SORTS.map((item) => (
+                  <SelectItem key={item} value={item}>
+                    {t(`explore.sort.${item}` as TranslationKey)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Tabs value={view} onValueChange={(value) => updateParams({ view: value === DEFAULT_VIEW ? null : value })} variant="segment">
+              <TabsList aria-label={t("explore.view")}>
+                <TabsTrigger
+                  value="list"
+                  icon={<LayoutList className="size-3.5" aria-hidden="true" />}
+                  className="gap-1.5 px-2.5 py-1 text-[12px]"
+                >
+                  {t("explore.view.list")}
+                </TabsTrigger>
+                <TabsTrigger
+                  value="grid"
+                  icon={<LayoutGrid className="size-3.5" aria-hidden="true" />}
+                  className="gap-1.5 px-2.5 py-1 text-[12px]"
+                >
+                  {t("explore.view.grid")}
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+
+            <Button
+              size="sm"
+              onClick={() => window.dispatchEvent(new CustomEvent("basics:new-note", { detail: { type } }))}
+              pressScale={0.97}
+              className="shrink-0 whitespace-nowrap min-[1280px]:ml-auto"
+            >
+              <Plus className="size-3.5" aria-hidden="true" />
+              {t("explore.newNote")}
+            </Button>
           </fieldset>
 
-          {view === "list" && rows.length > 0 ? <ListHeader sort={sort} onSort={setSort} /> : null}
+          {view === "list" && rows.length > 0 ? <ListHeader sort={sort} onSort={setSort} showSource={showSource} /> : null}
         </PageHeader>
       </Reveal>
 
@@ -592,6 +630,7 @@ interface ItemProps {
   selected: boolean;
   reduce: boolean;
   layerTitles: Map<string, string>;
+  showSource: boolean;
   onHover: () => void;
   onOpen: () => void;
 }
@@ -678,6 +717,70 @@ function LayerChips({
   );
 }
 
+/**
+ * Tag pills for one entry. Unlike layers, a tag is never truncated: a tag either reads
+ * whole or folds into `+n`, so no row ever shows a broken word like "#integrati...".
+ */
+function TagChips({ tags, className }: { tags: string[]; className: string }) {
+  const t = useT();
+  const max = Math.min(MAX_TAGS, tags.length);
+  const tagKey = tags.join("\u0000");
+  const ref = useRef<HTMLSpanElement>(null);
+  const [count, setCount] = useState(max);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `tagKey` is the tag list identity
+  useLayoutEffect(() => {
+    setCount(max);
+  }, [max, tagKey]);
+
+  // A tag that does not fit whole drops out; the remaining ones keep their full width.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `tagKey` re-measures on a new tag list
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el || count <= 0) return;
+    if (el.scrollWidth > el.clientWidth + 1) setCount(count - 1);
+  }, [count, tagKey]);
+
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    let previous = el.clientWidth;
+    const observer = new ResizeObserver(() => {
+      const width = el.clientWidth;
+      if (Math.abs(width - previous) < 1) return;
+      previous = width;
+      setCount(max);
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [max]);
+
+  const extra = tags.length - count;
+  return (
+    <span ref={ref} className={className}>
+      {tags.slice(0, count).map((tag) => (
+        <span
+          key={tag}
+          className="inline-flex h-5 shrink-0 items-center whitespace-nowrap rounded-full bg-muted px-2 font-mono text-[10px] text-muted-foreground"
+        >
+          #{tag}
+        </span>
+      ))}
+      {extra > 0 && (
+        <span
+          title={tags
+            .slice(count)
+            .map((tag) => `#${tag}`)
+            .join(", ")}
+          className="shrink-0 font-mono text-[10px] text-muted-foreground"
+        >
+          {t("explore.moreTags", { count: extra })}
+        </span>
+      )}
+    </span>
+  );
+}
+
 function AgentBadge() {
   const t = useT();
   return (
@@ -717,7 +820,7 @@ function SourceBadge({ source }: { source: string }) {
   );
 }
 
-function ListHeader({ sort, onSort }: { sort: Sort; onSort: (sort: Sort) => void }) {
+function ListHeader({ sort, onSort, showSource }: { sort: Sort; onSort: (sort: Sort) => void; showSource: boolean }) {
   const t = useT();
   const sortButton = (value: Sort, label: string, className?: string) => (
     <button
@@ -738,7 +841,7 @@ function ListHeader({ sort, onSort }: { sort: Sort; onSort: (sort: Sort) => void
     <div
       data-list-header
       className={cn(
-        LIST_GRID,
+        listGrid(showSource),
         "mt-3 h-8 border-b border-border px-3 text-[10.5px] font-medium tracking-wide text-muted-foreground uppercase",
       )}
     >
@@ -758,19 +861,19 @@ function ListHeader({ sort, onSort }: { sort: Sort; onSort: (sort: Sort) => void
         />
       </button>
       {sortButton("title", t("explore.sort.title"))}
-      <span className="truncate">{t("explore.column.id")}</span>
-      <span className="hidden min-[1440px]:block truncate">{t("explore.column.excerpt")}</span>
-      <span className="truncate">{t("explore.column.layers")}</span>
+      <span className="hidden min-[1280px]:block truncate">{t("explore.column.layers")}</span>
       <span className="hidden min-[1280px]:block truncate">{t("explore.column.tags")}</span>
-      <span className="hidden min-[1280px]:block truncate">{t("explore.column.source")}</span>
-      {sortButton("updated", t("explore.column.updated"), "hidden min-[1280px]:flex justify-end")}
+      {showSource ? (
+        <span data-column="source" className="hidden min-[1280px]:block truncate">
+          {t("explore.column.source")}
+        </span>
+      ) : null}
+      {sortButton("updated", t("explore.column.updated"), "justify-end")}
     </div>
   );
 }
 
-function ListRow({ row, index, selected, reduce, layerTitles, onHover, onOpen }: ItemProps) {
-  const t = useT();
-  const extraTags = row.tags.length - MAX_TAGS;
+function ListRow({ row, index, selected, reduce, layerTitles, showSource, onHover, onOpen }: ItemProps) {
   return (
     <button
       id={`note-row-${index}`}
@@ -782,9 +885,10 @@ function ListRow({ row, index, selected, reduce, layerTitles, onHover, onOpen }:
       tabIndex={-1}
       onMouseEnter={onHover}
       onClick={onOpen}
+      title={row.id}
       className={cn(
-        LIST_GRID,
-        "relative h-10 w-full scroll-mt-32 scroll-mb-24 rounded-lg border-b border-border/40 px-3 text-left outline-none last:border-b-0",
+        listGrid(showSource),
+        "group/row relative h-10 w-full scroll-mt-32 scroll-mb-24 rounded-lg border-b border-border/40 px-3 text-left outline-none last:border-b-0",
       )}
     >
       {selected && (
@@ -796,30 +900,28 @@ function ListRow({ row, index, selected, reduce, layerTitles, onHover, onOpen }:
         />
       )}
       <span aria-hidden="true" className="relative h-5 w-[3px] rounded-full" style={{ backgroundColor: typeColor(row.type) }} />
-      <span className="relative min-w-0 truncate text-[13px] font-medium">{row.title}</span>
-      <span className="relative min-w-0 truncate font-mono text-[11px] text-muted-foreground">{row.id}</span>
-      <span className="relative hidden min-w-0 truncate text-[12px] text-muted-foreground min-[1440px]:block">{row.excerpt}</span>
-      <LayerChips layers={row.layers} layerTitles={layerTitles} className="relative flex min-w-0 items-center gap-1 overflow-hidden" />
-      <span className="relative hidden min-w-0 items-center gap-1 overflow-hidden min-[1280px]:flex">
-        {row.tags.slice(0, MAX_TAGS).map((tag) => (
-          <span
-            key={tag}
-            className="inline-flex h-5 max-w-28 shrink-0 items-center truncate rounded-full bg-muted px-2 font-mono text-[10px] text-muted-foreground"
-          >
-            #{tag}
-          </span>
-        ))}
-        {extraTags > 0 && (
-          <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{t("explore.moreTags", { count: extraTags })}</span>
-        )}
+      {/* The ID is not a column any more, but it stays one hover or focus away. */}
+      <span className="relative flex min-w-0 items-baseline gap-2">
+        <span className="min-w-0 truncate text-[13px] font-medium">{row.title}</span>
+        <span className="hidden min-w-0 shrink-0 truncate font-mono text-[10px] text-muted-foreground group-hover/row:inline group-focus-visible/row:inline">
+          {row.id}
+        </span>
       </span>
-      <span className="relative hidden min-w-0 items-center min-[1280px]:flex">
-        <SourceBadge source={row.source} />
-      </span>
+      <LayerChips
+        layers={row.layers}
+        layerTitles={layerTitles}
+        className="relative hidden min-w-0 items-center gap-1 overflow-hidden min-[1280px]:flex"
+      />
+      <TagChips tags={row.tags} className="relative hidden min-w-0 items-center gap-1 overflow-hidden min-[1280px]:flex" />
+      {showSource ? (
+        <span data-column="source" className="relative hidden min-w-0 items-center min-[1280px]:flex">
+          <SourceBadge source={row.source} />
+        </span>
+      ) : null}
       <time
         dateTime={row.updated}
         title={row.updated}
-        className="relative hidden min-w-0 truncate text-right font-mono text-[11px] text-muted-foreground min-[1280px]:block"
+        className="relative min-w-0 truncate text-right font-mono text-[11px] text-muted-foreground"
       >
         {row.updated ? formatCompactRelativeTime(row.updated) : "—"}
       </time>

@@ -1,13 +1,13 @@
-import type { ApproveAllRequest, NoteData } from "@marcozvd/basics-core";
+import type { ApproveAllRequest, NoteData, ProposalSummary } from "@marcozvd/basics-core";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Inbox as InboxIcon, Package } from "lucide-react";
+import { Inbox as InboxIcon, LoaderCircle, Package } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Link, useMatch, useNavigate, useSearchParams } from "react-router";
-import { ApprovalCard } from "@/components/agents/approval-card";
 import { AnimatedNumber } from "@/components/motion/animated-number";
 import { Button } from "@/components/motion/button/base";
 import { CenterMorphModal, CenterMorphModalContent } from "@/components/motion/center-morph-modal";
+import { Checkbox } from "@/components/motion/checkbox";
 import { Tabs, TabsList, TabsTrigger } from "@/components/motion/tabs";
 import { PAGE_SECTIONS, Page, Reveal } from "@/components/page";
 import { PageHeader } from "@/components/page-header";
@@ -18,12 +18,14 @@ import { type TranslationKey, useI18n } from "@/i18n";
 import { agentColor, agentInitial } from "@/lib/agent-color";
 import { ApiRequestError, approveAllProposals, approveProposal, rejectAllProposals, rejectProposal } from "@/lib/api";
 import { EASE_OUT, SPRING_LAYOUT } from "@/lib/ease";
+import { useIntro } from "@/lib/intro";
 import { groupPackProposals, packProposer } from "@/lib/packs";
 import { useFirstPaint, useProgressiveCount } from "@/lib/progressive";
 import { useInbox, useProposal, useStats } from "@/lib/queries";
 import { formatRelativeTime } from "@/lib/relative-time";
 import { useReturnFocus } from "@/lib/return-focus";
 import { toast } from "@/lib/toast";
+import { cn } from "@/lib/utils";
 
 type Filter = "all" | "create" | "update";
 type ApproveAllMode = "pack" | "header" | "selection";
@@ -58,8 +60,125 @@ function useWideInbox(): boolean {
   );
 }
 
-export function InboxPage() {
+/**
+ * One compact list row: kind, title, author and age. Approve and reject live in the
+ * detail panel on wide screens (and on the proposal page when narrow), so the list
+ * can carry a whole screenful without repeating the same two buttons on every card.
+ */
+function InboxRow({
+  proposal,
+  selected,
+  busy,
+  checked,
+  selectable,
+  selectionMode,
+  selectLabel,
+  onSelectPointerDown,
+  onCheckedChange,
+  onOpen,
+}: {
+  proposal: ProposalSummary;
+  selected: boolean;
+  busy: boolean;
+  checked: boolean;
+  selectable: boolean;
+  selectionMode: boolean;
+  selectLabel: string;
+  onSelectPointerDown: (shiftKey: boolean) => void;
+  onCheckedChange: () => void;
+  onOpen: () => void;
+}) {
   const { t, language } = useI18n();
+  const reduce = useReducedMotion() ?? false;
+  const name = proposal.meta.proposed_by;
+  const pack = packProposer(name);
+  const title = proposal.title || proposal.id;
+  const action = t(proposal.meta.action === "create" ? "proposal.action.create" : "proposal.action.update");
+  const type = t(`type.${proposal.type}` as TranslationKey);
+
+  return (
+    <div
+      data-state={busy ? "submitting" : "pending"}
+      aria-busy={busy}
+      className="group/row relative rounded-xl bg-muted/30 ring-1 ring-border/70 transition-colors"
+    >
+      {selected ? (
+        <motion.span
+          layoutId="inbox-focus-ring"
+          transition={reduce ? { duration: 0 } : SPRING_LAYOUT}
+          className="pointer-events-none absolute inset-0 rounded-xl ring-2 ring-ring"
+          aria-hidden="true"
+        />
+      ) : null}
+
+      {selectable ? (
+        <span
+          className={cn(
+            "absolute top-3 left-3 z-10 transition-opacity",
+            selectionMode ? "opacity-100" : "opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100",
+          )}
+          onPointerDown={(event) => onSelectPointerDown(event.shiftKey)}
+        >
+          <Checkbox checked={checked} onCheckedChange={() => onCheckedChange()} aria-label={selectLabel} className="gap-0" />
+        </span>
+      ) : null}
+
+      <button
+        type="button"
+        data-proposal-open
+        onClick={onOpen}
+        className={cn("flex w-full min-w-0 flex-col gap-1 rounded-xl px-3 py-2.5 text-left outline-none", selectable && "pl-10")}
+      >
+        <span className="flex min-w-0 items-baseline gap-2">
+          <span className="min-w-0 flex-1 truncate text-[13px] font-medium">{title}</span>
+          <time dateTime={proposal.meta.created} title={proposal.meta.created} className="shrink-0 text-[11px] text-muted-foreground">
+            {formatRelativeTime(proposal.meta.created, language)}
+          </time>
+        </span>
+
+        <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
+          <span className="inline-flex shrink-0 items-center gap-1.5">
+            {busy ? (
+              <LoaderCircle className={cn("size-3", !reduce && "animate-spin")} aria-hidden="true" />
+            ) : (
+              <span
+                aria-hidden="true"
+                className="size-1.5 rounded-full ring-1 ring-black/10 dark:ring-white/20"
+                style={{ backgroundColor: `var(--type-${proposal.type})` }}
+              />
+            )}
+            {type}
+          </span>
+          <span aria-hidden="true" className="text-muted-foreground/50">
+            ·
+          </span>
+          <span className="shrink-0 font-medium text-foreground/80">{action}</span>
+          <span aria-hidden="true" className="text-muted-foreground/50">
+            ·
+          </span>
+          <span className="inline-flex min-w-0 items-center gap-1.5">
+            <span
+              aria-hidden="true"
+              className={cn(
+                "grid size-4 shrink-0 place-items-center rounded-md font-mono text-[9px] font-semibold",
+                pack && "bg-muted text-muted-foreground ring-1 ring-border",
+              )}
+              style={pack ? undefined : { backgroundColor: agentColor(name), color: "#111113" }}
+            >
+              {pack ? <Package className="size-2.5" /> : agentInitial(name)}
+            </span>
+            <span className="truncate">
+              {pack ? t("inbox.byPack", { name: pack.name, version: pack.version }) : t("inbox.by", { name })}
+            </span>
+          </span>
+        </span>
+      </button>
+    </div>
+  );
+}
+
+export function InboxPage() {
+  const { t } = useI18n();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   // This page can stay mounted for one render after the router enters `/inbox/:id`.
@@ -101,6 +220,10 @@ export function InboxPage() {
     () => [...(inbox.data ?? [])].sort((a, b) => createdTime(b.meta.created) - createdTime(a.meta.created)),
     [inbox.data],
   );
+
+  // An inbox with nothing to review has no data yet: its intro stays under the title (with
+  // the empty state below it) until the user dismisses it or a proposal arrives.
+  const intro = useIntro("inbox", inbox.isSuccess ? proposals.length > 0 : true);
 
   // A `?pack=` filter shows only proposals proposed by that pack, so links like
   // "Review in Inbox" from Home land on exactly the right proposals.
@@ -588,7 +711,9 @@ export function InboxPage() {
               ) : null}
             </span>
           }
-          description={t("inbox.intro")}
+          description={intro.showIntro ? t("inbox.intro") : undefined}
+          hint={intro.showIntro ? undefined : t("inbox.intro")}
+          onDismissDescription={intro.showIntro ? intro.dismiss : undefined}
           action={
             <div className="flex flex-wrap items-center gap-2">
               {selectionActive ? (
@@ -705,9 +830,6 @@ export function InboxPage() {
                     {visible.slice(0, visibleWindow).map((proposal, index) => {
                       const busy =
                         (approve.isPending && approve.variables === proposal.id) || (reject.isPending && reject.variables === proposal.id);
-                      const typeLabel = t(`type.${proposal.type}` as TranslationKey);
-                      const name = proposal.meta.proposed_by;
-                      const pack = packProposer(name);
                       return (
                         <motion.div
                           key={proposal.id}
@@ -733,33 +855,12 @@ export function InboxPage() {
                           onKeyDown={(event) => onCardKeyDown(event, index)}
                           className="min-w-0"
                         >
-                          <ApprovalCard
-                            title={proposal.title || proposal.id}
-                            subtitle={proposal.id}
-                            actionLabel={t(proposal.meta.action === "create" ? "proposal.action.create" : "proposal.action.update")}
-                            action={proposal.meta.action}
-                            typeLabel={typeLabel}
-                            typeColor={`var(--type-${proposal.type})`}
-                            agentName={pack ? t("inbox.byPack", { name: pack.name, version: pack.version }) : t("inbox.by", { name })}
-                            agentInitial={agentInitial(name)}
-                            agentColor={agentColor(name)}
-                            agentForeground="#111113"
-                            agentKind={pack ? "pack" : "agent"}
-                            reason={proposal.meta.reason}
-                            time={
-                              <time dateTime={proposal.meta.created} title={proposal.meta.created}>
-                                {formatRelativeTime(proposal.meta.created, language)}
-                              </time>
-                            }
-                            status={busy ? "submitting" : "pending"}
+                          <InboxRow
+                            proposal={proposal}
                             selected={index === selected}
                             busy={busy}
-                            approveLabel={t("proposal.approve")}
-                            rejectLabel={t("proposal.reject")}
-                            rejectConfirmLabel={t("proposal.rejectConfirm")}
-                            rejectArmed={armed === proposal.id}
-                            selectable
                             checked={picked.has(proposal.id)}
+                            selectable
                             selectionMode={selectionActive}
                             selectLabel={t("inbox.selectProposal", { title: proposal.title || proposal.id })}
                             onSelectPointerDown={(shiftKey) => {
@@ -767,8 +868,6 @@ export function InboxPage() {
                             }}
                             onCheckedChange={() => togglePick(proposal.id, shiftPick.current)}
                             onOpen={() => open(proposal.id)}
-                            onApprove={() => approve.mutate(proposal.id)}
-                            onReject={() => requestReject(proposal.id)}
                           />
                         </motion.div>
                       );

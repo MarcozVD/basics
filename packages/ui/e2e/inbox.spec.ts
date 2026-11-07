@@ -92,18 +92,45 @@ test("lists and approves a proposal from the inbox", async ({ page }) => {
   await expect(page.locator("main aside")).toHaveCount(0);
 });
 
-test("approves a proposal directly from the list card", async ({ page }) => {
-  writeProposal("svelte", "Svelte", "Compiler-first UI framework for the list approval flow.");
+test("approves a proposal from the detail panel instead of the list", async ({ page }) => {
+  writeProposal("svelte", "Svelte", "Compiler-first UI framework for the detail approval flow.");
 
   await page.goto("/inbox");
+  const card = page.locator('[data-proposal-id="svelte"]');
   await expect(page.getByRole("button", { name: /svelte/i })).toBeVisible();
+  // The row carries no actions of its own; selecting it fills the detail panel where they live.
+  await expect(card.getByRole("button", { name: "Approve", exact: true })).toHaveCount(0);
 
-  await page.locator('[data-proposal-id="svelte"]').getByRole("button", { name: "Approve", exact: true }).click();
+  await page.getByRole("button", { name: /svelte/i }).click();
+  await expect(page).toHaveURL(/\/inbox\?p=svelte$/);
+  const detail = page.locator('aside[aria-label="Inbox"]');
+  await expect(detail).toContainText("Compiler-first UI framework for the detail approval flow.");
+  await detail.getByRole("button", { name: "Approve", exact: true }).click();
 
   await expect(page.getByText(/Nothing to review yet/)).toBeVisible();
   // The empty list drops the stale selection instead of deep-linking to a proposal that no longer exists.
   await expect(page).toHaveURL(/\/inbox$/);
   await expect(page.getByText("Approved", { exact: true })).toBeVisible();
+});
+
+test("a narrow inbox keeps the actions on the proposal page", async ({ page }) => {
+  writeProposal("narrow", "Narrow proposal", "Actions belong to the proposal page on a phone.");
+
+  try {
+    await page.setViewportSize({ width: 390, height: 800 });
+    await page.goto("/inbox");
+
+    const card = page.locator('[data-proposal-id="narrow"]');
+    await expect(card).toBeVisible();
+    // The narrow list keeps its rows to kind, title, author and age.
+    await expect(card.getByRole("button", { name: "Approve", exact: true })).toHaveCount(0);
+
+    await card.getByRole("button", { name: /Narrow proposal/ }).click();
+    await expect(page).toHaveURL(/\/inbox\/narrow$/);
+    await expect(page.getByRole("button", { name: "Approve", exact: true })).toBeVisible();
+  } finally {
+    fs.rmSync(path.join(vaultPath(), "inbox", "narrow.md"), { force: true });
+  }
 });
 
 test("shows a conflict toast when approving a proposal whose note changed", async ({ page }) => {

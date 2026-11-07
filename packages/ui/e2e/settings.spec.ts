@@ -56,6 +56,24 @@ test("language and theme save from General without a Save button", async ({ page
   await expect(page.getByText("basics config set vault")).toBeVisible();
 });
 
+test("the Navigation choice sits on the same row as its label", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 820 });
+  await page.goto("/settings");
+
+  const label = page.getByText("Navigation", { exact: true });
+  const group = page.getByRole("group", { name: "Navigation" });
+  await expect(group).toBeVisible();
+
+  const [labelBox, groupBox] = await Promise.all([label.boundingBox(), group.boundingBox()]);
+  expect(labelBox).not.toBeNull();
+  expect(groupBox).not.toBeNull();
+
+  // Same row: the control starts beside the label, not on the line below it.
+  expect(groupBox!.y).toBeLessThan(labelBox!.y + 30);
+  // Aligned right: the control clears the label text and its description column.
+  expect(groupBox!.x).toBeGreaterThan(labelBox!.x + 200);
+});
+
 test("Agents lists every client and connects, then disconnects, Cursor", async ({ page }) => {
   await page.goto("/settings?section=agents");
   await expect(page.getByRole("heading", { name: "Agents", level: 2 })).toBeVisible();
