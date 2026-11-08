@@ -15,7 +15,7 @@ import { PageHeader } from "@/components/page-header";
 import { ErrorState, Loading } from "@/components/state";
 import { type TranslationKey, useI18n } from "@/i18n";
 import { agentColor, agentInitial } from "@/lib/agent-color";
-import { ApiRequestError, addPack, approveProposal, installPack, type Language, rejectProposal } from "@/lib/api";
+import { ApiRequestError, addPack, installPack, type Language, rejectProposal } from "@/lib/api";
 import { SPRING_LAYOUT } from "@/lib/ease";
 import { useIntentNavigate } from "@/lib/intent-navigate";
 import { useIntro } from "@/lib/intro";
@@ -475,7 +475,6 @@ interface InboxStripProps {
   error: Error | null;
   armed: string | null;
   busyId: string | undefined;
-  onApprove: (id: string) => void;
   onReject: (id: string) => void;
 }
 
@@ -484,7 +483,7 @@ interface InboxStripProps {
  * single line, otherwise it previews at most three proposal cards and links to the
  * rest. Always the same height contract so the grid below can size itself.
  */
-function InboxStrip({ proposals, total, isPending, error, armed, busyId, onApprove, onReject }: InboxStripProps) {
+function InboxStrip({ proposals, total, isPending, error, armed, busyId, onReject }: InboxStripProps) {
   const { t, language } = useI18n();
   const navigate = useIntentNavigate();
   const reduce = useReducedMotion() ?? false;
@@ -570,6 +569,7 @@ function InboxStrip({ proposals, total, isPending, error, armed, busyId, onAppro
                   agentForeground="#111113"
                   agentKind={pack ? "pack" : "agent"}
                   reason={proposal.meta.reason}
+                  reasonLines={1}
                   time={
                     <time dateTime={proposal.meta.created} title={proposal.meta.created}>
                       {formatRelativeTime(proposal.meta.created, language)}
@@ -577,12 +577,12 @@ function InboxStrip({ proposals, total, isPending, error, armed, busyId, onAppro
                   }
                   status={busy ? "submitting" : "pending"}
                   busy={busy}
-                  approveLabel={t("proposal.approve")}
+                  reviewLabel={t("proposal.review")}
                   rejectLabel={t("proposal.reject")}
                   rejectConfirmLabel={t("proposal.rejectConfirm")}
                   rejectArmed={armed === proposal.id}
                   onOpen={() => navigate(`/inbox/${encodeURIComponent(proposal.id)}`)}
-                  onApprove={() => onApprove(proposal.id)}
+                  onReview={() => navigate(`/inbox/${encodeURIComponent(proposal.id)}`)}
                   onReject={() => onReject(proposal.id)}
                 />
               </motion.div>
@@ -923,29 +923,6 @@ export function HomePage() {
     void queryClient.invalidateQueries({ queryKey: ["stats"] });
   };
 
-  const approve = useMutation({
-    mutationFn: (id: string) => approveProposal(id),
-    onSuccess: (note) => {
-      invalidate();
-      toast.success(t("proposal.approved"), {
-        label: t("inbox.openNote"),
-        onClick: () => navigate(`/notes/${encodeURIComponent(note.id)}`),
-      });
-    },
-    onError: (error) => {
-      if (error instanceof ApiRequestError && error.status === 404) {
-        invalidate();
-        toast.error(t("proposal.gone"));
-        return;
-      }
-      if (error instanceof ApiRequestError && error.status === 409) {
-        toast.error(t("inbox.approveConflict"));
-        return;
-      }
-      toast.error(t("inbox.approveFailed"));
-    },
-  });
-
   const reject = useMutation({
     mutationFn: (id: string) => rejectProposal(id),
     onSuccess: () => {
@@ -1014,12 +991,7 @@ export function HomePage() {
     return t(verbKeys[tool] ? key : "home.verb.other");
   };
 
-  const busyId =
-    approve.isPending && typeof approve.variables === "string"
-      ? approve.variables
-      : reject.isPending && typeof reject.variables === "string"
-        ? reject.variables
-        : undefined;
+  const busyId = reject.isPending && typeof reject.variables === "string" ? reject.variables : undefined;
 
   return (
     <Page className={PAGE_SECTIONS}>
@@ -1068,7 +1040,6 @@ export function HomePage() {
               error={inbox.error}
               armed={armed}
               busyId={busyId}
-              onApprove={(id) => approve.mutate(id)}
               onReject={requestReject}
             />
           </div>

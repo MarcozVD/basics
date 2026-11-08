@@ -29,7 +29,7 @@ There are no page sidebars; secondary panels are overlays closed with `Esc`. You
 
 | Screen | What it does |
 | --- | --- |
-| **Home** | One line of vault health (notes, broken links, orphans). Broken links and orphans open a list of their rows with actions when there are any: open the note, or create the missing note for a broken link. Then pending proposals you can approve inline, **Continue where you left off** (the last five notes or projects you opened on this device, topped up with recently updated notes), and agent activity: three rows, with **Show all** to expand the full day in place. A **Get set up** line shows the next open step until all three are done (install notes, connect an agent, start a project); dismiss it to hide it. An empty vault shows the starter-pack onboarding. |
+| **Home** | One line of vault health (notes, broken links, orphans). Broken links and orphans open a list of their rows with actions when there are any: open the note, or create the missing note for a broken link. Then up to three pending proposals, each with one line of its reason. Home does not approve: **Review** opens the proposal, where you approve it, and **Reject** asks you to press it again to confirm. A **Show all in Inbox** link with the count appears when there are more. Then **Continue where you left off** (the last five notes or projects you opened on this device, topped up with recently updated notes), and agent activity: three rows, with **Show all** to expand the full day in place. A **Get set up** line shows the next open step until all three are done (install notes, connect an agent, start a project); dismiss it to hide it. An empty vault shows the starter-pack onboarding. |
 | **Explore** | One toolbar row: search, a type select with counts, layer, sort, list or grid, and New note. Filters, keyboard navigation and the new-note dialog work as before. Default columns are title, layers, tags and updated. The note ID shows on row hover or focus; Source is a column only when the vault mixes agent, pack and hand-written notes. An empty vault and a search with no matches show different empty states, each with one action. |
 | **Projects** | Project notes, filtered by status with counts. Each row shows the name, status and last update, plus one muted line only when something needs attention: failing checks or missing technologies. Search and sort appear from eight projects. The status chip on each row is a menu: Active, Paused, Done or Archived. Done projects sort last and collapse into a `Done (N)` group in the All view. The empty state offers New project. |
 | **Editor** | Frontmatter form generated from the note type, Markdown body in edit / preview / split, `[[` wikilink autocomplete, connections (links, backlinks, unresolved) and a local graph. A conflict banner appears if the file changed on disk. |
@@ -51,9 +51,10 @@ navigation. If a note has unsaved changes, going back asks you first.
 
 ## Reviewing proposals
 
-Approve, reject and **Approve all** wait 6 seconds before the change is written. The toast shows **Saving in 6 s** and
-**Undo (Z)**. Press `Z` or click **Undo (Z)** to cancel: the proposal comes back and nothing is written. The selection moves
-on at once, so you can keep reviewing while a decision waits.
+In the Inbox and on a proposal page, approve, reject and **Approve all** wait 6 seconds before the change is written. The
+toast shows **Saving in 6 s** and **Undo (Z)**. Press `Z` or click **Undo (Z)** to cancel: the proposal comes back and nothing
+is written. The selection moves on at once, so you can keep reviewing while a decision waits. Reject on Home is sent at once
+after its second press, with no undo.
 
 Closing the browser tab, or reloading it, before the 6 seconds end cancels the decision too, and nothing is written. In the
 [desktop app](desktop), closing the window only hides it, so the decision still goes through; **Quit Basics** cancels it.

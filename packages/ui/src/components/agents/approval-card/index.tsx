@@ -26,11 +26,16 @@ export interface ApprovalCardProps {
   /** Packs get a neutral package glyph instead of the proposal author's letter. */
   agentKind?: "agent" | "pack";
   reason: string;
+  /** Home shows one clamped reason line; the Inbox keeps two. */
+  reasonLines?: 1 | 2;
   time: ReactNode;
   status?: ApprovalCardStatus;
   selected?: boolean;
   busy?: boolean;
-  approveLabel: ReactNode;
+  /** Primary action label when the card approves. Omit when it reviews instead. */
+  approveLabel?: ReactNode;
+  /** When present, the primary action opens the proposal for review instead of approving it. */
+  reviewLabel?: ReactNode;
   rejectLabel: ReactNode;
   rejectConfirmLabel: ReactNode;
   rejectArmed?: boolean;
@@ -45,6 +50,7 @@ export interface ApprovalCardProps {
   onSelectPointerDown?: (shiftKey: boolean) => void;
   onOpen?: () => void;
   onApprove?: () => void;
+  onReview?: () => void;
   onReject?: () => void;
   className?: string;
 }
@@ -79,11 +85,13 @@ export function ApprovalCard({
   agentForeground,
   agentKind = "agent",
   reason,
+  reasonLines = 2,
   time,
   status = "pending",
   selected = false,
   busy = false,
   approveLabel,
+  reviewLabel,
   rejectLabel,
   rejectConfirmLabel,
   rejectArmed = false,
@@ -95,6 +103,7 @@ export function ApprovalCard({
   onSelectPointerDown,
   onOpen,
   onApprove,
+  onReview,
   onReject,
   className,
 }: ApprovalCardProps) {
@@ -180,7 +189,12 @@ export function ApprovalCard({
           <span className="min-w-0 truncate">{agentName}</span>
         </div>
 
-        <p className="line-clamp-2 text-xs leading-5 text-muted-foreground">{reason}</p>
+        <p
+          data-proposal-reason
+          className={cn("text-xs leading-5 text-muted-foreground", reasonLines === 1 ? "line-clamp-1" : "line-clamp-2")}
+        >
+          {reason}
+        </p>
       </button>
 
       <div className="flex items-center justify-end gap-1.5 px-3 pb-3">
@@ -194,8 +208,8 @@ export function ApprovalCard({
         >
           {rejectArmed ? rejectConfirmLabel : rejectLabel}
         </Button>
-        <Button variant="primary" size="sm" pressScale={0.97} disabled={busy} onClick={onApprove} className="h-7 px-3">
-          {approveLabel}
+        <Button variant="primary" size="sm" pressScale={0.97} disabled={busy} onClick={onReview ?? onApprove} className="h-7 px-3">
+          {onReview ? (reviewLabel ?? approveLabel) : approveLabel}
         </Button>
       </div>
     </motion.div>
