@@ -1,7 +1,7 @@
 {
   "name": "basics-desktop",
   "private": true,
-  "version": "1.6.0",
+  "version": "1.6.1",
   "description": "Tauri desktop shell that runs the basics server as a Node sidecar",
   "type": "module",
   "scripts": {
