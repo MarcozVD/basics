@@ -1,12 +1,13 @@
 import type { ApproveAllRequest, ApproveAllResponse, ProposalSummary, RejectAllResponse } from "@marcozvd/basics-core";
 import { Inbox as InboxIcon, LoaderCircle, Package } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { type KeyboardEvent as ReactKeyboardEvent, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Link, useMatch } from "react-router";
 import { AnimatedNumber } from "@/components/motion/animated-number";
 import { Button } from "@/components/motion/button/base";
 import { CenterMorphModal, CenterMorphModalContent } from "@/components/motion/center-morph-modal";
 import { Checkbox } from "@/components/motion/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/motion/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/motion/tabs";
 import { PAGE_SECTIONS, Page, Reveal } from "@/components/page";
 import { PageHeader } from "@/components/page-header";
@@ -29,6 +30,9 @@ import { cn } from "@/lib/utils";
 
 type Filter = "all" | "create" | "update";
 type RejectMode = "all" | "selection";
+
+/** Sentinel for the agent select's "all agents" row; no `proposed_by` uses it. */
+const ALL_AGENTS = "__all__";
 
 const README_PROPOSE = "https://marcozvd.github.io/basics/guide/mcp-clients.html";
 const WIDE_QUERY = "(min-width: 1280px)";
@@ -188,6 +192,7 @@ export function InboxPage() {
   const stats = useStats();
   const vaultEmpty = stats.data?.total === 0;
   const [filter, setFilter] = useState<Filter>("all");
+  const [agent, setAgent] = useState(ALL_AGENTS);
   const [selected, setSelected] = useState(0);
   const [armed, setArmed] = useState<string | null>(null);
   const armTimer = useRef<number | undefined>(undefined);
@@ -229,32 +234,63 @@ export function InboxPage() {
     [proposals, packFilter],
   );
 
+  // Agents are the distinct `proposed_by` values pending in the current pack
+  // scope. The select only appears when there is more than one to choose from.
+  const agents = useMemo(
+    () => [...new Set(packFiltered.map((proposal) => proposal.meta.proposed_by))].sort((a, b) => a.localeCompare(b)),
+    [packFiltered],
+  );
+  const agentFiltered = useMemo(
+    () => (agent === ALL_AGENTS ? packFiltered : packFiltered.filter((proposal) => proposal.meta.proposed_by === agent)),
+    [agent, packFiltered],
+  );
+
+  useEffect(() => {
+    if (agent === ALL_AGENTS) return;
+    if (agents.length <= 1 || !agents.includes(agent)) setAgent(ALL_AGENTS);
+  }, [agent, agents]);
+
   const counts = useMemo(() => {
-    const create = packFiltered.filter((proposal) => proposal.meta.action === "create").length;
-    return { all: packFiltered.length, create, update: packFiltered.length - create };
-  }, [packFiltered]);
+    const create = agentFiltered.filter((proposal) => proposal.meta.action === "create").length;
+    return { all: agentFiltered.length, create, update: agentFiltered.length - create };
+  }, [agentFiltered]);
 
   const visible = useMemo(
-    () => (filter === "all" ? packFiltered : packFiltered.filter((proposal) => proposal.meta.action === filter)),
-    [filter, packFiltered],
+    () => (filter === "all" ? agentFiltered : agentFiltered.filter((proposal) => proposal.meta.action === filter)),
+    [filter, agentFiltered],
   );
   // Long inboxes mount the first screenful, then fill in idle slices.
   const firstPaint = useFirstPaint();
-  const renderLimit = useProgressiveCount(visible.length, `${filter}|${packFilter ?? ""}`, {
+  const renderLimit = useProgressiveCount(visible.length, `${filter}|${packFilter ?? ""}|${agent}`, {
     active: firstPaint,
     initial: 6,
     chunk: 10,
   });
   const visibleWindow = firstPaint ? Math.max(renderLimit, selected + 1) : 0;
   const visibleIds = useMemo(() => new Set(visible.map((proposal) => proposal.id)), [visible]);
+
+  /** Focus the visible row at `index`, after React has painted any new rows. */
+  const focusRow = useCallback((index: number) => {
+    const row = listRef.current?.querySelector<HTMLButtonElement>(`#proposal-card-${index} [data-proposal-open]`);
+    row?.focus({ preventScroll: true });
+  }, []);
+
+  const moveSelection = (next: number) => {
+    const bounded = Math.max(0, Math.min(next, visible.length - 1));
+    setSelected(bounded);
+    requestAnimationFrame(() => focusRow(bounded));
+  };
   // The selection only ever counts proposals that are still visible: it is not stored
   // in the URL, and a filter change drops the ids it hides.
   const pickedVisible = useMemo(() => visible.filter((proposal) => picked.has(proposal.id)), [visible, picked]);
   const pickedIds = pickedVisible.map((proposal) => proposal.id);
   const selectionActive = pickedVisible.length > 0;
   const approveAllCount = visible.length;
-  const showApproveAll = approveAllCount >= 2;
-  const showRejectAll = approveAllCount >= 2;
+  // Keep both bulk buttons mounted at one pending: hiding them shifted the
+  // filter tabs by a few pixels. They disable instead.
+  const showBulkActions = approveAllCount > 0;
+  const bulkDisabled = queueBusy || approveAllCount < 2;
+  const showAgentFilter = agents.length > 1;
 
   useEffect(() => {
     setPicked((previous) => {
@@ -264,10 +300,18 @@ export function InboxPage() {
   }, [visibleIds]);
   const approveAllRequest = (): ApproveAllRequest => {
     const request: ApproveAllRequest = {};
-    if (packFilter) request.pack = packFilter;
+    // A chosen agent is an exact `proposed_by`, so it already narrows a pack
+    // scope; the server rejects pack and agent together.
+    if (agent !== ALL_AGENTS) request.agent = agent;
+    else if (packFilter) request.pack = packFilter;
     if (filter !== "all") request.action = filter;
     return request;
   };
+
+  const approveAllLabel =
+    agent === ALL_AGENTS
+      ? t("inbox.approveAllCount", { count: approveAllCount })
+      : t("inbox.approveAllFrom", { count: approveAllCount, agent });
 
   const packGroups = useMemo(
     () =>
@@ -326,6 +370,16 @@ export function InboxPage() {
   useEffect(() => {
     document.getElementById(`proposal-card-${selected}`)?.scrollIntoView({ block: "nearest" });
   }, [selected]);
+
+  // On load the selected row takes focus, so arrows and shortcuts act on the
+  // list without a click. Never steal focus the user already moved elsewhere.
+  useEffect(() => {
+    if (detailRoute || inbox.isPending || !currentId || visibleWindow === 0) return;
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && active !== document.body && active !== document.documentElement) return;
+    const frame = requestAnimationFrame(() => focusRow(selected));
+    return () => cancelAnimationFrame(frame);
+  }, [currentId, detailRoute, inbox.isPending, selected, visibleWindow, focusRow]);
 
   useEffect(() => {
     if (editedId.current === currentId) return;
@@ -534,10 +588,10 @@ export function InboxPage() {
 
       if (event.key === "ArrowDown") {
         event.preventDefault();
-        setSelected((index) => Math.min(index + 1, visible.length - 1));
+        moveSelection(selected + 1);
       } else if (event.key === "ArrowUp") {
         event.preventDefault();
-        setSelected((index) => Math.max(index - 1, 0));
+        moveSelection(selected - 1);
       } else if (event.key === "Enter") {
         event.preventDefault();
         openFull(focused.id);
@@ -571,7 +625,7 @@ export function InboxPage() {
   const onCardKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>, index: number) => {
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
-      setSelected(Math.max(0, Math.min(index + (event.key === "ArrowDown" ? 1 : -1), visible.length - 1)));
+      moveSelection(index + (event.key === "ArrowDown" ? 1 : -1));
     }
   };
 
@@ -726,32 +780,32 @@ export function InboxPage() {
                 </section>
               ) : (
                 <>
-                  {showRejectAll ? (
+                  {showBulkActions ? (
                     <Button
                       ref={rejectAllButtonRef}
                       variant="secondary"
                       size="sm"
                       pressScale={0.97}
-                      disabled={queueBusy}
+                      disabled={bulkDisabled}
                       className="h-8 shrink-0 border-destructive/40 text-destructive"
                       onClick={() => setRejectOpen("all")}
                     >
                       {t("inbox.rejectAllCount", { count: approveAllCount })}
                     </Button>
                   ) : null}
-                  {showApproveAll ? (
+                  {showBulkActions ? (
                     <Button
                       ref={approveAllButtonRef}
                       variant="primary"
                       size="sm"
                       pressScale={0.97}
-                      disabled={queueBusy}
+                      disabled={bulkDisabled}
                       aria-haspopup="dialog"
                       aria-expanded={approveAllOpen}
                       onClick={() => setApproveAllOpen(true)}
                       className="h-8 shrink-0"
                     >
-                      {t("inbox.approveAllCount", { count: approveAllCount })}
+                      {approveAllLabel}
                     </Button>
                   ) : null}
                   <Tabs value={filter} onValueChange={(value) => setFilter(value as Filter)} variant="segment">
@@ -770,6 +824,31 @@ export function InboxPage() {
                       ))}
                     </TabsList>
                   </Tabs>
+                  {showAgentFilter ? (
+                    <Select
+                      value={agent}
+                      onValueChange={(value) => {
+                        setAgent(value);
+                        setSelected(0);
+                      }}
+                    >
+                      <SelectTrigger
+                        aria-label={t("inbox.filterAgent")}
+                        title={t("inbox.filterAgent")}
+                        className="h-8 w-40 shrink-0 rounded-lg border-border bg-card px-3 py-0 text-xs"
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="w-56">
+                        <SelectItem value={ALL_AGENTS}>{t("inbox.allAgents")}</SelectItem>
+                        {agents.map((name) => (
+                          <SelectItem key={name} value={name}>
+                            {name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : null}
                 </>
               )}
             </div>

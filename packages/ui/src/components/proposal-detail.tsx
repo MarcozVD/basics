@@ -1,6 +1,6 @@
 import type { NoteData, NoteType, ProposalDetail as Proposal } from "@marcozvd/basics-core";
 import { Check, Pencil, X } from "lucide-react";
-import { type Ref, useEffect, useState } from "react";
+import { type Ref, useEffect, useMemo, useState } from "react";
 import { DiffView } from "@/components/diff-view";
 import { AnimatedBadge } from "@/components/motion/animated-badge";
 import { Button } from "@/components/motion/button/base";
@@ -10,6 +10,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { type TranslationKey, useI18n } from "@/i18n";
 import { agentColor, agentInitial } from "@/lib/agent-color";
 import { useResolvedDockEdge } from "@/lib/navigation";
+import { type ProposalSummary, type SummaryChange, summarizeProposal } from "@/lib/proposal-summary";
+import { useLayers } from "@/lib/queries";
 import { formatRelativeTime } from "@/lib/relative-time";
 import { cn } from "@/lib/utils";
 
@@ -64,6 +66,37 @@ function Kbd({ children }: { children: string }) {
   );
 }
 
+type Translate = ReturnType<typeof useI18n>["t"];
+
+function changeText(change: SummaryChange, t: Translate): string {
+  if (change.kind === "field") return t("diff.summary.field", { field: change.field });
+  if (change.kind === "body") return t("diff.summary.body");
+
+  const first = change.values[0] ?? "";
+  const all = change.values.join(", ");
+  const one = change.values.length === 1;
+  if (change.kind === "tags") {
+    if (change.action === "add") return one ? t("diff.summary.addTag", { tag: first }) : t("diff.summary.addTags", { tags: all });
+    return one ? t("diff.summary.removeTag", { tag: first }) : t("diff.summary.removeTags", { tags: all });
+  }
+  if (change.action === "add") {
+    return one ? t("diff.summary.addSection", { section: first }) : t("diff.summary.addSections", { sections: all });
+  }
+  return one ? t("diff.summary.removeSection", { section: first }) : t("diff.summary.removeSections", { sections: all });
+}
+
+function summaryText(summary: ProposalSummary, t: Translate, language: "en" | "es"): string {
+  if (summary.create) {
+    const type = t(`type.${summary.type}` as TranslationKey).toLocaleLowerCase(language);
+    return summary.layer ? t("diff.summary.newNote", { type, layer: summary.layer }) : t("diff.summary.newNoteNoLayer", { type });
+  }
+
+  const shown = summary.changes.slice(0, 3).map((change) => changeText(change, t));
+  const more = summary.changes.length - shown.length;
+  if (more > 0) shown.push(t("diff.summary.more", { count: more }));
+  return shown.join(" · ");
+}
+
 interface ProposalDetailProps {
   proposal: Proposal;
   busy: boolean;
@@ -97,6 +130,13 @@ export function ProposalDetail({
   const dockEdge = useResolvedDockEdge();
   const title = proposal.data.title ?? proposal.id;
   const name = proposal.meta.proposed_by;
+  const layers = useLayers();
+  const layerTitles = useMemo(() => new Map((layers.data ?? []).map((layer) => [layer.id, layer.title || layer.id])), [layers.data]);
+  const summary = useMemo(
+    () => summarizeProposal(proposal.current?.data ?? null, proposal.data, proposal.current?.body ?? "", proposal.body, layerTitles),
+    [proposal, layerTitles],
+  );
+  const summaryLine = useMemo(() => summaryText(summary, t, language), [summary, t, language]);
 
   const actions = (
     <>
@@ -144,11 +184,11 @@ export function ProposalDetail({
   );
 
   return (
-    <div data-proposal-detail={proposal.id} className={cn("flex min-h-0 flex-col", panel && "h-full", className)}>
+    <div data-proposal-detail={proposal.id} className={cn("flex min-h-0 flex-col", panel ? "h-full" : "flex-1", className)}>
       <p role="status" aria-live="polite" className="sr-only">
         {armed ? t("proposal.rejectConfirmAnnounce") : ""}
       </p>
-      <header className={cn(panel && "px-4 pt-4")}>
+      <header className={cn("shrink-0", panel && "px-4 pt-4")}>
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <ActionBadge action={proposal.meta.action} />
           <TypeChip type={proposal.data.type} />
@@ -185,7 +225,17 @@ export function ProposalDetail({
         </blockquote>
       </header>
 
-      <div className={panel ? "mt-3 min-h-0 flex-1 px-4 pb-2" : "mt-4 h-[calc(100dvh-21rem)] min-h-[320px]"}>
+      {summaryLine ? (
+        <p
+          data-testid="proposal-summary"
+          className={cn("mt-3 shrink-0 truncate text-[13px] text-muted-foreground", panel && "px-4")}
+          title={summaryLine}
+        >
+          {summaryLine}
+        </p>
+      ) : null}
+
+      <div className={panel ? "mt-2 min-h-0 flex-1 px-4 pb-2" : "mt-3 min-h-0 flex-1"}>
         <DiffView before={proposal.current?.text ?? null} after={proposal.proposedText} file={proposal.id} />
       </div>
 

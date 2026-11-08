@@ -187,7 +187,7 @@ export function ProposalPage() {
   }
 
   return (
-    <Page className="pb-28">
+    <Page className="min-h-0 pb-28">
       <PageHeader back={back} />
 
       <ProposalDetail

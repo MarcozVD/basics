@@ -29,31 +29,80 @@ function pushUnchanged(rows: DiffRow[], lines: string[], left: { value: number }
 
 export type DiffSegment = { kind: "rows"; rows: DiffRow[] } | { kind: "fold"; count: number; key: number; rows: DiffRow[] };
 
+/** Lines kept around each hunk before an unchanged run collapses. */
+export const DIFF_CONTEXT = 3;
+
+/** A top-level YAML key (`use_when:`), the block start a changed line belongs to. */
+const FRONTMATTER_KEY = /^[A-Za-z_][A-Za-z0-9_-]*:(\s|$)/;
+
+function lineText(row: DiffRow): string | undefined {
+  return row.right?.text ?? row.left?.text;
+}
+
+/** Index of the closing `---` of the note frontmatter, or -1 when the diff has none. */
+function frontmatterEnd(rows: DiffRow[]): number {
+  if (rows[0]?.right?.text !== "---" && rows[0]?.left?.text !== "---") return -1;
+  for (let index = 1; index < rows.length; index++) {
+    const text = lineText(rows[index]);
+    if (text === "---") return index;
+  }
+  return -1;
+}
+
 /**
- * Fold unchanged runs longer than `threshold` lines into one segment.
- * Only equal rows are folded; changed rows always stay visible.
+ * Fold unchanged runs into one expandable segment, keeping `context` lines around
+ * every hunk. A changed frontmatter line also keeps the block's key line visible,
+ * even when more than `context` unchanged lines separate it from the hunk.
  */
-export function foldDiff(rows: DiffRow[], threshold = 6): DiffSegment[] {
+export function foldDiff(rows: DiffRow[], context = DIFF_CONTEXT): DiffSegment[] {
+  if (rows.length === 0) return [];
+
+  const visible = rows.map((row) => row.kind !== "equal");
+
+  for (let index = 0; index < rows.length; index++) {
+    if (rows[index].kind === "equal") continue;
+    for (let offset = 1; offset <= context; offset++) {
+      if (index - offset >= 0) visible[index - offset] = true;
+      if (index + offset < rows.length) visible[index + offset] = true;
+    }
+  }
+
+  const end = frontmatterEnd(rows);
+  for (let index = 1; index <= end; index++) {
+    if (rows[index].kind === "equal") continue;
+    for (let keyIndex = index - 1; keyIndex > 0; keyIndex--) {
+      if (rows[keyIndex].kind !== "equal") continue;
+      const text = lineText(rows[keyIndex]);
+      if (text === undefined || !FRONTMATTER_KEY.test(text)) continue;
+      visible[keyIndex] = true;
+      break;
+    }
+  }
+
   const segments: DiffSegment[] = [];
-  let run: DiffRow[] = [];
+  let hidden: DiffRow[] = [];
 
   const flush = () => {
-    if (run.length > threshold) {
-      const first = run[0];
-      segments.push({ kind: "fold", count: run.length, key: first?.left?.lineNumber ?? first?.right?.lineNumber ?? 0, rows: run });
-    } else if (run.length > 0) {
-      segments.push({ kind: "rows", rows: run });
-    }
-    run = [];
+    if (hidden.length === 0) return;
+    const first = hidden[0];
+    segments.push({
+      kind: "fold",
+      count: hidden.length,
+      key: first.left?.lineNumber ?? first.right?.lineNumber ?? 0,
+      rows: hidden,
+    });
+    hidden = [];
   };
 
-  for (const row of rows) {
-    if (row.kind === "equal") {
-      run.push(row);
+  for (let index = 0; index < rows.length; index++) {
+    if (!visible[index]) {
+      hidden.push(rows[index]);
       continue;
     }
     flush();
-    segments.push({ kind: "rows", rows: [row] });
+    const last = segments[segments.length - 1];
+    if (last?.kind === "rows") last.rows.push(rows[index]);
+    else segments.push({ kind: "rows", rows: [rows[index]] });
   }
   flush();
 

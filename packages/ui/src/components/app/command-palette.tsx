@@ -137,6 +137,20 @@ export function AppCommandPalette() {
     const list: PaletteItem[] = [];
     const noteById = new Map((notes.data ?? []).map((note) => [note.id, note]));
 
+    // Pending proposals open the palette: reviewing is the most common next
+    // step, and it needs one keystroke, not a search through the notes.
+    const pendingCount = inbox.data?.length ?? 0;
+    if (pendingCount > 0) {
+      list.push({
+        id: "action:review-next",
+        group: t("palette.group.review"),
+        label: t("palette.action.reviewNext", { count: pendingCount }),
+        keywords: ["inbox", "pending", "proposal", "review"],
+        icon: InboxIcon,
+        onSelect: () => navigate("/inbox"),
+      });
+    }
+
     if (query.trim()) {
       const noteItems = [...(notes.data ?? [])]
         .sort((a, b) => (a.title || a.id).localeCompare(b.title || b.id) || a.id.localeCompare(b.id))
