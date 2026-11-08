@@ -1,5 +1,17 @@
 # @marcozvd/basics
 
+## 1.6.0
+
+### Minor Changes
+
+- 77761a3: Replace the floating Dock with a navigation sidebar and a single content panel. The sidebar holds the same screens, with an expanded width, an icon rail and a drawer on narrow windows, and Ctrl/Cmd+B toggles it. Settings > General > Navigation can switch to a floating bar that you drag to any edge, with arrow keys for keyboard users. The desktop app shows a thin title strip with the window controls. Language and theme move into Settings only.
+- afb40ab: Add back navigation. The note and proposal views get a Back control that names the page you came from. Alt+Left, Alt+Right and the mouse side buttons move through the pages you visited, and each page returns with its scroll position and filters restored.
+- b4b7f28: Simplify Home, Projects, Recommend, Inbox, Explore, Skills and Settings to one main task per screen. Home opens with one line of vault health, then waiting proposals, Continue where you left off (your recent notes and projects), three activity rows with Show all, and a single Get set up line while steps are open. Projects rows show the name, status and update time, and add a line only when checks fail or technologies are missing. Recommend puts the prompt first and folds the layer options into one line. Inbox rows show the type, title, action, author and age; the reason and the Approve, Edit and approve, and Reject actions open in the detail panel, or on the proposal page below 1280px. Explore keeps its search, type, layer, sort, view and New note in one toolbar row; its default columns are title, layers, tags and updated, the note ID appears on hover or focus, and Source appears only when the vault mixes agent, pack and hand-written notes. Skills has one filter row with an agent select, and each skill's area control sits in its Details. A page's intro sits under its title until the page has content, then moves behind a ? in the header; each intro can be dismissed. The note title wraps on narrow windows instead of being clipped.
+
+### Patch Changes
+
+- @marcozvd/basics-core@1.6.0
+
 ## 1.5.0
 
 ### Minor Changes
