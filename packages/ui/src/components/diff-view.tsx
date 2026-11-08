@@ -7,6 +7,7 @@ import { alignDiff, type DiffLine, type DiffRow, type DiffSegment, foldDiff } fr
 import { cn } from "@/lib/utils";
 
 type Tone = "add" | "remove" | undefined;
+type Mark = "+" | "-" | " ";
 
 const toneClass: Record<Exclude<Tone, undefined>, string> = {
   add: "bg-emerald-500/10 dark:bg-emerald-400/10",
@@ -18,7 +19,7 @@ const gutterClass: Record<Exclude<Tone, undefined>, string> = {
   remove: "text-red-700 dark:text-red-300",
 };
 
-function SideCell({ line, tone }: { line: DiffLine | null; tone: Tone }) {
+function SideCell({ line, tone, mark }: { line: DiffLine | null; tone: Tone; mark: Mark }) {
   return (
     <div
       className={cn(
@@ -26,6 +27,9 @@ function SideCell({ line, tone }: { line: DiffLine | null; tone: Tone }) {
         tone ? toneClass[tone] : line ? undefined : "bg-muted/30",
       )}
     >
+      <span aria-hidden="true" data-diff-mark={mark} className={cn("w-3 shrink-0 select-none text-center", tone && gutterClass[tone])}>
+        {mark}
+      </span>
       <span className={cn("w-9 shrink-0 select-none text-right text-[11px] tabular-nums text-muted-foreground", tone && gutterClass[tone])}>
         {line?.lineNumber ?? ""}
       </span>
@@ -34,12 +38,14 @@ function SideCell({ line, tone }: { line: DiffLine | null; tone: Tone }) {
   );
 }
 
-function UnifiedLine({ line, mark, tone }: { line: DiffLine | null; mark: " " | "+" | "−"; tone: Tone }) {
+function UnifiedLine({ line, mark, tone }: { line: DiffLine | null; mark: Mark; tone: Tone }) {
   return (
     <div
       className={cn("flex min-h-5 gap-2 border-b border-border/40 px-2 py-0.5 font-mono text-[12px] leading-5", tone && toneClass[tone])}
     >
-      <span className={cn("w-3 shrink-0 select-none text-center", tone && gutterClass[tone])}>{mark}</span>
+      <span aria-hidden="true" data-diff-mark={mark} className={cn("w-3 shrink-0 select-none text-center", tone && gutterClass[tone])}>
+        {mark}
+      </span>
       <span className="w-9 shrink-0 select-none text-right text-[11px] tabular-nums text-muted-foreground">{line?.lineNumber ?? ""}</span>
       <span className="min-w-0 flex-1 whitespace-pre-wrap break-words">{line?.text ?? "\u00a0"}</span>
     </div>
@@ -58,7 +64,7 @@ function FoldButton({ count, expanded, onToggle }: { count: number; expanded: bo
       <motion.span animate={{ rotate: expanded ? 180 : 0 }} aria-hidden="true">
         <ChevronDown className="size-3" />
       </motion.span>
-      {t("diff.unchanged", { count })}
+      {t(count === 1 ? "diff.unchangedOne" : "diff.unchanged", { count })}
     </button>
   );
 }
@@ -98,12 +104,14 @@ function SplitRows({
 function SplitRow({ row }: { row: DiffRow }) {
   const leftTone: Tone = row.kind === "remove" || row.kind === "change" ? "remove" : undefined;
   const rightTone: Tone = row.kind === "add" || row.kind === "change" ? "add" : undefined;
+  const leftMark: Mark = row.left && leftTone ? "-" : " ";
+  const rightMark: Mark = row.right && rightTone ? "+" : " ";
   return (
     <div className="grid grid-cols-2 border-b border-border/30 last:border-b-0">
       <div className="border-r border-border/40">
-        <SideCell line={row.left} tone={leftTone} />
+        <SideCell line={row.left} tone={leftTone} mark={leftMark} />
       </div>
-      <SideCell line={row.right} tone={rightTone} />
+      <SideCell line={row.right} tone={rightTone} mark={rightMark} />
     </div>
   );
 }
@@ -131,7 +139,7 @@ function UnifiedRows({
           return segment.rows.map((row) => (
             <UnifiedLine
               key={`fold-${segment.key}-${row.right?.lineNumber ?? row.left?.lineNumber ?? "x"}`}
-              line={row.right}
+              line={row.right ?? row.left}
               mark=" "
               tone={undefined}
             />
@@ -142,13 +150,13 @@ function UnifiedRows({
             return [<UnifiedLine key={`equal-${row.right.lineNumber}`} line={row.right} mark=" " tone={undefined} />];
           }
           if (row.kind === "remove") {
-            return [<UnifiedLine key={`remove-${row.left.lineNumber}`} line={row.left} mark="−" tone="remove" />];
+            return [<UnifiedLine key={`remove-${row.left.lineNumber}`} line={row.left} mark="-" tone="remove" />];
           }
           if (row.kind === "add") {
             return [<UnifiedLine key={`add-${row.right.lineNumber}`} line={row.right} mark="+" tone="add" />];
           }
           return [
-            <UnifiedLine key={`change-${row.left.lineNumber}-left`} line={row.left} mark="−" tone="remove" />,
+            <UnifiedLine key={`change-${row.left.lineNumber}-left`} line={row.left} mark="-" tone="remove" />,
             <UnifiedLine key={`change-${row.right.lineNumber}-right`} line={row.right} mark="+" tone="add" />,
           ];
         });
@@ -159,8 +167,11 @@ function UnifiedRows({
 
 export function DiffView({ before, after, file }: { before: string | null; after: string; file?: string }) {
   const t = useT();
+  // A create has no current note: split would only paint an empty column.
+  const create = before === null;
   // Side-by-side needs room; phones start on the unified view.
-  const [unified, setUnified] = useState(() => typeof window !== "undefined" && window.innerWidth < 640);
+  const [unifiedChoice, setUnifiedChoice] = useState(() => typeof window !== "undefined" && window.innerWidth < 640);
+  const unified = create || unifiedChoice;
   const [expanded, setExpanded] = useState<ReadonlySet<number>>(new Set());
   const rows = useMemo(() => alignDiff(before, after), [before, after]);
   const segments = useMemo(() => foldDiff(rows), [rows]);
@@ -177,23 +188,29 @@ export function DiffView({ before, after, file }: { before: string | null; after
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-border bg-muted/30">
+    <div
+      data-testid="diff-view"
+      data-mode={unified ? "unified" : "split"}
+      className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-border bg-muted/30"
+    >
       <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border bg-muted/25 px-3 py-1.5">
         <div className="flex min-w-0 items-center gap-2">
           <span className="truncate font-mono text-[11px] text-muted-foreground">{file ?? t("diff.proposed")}</span>
           <span className="shrink-0 font-mono text-[11px] tabular-nums text-emerald-700 dark:text-emerald-300">+{additions}</span>
-          <span className="shrink-0 font-mono text-[11px] tabular-nums text-red-700 dark:text-red-300">−{deletions}</span>
+          <span className="shrink-0 font-mono text-[11px] tabular-nums text-red-700 dark:text-red-300">-{deletions}</span>
         </div>
-        <Tabs value={unified ? "unified" : "split"} onValueChange={(value) => setUnified(value === "unified")} variant="segment">
-          <TabsList>
-            <TabsTrigger value="split" className="px-2.5 py-1 text-[11px]">
-              {t("diff.sideBySide")}
-            </TabsTrigger>
-            <TabsTrigger value="unified" className="px-2.5 py-1 text-[11px]">
-              {t("diff.unified")}
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
+        {create ? null : (
+          <Tabs value={unified ? "unified" : "split"} onValueChange={(value) => setUnifiedChoice(value === "unified")} variant="segment">
+            <TabsList>
+              <TabsTrigger value="split" className="px-2.5 py-1 text-[11px]">
+                {t("diff.sideBySide")}
+              </TabsTrigger>
+              <TabsTrigger value="unified" className="px-2.5 py-1 text-[11px]">
+                {t("diff.unified")}
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+        )}
       </div>
 
       <section aria-label={t("diff.proposed")} className="min-h-0 flex-1 overflow-auto font-mono text-[12px]">
