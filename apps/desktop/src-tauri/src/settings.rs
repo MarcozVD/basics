@@ -91,6 +91,14 @@ pub fn launched_at_login<I: IntoIterator<Item = String>>(args: I) -> bool {
     args.into_iter().any(|arg| arg == MINIMIZED_ARG)
 }
 
+/// True when a second launch should bring the running window to the front. Windows can
+/// run the login item twice (an elevated run of the app registers it under HKLM as well
+/// as HKCU), and the second copy only reaches the running app through single-instance:
+/// a login launch must never surface the window, so only a launch by hand shows it.
+pub fn second_launch_shows_window<I: IntoIterator<Item = String>>(args: I) -> bool {
+    !launched_at_login(args)
+}
+
 /// True when this launch keeps the window hidden. `at_login` is only true for a launch
 /// from the login item, so `Login` hides there and `Always` hides on every launch.
 pub fn start_hidden(settings: &DesktopSettings, at_login: bool) -> bool {
@@ -225,6 +233,13 @@ mod tests {
         assert!(launched_at_login(args));
         assert!(!launched_at_login(["C:\\Basics\\Basics.exe"].map(str::to_owned)));
         assert!(!launched_at_login(["--minimized-later"].map(str::to_owned)));
+    }
+
+    #[test]
+    fn a_second_login_launch_keeps_the_window_hidden() {
+        let login = ["C:\\Basics\\Basics.exe", "--minimized"].map(str::to_owned);
+        assert!(!second_launch_shows_window(login));
+        assert!(second_launch_shows_window(["C:\\Basics\\Basics.exe"].map(str::to_owned)));
     }
 
     #[test]
