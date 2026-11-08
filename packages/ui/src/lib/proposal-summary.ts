@@ -67,28 +67,29 @@ function addedValues(before: readonly string[], after: readonly string[]): strin
   return after.filter((value) => !existing.has(value));
 }
 
-function humanize(value: string): string {
-  return value
-    .split(/[-_\s]+/)
-    .filter(Boolean)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(" ");
-}
-
-function createLayer(data: NoteData): string | undefined {
+/** The layer note's own title, or the raw id when the vault has no layer data. */
+function createLayer(data: NoteData, layerTitles?: ReadonlyMap<string, string>): string | undefined {
   if (data.type !== "tech") return undefined;
   const layer = data.layer;
   const first = Array.isArray(layer) ? layer[0] : layer;
-  return first ? humanize(first) : undefined;
+  if (!first) return undefined;
+  return layerTitles?.get(first) || first;
 }
 
 /**
  * Describe a proposal from its parsed data, never by re-reading the serialized text.
  * The caller caps the list; the order is what reads best: tags, sections, fields, body.
+ * `layerTitles` maps layer ids to their note titles so Spanish vaults read "Datos".
  */
-export function summarizeProposal(before: NoteData | null, after: NoteData, beforeBody = "", afterBody = ""): ProposalSummary {
+export function summarizeProposal(
+  before: NoteData | null,
+  after: NoteData,
+  beforeBody = "",
+  afterBody = "",
+  layerTitles?: ReadonlyMap<string, string>,
+): ProposalSummary {
   if (!before) {
-    return { create: true, type: after.type, layer: createLayer(after), changes: [] };
+    return { create: true, type: after.type, layer: createLayer(after, layerTitles), changes: [] };
   }
 
   const changes: SummaryChange[] = [];

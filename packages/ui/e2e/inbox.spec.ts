@@ -4,7 +4,7 @@ import path from "node:path";
 import { expect, test } from "@playwright/test";
 import { vaultPath } from "./helpers";
 
-function writeProposal(id: string, title: string, body: string, created = new Date().toISOString()) {
+function writeProposal(id: string, title: string, body: string, created = new Date().toISOString(), agent = "e2e") {
   const vault = vaultPath();
   const inboxFile = path.join(vault, "inbox", `${id}.md`);
   fs.rmSync(path.join(vault, "tech", `${id}.md`), { force: true });
@@ -21,7 +21,7 @@ function writeProposal(id: string, title: string, body: string, created = new Da
       "source: agent:e2e",
       "proposal:",
       "  action: create",
-      "  proposed_by: e2e",
+      `  proposed_by: ${agent}`,
       "  reason: test",
       `  created: "${created}"`,
       "---",
@@ -527,6 +527,105 @@ test("selects with x and approves the selection", async ({ page }) => {
     await expect(page.locator("[data-proposal-id]")).toHaveCount(1);
   } finally {
     for (const id of ids) {
+      fs.rmSync(path.join(vaultPath(), "inbox", `${id}.md`), { force: true });
+      fs.rmSync(path.join(vaultPath(), "tech", `${id}.md`), { force: true });
+    }
+  }
+});
+
+test("filters pending proposals by agent and scopes approve all to that agent", async ({ page }) => {
+  const mine = ["agent-a-one", "agent-a-two"];
+  const other = "agent-b-one";
+  writeProposal(mine[0], "Agent A one", "First from agent A.", new Date().toISOString(), "agent-a");
+  writeProposal(mine[1], "Agent A two", "Second from agent A.", new Date().toISOString(), "agent-a");
+  writeProposal(other, "Agent B one", "Only from agent B.", new Date().toISOString(), "agent-b");
+
+  try {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/inbox");
+
+    // With two proposers the agent select appears beside the action tabs.
+    const filter = page.getByRole("button", { name: "Filter by agent", exact: true });
+    await expect(filter).toBeVisible();
+    await filter.click();
+    await page.getByRole("option", { name: "agent-a", exact: true }).click();
+
+    await expect(page.locator("[data-proposal-id]")).toHaveCount(2);
+    const trigger = page.getByRole("button", { name: "Approve 2 from agent-a", exact: true });
+    await expect(trigger).toBeVisible();
+    await trigger.click();
+
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toContainText("Approve 2 proposals?");
+    await dialog.getByRole("button", { name: "Approve all", exact: true }).click();
+
+    await expect(page.getByText("Approved 2 notes", { exact: true })).toBeVisible();
+    await expect(page.getByText("Approved 2 · 0 kept for review", { exact: true })).toBeVisible({ timeout: 10_000 });
+
+    // The other agent was outside the scope and is still pending.
+    await expect(page.locator(`[data-proposal-id="${other}"]`)).toBeVisible();
+    await expect(page.locator("[data-proposal-id]")).toHaveCount(1);
+  } finally {
+    for (const id of [...mine, other]) {
+      fs.rmSync(path.join(vaultPath(), "inbox", `${id}.md`), { force: true });
+      fs.rmSync(path.join(vaultPath(), "tech", `${id}.md`), { force: true });
+    }
+  }
+});
+
+test("bulk actions keep their place and disable at one pending", async ({ page }) => {
+  writeProposal("bulk-one", "Bulk one", "One pending proposal.", new Date().toISOString(), "agent-a");
+
+  try {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/inbox");
+
+    const approve = page.getByRole("button", { name: "Approve all (1)", exact: true });
+    const reject = page.getByRole("button", { name: "Reject all (1)", exact: true });
+    await expect(approve).toBeVisible();
+    await expect(approve).toBeDisabled();
+    await expect(reject).toBeVisible();
+    await expect(reject).toBeDisabled();
+
+    const tabs = page.getByRole("tablist");
+    const before = await tabs.boundingBox();
+    expect(before).not.toBeNull();
+
+    // A second proposal enables the same buttons without moving the tabs.
+    writeProposal("bulk-two", "Bulk two", "Second pending proposal.", new Date().toISOString(), "agent-a");
+    await page.reload();
+    await expect(page.getByRole("button", { name: "Approve all (2)", exact: true })).toBeEnabled();
+    const after = await tabs.boundingBox();
+    expect(after).not.toBeNull();
+    if (!before || !after) return;
+    expect(Math.abs(after.x - before.x)).toBeLessThan(1);
+  } finally {
+    for (const id of ["bulk-one", "bulk-two"]) {
+      fs.rmSync(path.join(vaultPath(), "inbox", `${id}.md`), { force: true });
+      fs.rmSync(path.join(vaultPath(), "tech", `${id}.md`), { force: true });
+    }
+  }
+});
+
+test("the palette leads with the next proposal and the inbox focuses its selected row", async ({ page }) => {
+  writeProposal("focus-one", "Focus one", "Older focus row.", new Date(Date.now() - 60_000).toISOString(), "agent-a");
+  writeProposal("focus-two", "Focus two", "Newer focus row.", new Date().toISOString(), "agent-a");
+
+  try {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/inbox");
+
+    // Newest first is the default selection, and it receives focus on load.
+    await expect(page.locator('[data-proposal-id="focus-two"] [data-proposal-open]')).toBeFocused();
+    await page.keyboard.press("ArrowDown");
+    await expect(page.locator('[data-proposal-id="focus-one"] [data-proposal-open]')).toBeFocused();
+    await expect(page).toHaveURL(/\/inbox\?p=focus-one$/);
+
+    await page.keyboard.press("Control+k");
+    await expect(page.getByRole("option").first()).toContainText("Review next proposal (2)");
+    await page.keyboard.press("Escape");
+  } finally {
+    for (const id of ["focus-one", "focus-two"]) {
       fs.rmSync(path.join(vaultPath(), "inbox", `${id}.md`), { force: true });
       fs.rmSync(path.join(vaultPath(), "tech", `${id}.md`), { force: true });
     }

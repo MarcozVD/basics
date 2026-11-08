@@ -21,10 +21,16 @@ function tech(overrides: Partial<NoteData> = {}): NoteData {
 }
 
 describe("summarizeProposal", () => {
-  it("describes a create with its type and layer", () => {
+  it("uses the layer note title for a create", () => {
+    const summary = summarizeProposal(null, tech(), "", "", new Map([["backend", "Datos"]]));
+
+    expect(summary).toEqual({ create: true, type: "tech", layer: "Datos", changes: [] });
+  });
+
+  it("falls back to the layer id when the layer has no title", () => {
     const summary = summarizeProposal(null, tech());
 
-    expect(summary).toEqual({ create: true, type: "tech", layer: "Backend", changes: [] });
+    expect(summary).toEqual({ create: true, type: "tech", layer: "backend", changes: [] });
   });
 
   it("describes a create without a layer", () => {

@@ -11,6 +11,7 @@ import { type TranslationKey, useI18n } from "@/i18n";
 import { agentColor, agentInitial } from "@/lib/agent-color";
 import { useResolvedDockEdge } from "@/lib/navigation";
 import { type ProposalSummary, type SummaryChange, summarizeProposal } from "@/lib/proposal-summary";
+import { useLayers } from "@/lib/queries";
 import { formatRelativeTime } from "@/lib/relative-time";
 import { cn } from "@/lib/utils";
 
@@ -129,9 +130,11 @@ export function ProposalDetail({
   const dockEdge = useResolvedDockEdge();
   const title = proposal.data.title ?? proposal.id;
   const name = proposal.meta.proposed_by;
+  const layers = useLayers();
+  const layerTitles = useMemo(() => new Map((layers.data ?? []).map((layer) => [layer.id, layer.title || layer.id])), [layers.data]);
   const summary = useMemo(
-    () => summarizeProposal(proposal.current?.data ?? null, proposal.data, proposal.current?.body ?? "", proposal.body),
-    [proposal],
+    () => summarizeProposal(proposal.current?.data ?? null, proposal.data, proposal.current?.body ?? "", proposal.body, layerTitles),
+    [proposal, layerTitles],
   );
   const summaryLine = useMemo(() => summaryText(summary, t, language), [summary, t, language]);
 
