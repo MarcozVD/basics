@@ -42,6 +42,23 @@ function walk(dir: string): string[] {
   });
 }
 
+/**
+ * The provenance an approved proposal writes. Packs keep their `pack:` source and agents get
+ * exactly one `agent:` prefix, whether the caller passed `claude-code` or `agent:claude-code`.
+ */
+export function approvedSource(proposedBy: string): string {
+  if (proposedBy.startsWith("pack:") || proposedBy.startsWith("agent:")) return proposedBy;
+  return `agent:${proposedBy}`;
+}
+
+/**
+ * The note data approving a proposal writes, minus `updated` (added by `writeNote` on disk).
+ * Approve and the proposal diff both go through this, so the preview is the file.
+ */
+export function stampApproved(data: NoteData, meta: Pick<ProposalMeta, "proposed_by">): NoteData {
+  return { ...data, source: approvedSource(meta.proposed_by) };
+}
+
 function describeError(error: unknown): string {
   if (error instanceof ZodError) {
     return error.issues.map((issue) => `${issue.path.join(".") || "frontmatter"}: ${issue.message}`).join("; ");
@@ -306,8 +323,7 @@ export class Vault {
   }
 
   private acceptProposal(p: Proposal, override: { data?: NoteData; body?: string } = {}, reload = true): string {
-    const source = p.meta.proposed_by.startsWith("pack:") ? p.meta.proposed_by : `agent:${p.meta.proposed_by}`;
-    const data = { ...(override.data ?? p.data), source };
+    const data = stampApproved(override.data ?? p.data, p.meta);
     let file: string;
     try {
       file = this.writeNote(p.id, data, override.body ?? p.body, { expectedHash: p.meta.base_hash, reload });
