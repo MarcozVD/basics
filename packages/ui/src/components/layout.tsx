@@ -32,6 +32,7 @@ import {
   pageDirection,
   takeNextDirection,
 } from "@/lib/page-transition";
+import { ReviewQueueProvider } from "@/lib/review-queue";
 import { useGlobalShortcuts } from "@/lib/shortcuts";
 import { dismissToast, toast, useToasts } from "@/lib/toast";
 import { startUpdater } from "@/lib/updater";
@@ -209,6 +210,16 @@ export function Layout() {
   // native title bar, find bar and reload. `isDesktop()` never changes for a page.
   const desktop = useMemo(() => isDesktop(), []);
   const mac = useMemo(() => desktop && isMacos(), [desktop]);
+  // The review loop's action bar sits at the bottom of the proposal (fixed on the page,
+  // a footer in the Inbox panel), so its toasts live at the top and never cover it.
+  const reviewRoute = location.pathname === "/inbox" || location.pathname.startsWith("/inbox/");
+  const toastPosition = reviewRoute
+    ? floating && edge === "right"
+      ? "top-left"
+      : "top-right"
+    : floating && edge === "right"
+      ? "bottom-left"
+      : "bottom-right";
 
   useGlobalShortcuts();
   // Alt+Left/Right and mouse back/forward stay inside the app, in the browser and the desktop.
@@ -295,80 +306,86 @@ export function Layout() {
   }, [location.key, navigationType]);
 
   return (
-    <div className="flex h-dvh overflow-hidden bg-shell text-foreground">
-      {!mobile ? <Sidebar hidden={floating} /> : null}
+    <ReviewQueueProvider>
+      <div className="flex h-dvh overflow-hidden bg-shell text-foreground">
+        {!mobile ? <Sidebar hidden={floating} /> : null}
 
-      <div className="relative flex min-w-0 flex-1 flex-col">
-        {desktop ? (
-          // Desktop app: a transparent 40px strip keeps the window draggable (double-click
-          // maximizes) and the controls at the right, without costing a page any height in a
-          // browser, which renders no strip at all.
-          <div data-testid="title-strip" data-tauri-drag-region="deep" className="flex h-10 shrink-0 select-none items-center justify-end">
-            <WindowControls />
-          </div>
-        ) : null}
-
-        <div
-          ref={panelRef}
-          data-testid="content-panel"
-          className="relative m-2 flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-card"
-        >
-          <main ref={scrollRef} style={mainStyle} className="min-h-0 flex-1 overflow-x-clip overflow-y-auto max-md:pt-12">
-            <AnimatePresence mode="popLayout" initial={false} custom={transitionCustom}>
-              <motion.div
-                key={pageKey}
-                custom={transitionCustom}
-                variants={PAGE_VARIANTS}
-                initial="enter"
-                animate="center"
-                exit="exit"
-                transition={{ duration: (reduced ? PAGE_REDUCED_MS : PAGE_ENTER_MS) / 1000, ease: EASE_OUT }}
-                className="flex h-full flex-col"
-              >
-                <PageFrame location={location} navigationType={navigationType} outlet={outlet} epoch={pageEpochRef.current} />
-              </motion.div>
-            </AnimatePresence>
-          </main>
-
-          {floating ? <FloatingNav edge={edge} onEdgeChange={setDockEdge} /> : null}
-
-          {mobile ? (
-            <button
-              type="button"
-              data-testid="sidebar-menu"
-              aria-label={t("nav.openMenu")}
-              aria-expanded={menuOpen}
-              onClick={() => setMenuOpen(true)}
-              className="absolute top-2 left-2 z-30 grid size-9 place-items-center rounded-lg border border-border bg-card/80 text-muted-foreground backdrop-blur transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        <div className="relative flex min-w-0 flex-1 flex-col">
+          {desktop ? (
+            // Desktop app: a transparent 40px strip keeps the window draggable (double-click
+            // maximizes) and the controls at the right, without costing a page any height in a
+            // browser, which renders no strip at all.
+            <div
+              data-testid="title-strip"
+              data-tauri-drag-region="deep"
+              className="flex h-10 shrink-0 select-none items-center justify-end"
             >
-              <Menu className="size-5" aria-hidden="true" />
-            </button>
+              <WindowControls />
+            </div>
           ) : null}
+
+          <div
+            ref={panelRef}
+            data-testid="content-panel"
+            className="relative m-2 flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-card"
+          >
+            <main ref={scrollRef} style={mainStyle} className="min-h-0 flex-1 overflow-x-clip overflow-y-auto max-md:pt-12">
+              <AnimatePresence mode="popLayout" initial={false} custom={transitionCustom}>
+                <motion.div
+                  key={pageKey}
+                  custom={transitionCustom}
+                  variants={PAGE_VARIANTS}
+                  initial="enter"
+                  animate="center"
+                  exit="exit"
+                  transition={{ duration: (reduced ? PAGE_REDUCED_MS : PAGE_ENTER_MS) / 1000, ease: EASE_OUT }}
+                  className="flex h-full flex-col"
+                >
+                  <PageFrame location={location} navigationType={navigationType} outlet={outlet} epoch={pageEpochRef.current} />
+                </motion.div>
+              </AnimatePresence>
+            </main>
+
+            {floating ? <FloatingNav edge={edge} onEdgeChange={setDockEdge} /> : null}
+
+            {mobile ? (
+              <button
+                type="button"
+                data-testid="sidebar-menu"
+                aria-label={t("nav.openMenu")}
+                aria-expanded={menuOpen}
+                onClick={() => setMenuOpen(true)}
+                className="absolute top-2 left-2 z-30 grid size-9 place-items-center rounded-lg border border-border bg-card/80 text-muted-foreground backdrop-blur transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              >
+                <Menu className="size-5" aria-hidden="true" />
+              </button>
+            ) : null}
+          </div>
         </div>
+
+        <Drawer
+          open={mobile && menuOpen}
+          onOpenChange={setMenuOpen}
+          side="left"
+          ariaLabel={t("nav.primary")}
+          className="w-72 max-w-[85vw] bg-shell"
+        >
+          <SidebarNav collapsed={false} onNavigate={() => setMenuOpen(false)} draggable={desktop} mac={mac} />
+        </Drawer>
+
+        {/* Above portalled popovers (`z-[9999]`): a toast action such as "Open" must stay
+            clickable even while a dropdown is open over the panel corner. */}
+        <AnimatedToastStack
+          toasts={toasts}
+          onDismiss={dismissToast}
+          position={toastPosition}
+          fixed
+          className={cn("z-[10000]", !reviewRoute && floating && edge === "bottom" && "bottom-28", reviewRoute && desktop && "top-14")}
+        />
+        <UpdateBanner />
+        <AppCommandPalette />
+        <NewNoteDialog />
       </div>
-
-      <Drawer
-        open={mobile && menuOpen}
-        onOpenChange={setMenuOpen}
-        side="left"
-        ariaLabel={t("nav.primary")}
-        className="w-72 max-w-[85vw] bg-shell"
-      >
-        <SidebarNav collapsed={false} onNavigate={() => setMenuOpen(false)} draggable={desktop} mac={mac} />
-      </Drawer>
-
-      {/* Above portalled popovers (`z-[9999]`): a toast action such as "Open" must stay
-          clickable even while a dropdown is open over the panel corner. */}
-      <AnimatedToastStack
-        toasts={toasts}
-        onDismiss={dismissToast}
-        position={floating && edge === "right" ? "bottom-left" : "bottom-right"}
-        fixed
-        className={cn("z-[10000]", floating && edge === "bottom" && "bottom-28")}
-      />
-      <UpdateBanner />
-      <AppCommandPalette />
-      <NewNoteDialog />
-    </div>
+    </ReviewQueueProvider>
   );
 }

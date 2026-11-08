@@ -34,7 +34,7 @@ There are no page sidebars; secondary panels are overlays closed with `Esc`. You
 | **Projects** | Project notes, filtered by status with counts. Each row shows the name, status and last update, plus one muted line only when something needs attention: failing checks or missing technologies. Search and sort appear from eight projects. The status chip on each row is a menu: Active, Paused, Done or Archived. Done projects sort last and collapse into a `Done (N)` group in the All view. The empty state offers New project. |
 | **Editor** | Frontmatter form generated from the note type, Markdown body in edit / preview / split, `[[` wikilink autocomplete, connections (links, backlinks, unresolved) and a local graph. A conflict banner appears if the file changed on disk. |
 | **Graph** | Every note and link, with type and layer filters in a floating toolbar, node search, broken links and neighborhood focus. On an empty vault the toolbar is hidden and the canvas offers starter notes or Explore. Coming back to Graph shows the picture you left, with the same positions and zoom, without laying it out again; a reload keeps the positions for the same vault. Vault changes still update it. On a graph over 300 notes the layout runs in the background, so you can click and open notes while it settles, and zoomed-out labels show only the best-connected notes. |
-| **Inbox** | Each row shows the type, title, action, author and age. At 1280px and wider, selecting a row opens its detail panel with the reason, a side-by-side or unified diff, and Approve, Edit and approve, or Reject. Below 1280px the row opens the proposal page, which has the same actions. Pack proposals are grouped with **Approve all**. An empty inbox says why and offers one action: install the starter notes, or connect an agent. |
+| **Inbox** | Each row shows the type, title, action, author and age. At 1280px and wider, selecting a row opens its detail panel with the reason, a side-by-side or unified diff, and Approve, Edit and approve, or Reject. Below 1280px the row opens the proposal page, which has the same actions. Pack proposals are grouped with **Approve all**. Approve, reject and **Approve all** wait 6 seconds before they are written; see [Reviewing proposals](#reviewing-proposals). An empty inbox says why and offers one action: install the starter notes, or connect an agent. |
 | **Settings** | Six sections: **General** (language, theme, navigation style and bar position, vault path; in the [desktop app](desktop) also **Open folder** and **Change folder**), **Startup**, **Agents** (connect or disconnect each coding agent and see the file change it makes), **Search** (semantic search on or off), **Updates** and **About**. Each change applies as soon as you pick it; there is no Save button. Startup and Updates are desktop-only; see [Desktop settings](desktop#desktop-settings). |
 | **Skills** | Every skill installed for your coding agents, grouped by area. One filter row holds the search and an agent select, with area chips beside it. Expand a row for its path, version and area control; the area control is where you change a skill's area, and **Changed by you** shows when you have. |
 | **Recommend** | Project description first; layers are one collapsed line (`All layers, 3 per layer`) that opens the layer chips and per-layer stepper. Once there is a result, the example prompts hide and the intro moves behind `?`. Profiles and per-layer candidates with `use_when`, `performs_best` and `avoid_when`, selection, and the export modal with **STACK.md / AGENTS.md / CLAUDE.md / Cursor** tabs, each with copy or download. Shows whether the mode is **Keywords** or **Hybrid** and the score breakdown. On an empty vault it asks you to install the starter packs first. An **Ask an agent** run is kept per browser tab: it keeps going when you leave the page, and the Recommend item in the navigation (sidebar or floating bar) shows its progress. |
@@ -49,6 +49,18 @@ position and Explore's filters restored. A note or proposal opened directly, wit
 Inbox. Home, Explore, Projects, Graph, Inbox, Recommend, Skills and Settings have no back control; you reach them from the
 navigation. If a note has unsaved changes, going back asks you first.
 
+## Reviewing proposals
+
+Approve, reject and **Approve all** wait 6 seconds before the change is written. The toast shows **Saving in 6 s** and
+**Undo (Z)**. Press `Z` or click **Undo (Z)** to cancel: the proposal comes back and nothing is written. The selection moves
+on at once, so you can keep reviewing while a decision waits.
+
+Closing the browser tab, or reloading it, before the 6 seconds end cancels the decision too, and nothing is written. In the
+[desktop app](desktop), closing the window only hides it, so the decision still goes through; **Quit Basics** cancels it.
+
+If an edit fails, your draft is kept. A field error reopens the editor with the errors shown on the fields. Other errors
+show a toast with **Open**, which brings the editor back with your draft.
+
 ## Shortcuts
 
 | Keys | Action |
@@ -61,8 +73,10 @@ navigation. If a note has unsaved changes, going back asks you first.
 | `Ctrl`/`⌘+S` | Save the note in the editor |
 | `Ctrl`/`⌘+F` | Focus search in Explore and in the graph. In the [desktop app](desktop) it opens the command palette search instead |
 | `↑` / `↓`, `Enter` | Move through lists (Explore, Inbox, palette) and open |
-| `a` / `r` | Approve / reject the selected proposal in the Inbox |
-| `a` / `e` / `r` | Approve / edit and approve / reject in a proposal |
+| `a` | Approve the selected proposal, in the Inbox or in a proposal. The write waits 6 seconds |
+| `r`, then `r` again | Reject the selected proposal, in the Inbox or in a proposal. The second press confirms |
+| `e` | Edit and approve the open proposal |
+| `z` | Undo the last approve, reject or bulk action that is still waiting to save |
 | `Ctrl`/`⌘+Enter` | Run the recommendation |
 
 ## Live updates and preferences

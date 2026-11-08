@@ -4,7 +4,7 @@ import path from "node:path";
 import { expect, test } from "@playwright/test";
 import { vaultPath } from "./helpers";
 
-function writeProposal(id: string, title: string, body: string) {
+function writeProposal(id: string, title: string, body: string, created = new Date().toISOString()) {
   const vault = vaultPath();
   const inboxFile = path.join(vault, "inbox", `${id}.md`);
   fs.rmSync(path.join(vault, "tech", `${id}.md`), { force: true });
@@ -23,7 +23,7 @@ function writeProposal(id: string, title: string, body: string) {
       "  action: create",
       "  proposed_by: e2e",
       "  reason: test",
-      `  created: "${new Date().toISOString()}"`,
+      `  created: "${created}"`,
       "---",
       `# ${title}`,
       "",
@@ -83,6 +83,13 @@ test("lists and approves a proposal from the inbox", async ({ page }) => {
   await expect(page.getByText("Web framework for the e2e proposal flow.")).toBeVisible();
 
   await page.getByRole("button", { name: "Approve", exact: true }).click();
+  // The decision is queued: the next proposal opens at once and the toast can undo it.
+  await expect(page).toHaveURL(/\/inbox(\?p=django)?$/);
+  await expect(page.getByText("Approved Django", { exact: true })).toBeVisible();
+  await expect(page.getByText("Saving in 6 s", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Undo (Z)", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open note", exact: true })).toBeVisible({ timeout: 10_000 });
+  await page.getByRole("button", { name: "Open note", exact: true }).click();
   await expect(page).toHaveURL(/\/notes\/django$/);
 
   await page.locator('nav a[href="/inbox"]').click();
@@ -107,10 +114,10 @@ test("approves a proposal from the detail panel instead of the list", async ({ p
   await expect(detail).toContainText("Compiler-first UI framework for the detail approval flow.");
   await detail.getByRole("button", { name: "Approve", exact: true }).click();
 
-  await expect(page.getByText(/Nothing to review yet/)).toBeVisible();
+  await expect(page.getByText("Approved Svelte", { exact: true })).toBeVisible();
+  await expect(page.getByText(/Nothing to review yet/)).toBeVisible({ timeout: 10_000 });
   // The empty list drops the stale selection instead of deep-linking to a proposal that no longer exists.
   await expect(page).toHaveURL(/\/inbox$/);
-  await expect(page.getByText("Approved", { exact: true })).toBeVisible();
 });
 
 test("a narrow inbox keeps the actions on the proposal page", async ({ page }) => {
@@ -146,7 +153,9 @@ test("shows a conflict toast when approving a proposal whose note changed", asyn
     const detail = page.locator('aside[aria-label="Inbox"]');
     await detail.getByRole("button", { name: "Approve", exact: true }).click();
 
-    await expect(page.getByText("Note changed on disk. The proposal is still pending.", { exact: true })).toBeVisible();
+    await expect(page.getByText("Note changed on disk. The proposal is still pending.", { exact: true })).toBeVisible({
+      timeout: 10_000,
+    });
     await expect(page).toHaveURL(/\/inbox\?p=fastapi$/);
     await expect(card).toBeVisible();
   } finally {
@@ -167,11 +176,13 @@ test("approves every pending proposal from the inbox header", async ({ page }) =
 
     const dialog = page.getByRole("dialog");
     await expect(dialog).toContainText(
-      "Approve 3 proposals? Notes are written to the vault now. Proposals that conflict are kept for review.",
+      "Approve 3 proposals? Notes are written to the vault in 6 seconds; you can undo from the toast. Proposals that conflict are kept for review.",
     );
     await dialog.getByRole("button", { name: "Approve all", exact: true }).click();
 
-    await expect(page.getByText("Approved 3 · 0 kept for review", { exact: true })).toBeVisible();
+    await expect(page.getByText("Approved 3 notes", { exact: true })).toBeVisible();
+    await expect(page.getByText("Saving in 6 s", { exact: true })).toBeVisible();
+    await expect(page.getByText("Approved 3 · 0 kept for review", { exact: true })).toBeVisible({ timeout: 10_000 });
     await expect(page.getByText(/Nothing to review yet/)).toBeVisible();
   } finally {
     for (const id of ids) {
@@ -235,10 +246,11 @@ test("rejects every pending proposal from the inbox header", async ({ page }) =>
     await trigger.click();
 
     const dialog = page.getByRole("dialog");
-    await expect(dialog).toContainText("Reject 3 proposals? They are deleted from the inbox and cannot be recovered.");
+    await expect(dialog).toContainText("Reject 3 proposals? They are deleted from the inbox in 6 seconds; you can undo from the toast.");
     await dialog.getByRole("button", { name: "Reject all", exact: true }).click();
 
-    await expect(page.getByText("Rejected 3 · 0 kept", { exact: true })).toBeVisible();
+    await expect(page.getByText("Rejected 3 notes", { exact: true })).toBeVisible();
+    await expect(page.getByText("Rejected 3 · 0 kept", { exact: true })).toBeVisible({ timeout: 10_000 });
     await expect(page.getByText(/Nothing to review yet/)).toBeVisible();
   } finally {
     for (const id of ids) fs.rmSync(path.join(vaultPath(), "inbox", `${id}.md`), { force: true });
@@ -261,14 +273,237 @@ test("rejects a selection of proposals with the card checkboxes", async ({ page 
     await page.getByRole("button", { name: "Reject selected", exact: true }).click();
 
     const dialog = page.getByRole("dialog");
-    await expect(dialog).toContainText("Reject 2 proposals? They are deleted from the inbox and cannot be recovered.");
+    await expect(dialog).toContainText("Reject 2 proposals? They are deleted from the inbox in 6 seconds; you can undo from the toast.");
     await dialog.getByRole("button", { name: "Reject selected", exact: true }).click();
 
-    await expect(page.getByText("Rejected 2 · 0 kept", { exact: true })).toBeVisible();
+    await expect(page.getByText("Rejected 2 notes", { exact: true })).toBeVisible();
+    await expect(page.getByText("Rejected 2 · 0 kept", { exact: true })).toBeVisible({ timeout: 10_000 });
     await expect(page.locator('[data-proposal-id="reject-sel-three"]')).toBeVisible();
     await expect(page.locator("[data-proposal-id]")).toHaveCount(1);
   } finally {
     for (const id of ids) fs.rmSync(path.join(vaultPath(), "inbox", `${id}.md`), { force: true });
+  }
+});
+
+test("undo restores an approval before it is written", async ({ page }) => {
+  writeProposal("undo-approve", "Undo approve", "Approval cancelled inside the undo window.");
+
+  try {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/inbox");
+    await page.getByRole("button", { name: /Undo approve/i }).click();
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(/\/inbox\/undo-approve$/);
+    await expect(page.getByRole("heading", { name: "Inbox", level: 1 })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Approve", exact: true })).toBeVisible();
+
+    await page.keyboard.press("a");
+    await expect(page).toHaveURL(/\/inbox(\?p=undo-approve)?$/);
+    await expect(page.getByText("Approved Undo approve", { exact: true })).toBeVisible();
+    await expect(page.getByText("Saving in 6 s", { exact: true })).toBeVisible();
+
+    await page.keyboard.press("z");
+    await expect(page).toHaveURL(/\/inbox\/undo-approve$/);
+    await expect(page.getByText("Saving in 6 s", { exact: true })).toHaveCount(0);
+
+    // Give the cancelled timer more than its full window: nothing may reach the vault.
+    await page.waitForTimeout(6500);
+    expect(fs.existsSync(path.join(vaultPath(), "tech", "undo-approve.md"))).toBe(false);
+    expect(fs.existsSync(path.join(vaultPath(), "inbox", "undo-approve.md"))).toBe(true);
+  } finally {
+    fs.rmSync(path.join(vaultPath(), "inbox", "undo-approve.md"), { force: true });
+    fs.rmSync(path.join(vaultPath(), "tech", "undo-approve.md"), { force: true });
+  }
+});
+
+test("approve writes the note after the undo window", async ({ page }) => {
+  writeProposal("undo-write", "Undo write", "Approval committed when the window closes.");
+
+  try {
+    await page.goto("/inbox/undo-write");
+    await page.getByRole("button", { name: "Approve", exact: true }).click();
+    await expect(page.getByText("Approved Undo write", { exact: true })).toBeVisible();
+    await expect(page.getByText("Saving in 6 s", { exact: true })).toBeVisible();
+
+    await expect(page.getByRole("button", { name: "Open note", exact: true })).toBeVisible({ timeout: 10_000 });
+    expect(fs.existsSync(path.join(vaultPath(), "tech", "undo-write.md"))).toBe(true);
+
+    await page.getByRole("button", { name: "Open note", exact: true }).click();
+    await expect(page).toHaveURL(/\/notes\/undo-write$/);
+  } finally {
+    fs.rmSync(path.join(vaultPath(), "inbox", "undo-write.md"), { force: true });
+    fs.rmSync(path.join(vaultPath(), "tech", "undo-write.md"), { force: true });
+  }
+});
+
+test("undo restores a rejection after its confirm", async ({ page }) => {
+  writeProposal("undo-reject", "Undo reject", "Rejection cancelled inside the undo window.");
+
+  try {
+    await page.goto("/inbox/undo-reject");
+    await expect(page.getByRole("button", { name: "Approve", exact: true })).toBeVisible();
+    await page.keyboard.press("r");
+    const live = page.getByRole("status").filter({ hasText: "Confirm reject?" });
+    await expect(live).toContainText("Confirm reject? Press R again to delete this proposal.");
+
+    await page.keyboard.press("r");
+    await expect(page).toHaveURL(/\/inbox(\?p=undo-reject)?$/);
+    await expect(page.getByText("Rejected Undo reject", { exact: true })).toBeVisible();
+    await expect(page.getByText("Saving in 6 s", { exact: true })).toBeVisible();
+
+    await page.keyboard.press("z");
+    await expect(page).toHaveURL(/\/inbox\/undo-reject$/);
+    await page.waitForTimeout(6500);
+    expect(fs.existsSync(path.join(vaultPath(), "inbox", "undo-reject.md"))).toBe(true);
+    expect(fs.existsSync(path.join(vaultPath(), "tech", "undo-reject.md"))).toBe(false);
+  } finally {
+    fs.rmSync(path.join(vaultPath(), "inbox", "undo-reject.md"), { force: true });
+    fs.rmSync(path.join(vaultPath(), "tech", "undo-reject.md"), { force: true });
+  }
+});
+
+test("a queued edit with an invalid field reopens the editor with the draft", async ({ page }) => {
+  writeProposal("recover-edit", "Recover edit", "Original body that will be replaced.");
+
+  await page.route("**/api/inbox/recover-edit/approve", (route) =>
+    route.fulfill({
+      status: 400,
+      contentType: "application/json",
+      body: JSON.stringify({
+        error: "invalid",
+        message: "invalid note",
+        issues: [{ path: ["body"], message: "Body must be a non-empty string." }],
+      }),
+    }),
+  );
+
+  try {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/inbox");
+    await page.getByRole("button", { name: /Recover edit/i }).click();
+
+    const detail = page.locator('aside[aria-label="Inbox"]');
+    await detail.getByRole("button", { name: "Edit & approve" }).click();
+    const dialog = page.getByRole("dialog");
+    await dialog.locator("#proposal-body").fill("Edited body that must survive.");
+    await dialog.getByRole("button", { name: "Approve", exact: true }).click();
+    await expect(dialog).toBeHidden();
+    await expect(page.getByText("Saving in 6 s", { exact: true })).toBeVisible();
+
+    // Still inside the Inbox when the 400 arrives: open the proposal and restore the draft.
+    await expect(page).toHaveURL(/\/inbox\/recover-edit$/, { timeout: 10_000 });
+    const reopened = page.getByRole("dialog");
+    await expect(reopened).toBeVisible();
+    await expect(reopened.locator("#proposal-body")).toHaveValue("Edited body that must survive.");
+    await expect(reopened.getByText("Body must be a non-empty string.", { exact: true })).toBeVisible();
+    await expect(page.getByText("The proposal has invalid fields. Review it and try again.", { exact: true })).toHaveCount(0);
+    expect(fs.existsSync(path.join(vaultPath(), "inbox", "recover-edit.md"))).toBe(true);
+  } finally {
+    fs.rmSync(path.join(vaultPath(), "inbox", "recover-edit.md"), { force: true });
+    fs.rmSync(path.join(vaultPath(), "tech", "recover-edit.md"), { force: true });
+  }
+});
+
+test("a failed queued edit offers Open from another route and restores the draft there", async ({ page }) => {
+  writeProposal("recover-away", "Recover away", "Original body before the edit.");
+
+  await page.route("**/api/inbox/recover-away/approve", (route) =>
+    route.fulfill({
+      status: 400,
+      contentType: "application/json",
+      body: JSON.stringify({
+        error: "invalid",
+        message: "invalid note",
+        issues: [{ path: ["body"], message: "Body must be a non-empty string." }],
+      }),
+    }),
+  );
+
+  try {
+    await page.goto("/inbox/recover-away");
+    await page.getByRole("button", { name: "Edit & approve" }).click();
+    const dialog = page.getByRole("dialog");
+    await dialog.locator("#proposal-body").fill("Edited away from the review loop.");
+    await dialog.getByRole("button", { name: "Approve", exact: true }).click();
+    await expect(dialog).toBeHidden();
+
+    await page.getByRole("link", { name: "Settings" }).click();
+    await expect(page).toHaveURL(/\/settings$/);
+
+    await expect(page.getByText("The proposal has invalid fields. Review it and try again.", { exact: true })).toBeVisible({
+      timeout: 10_000,
+    });
+    await page.getByRole("button", { name: "Open", exact: true }).click();
+
+    await expect(page).toHaveURL(/\/inbox\/recover-away$/);
+    const reopened = page.getByRole("dialog");
+    await expect(reopened).toBeVisible();
+    await expect(reopened.locator("#proposal-body")).toHaveValue("Edited away from the review loop.");
+    await expect(reopened.getByText("Body must be a non-empty string.", { exact: true })).toBeVisible();
+    expect(fs.existsSync(path.join(vaultPath(), "inbox", "recover-away.md"))).toBe(true);
+  } finally {
+    fs.rmSync(path.join(vaultPath(), "inbox", "recover-away.md"), { force: true });
+    fs.rmSync(path.join(vaultPath(), "tech", "recover-away.md"), { force: true });
+  }
+});
+
+test("review toasts stay clear of the proposal action bar at every viewport", async ({ page }) => {
+  writeProposal("toast-next", "Toast next", "Second proposal, so approving keeps an action bar on screen.");
+  writeProposal("toast-clear", "Toast clear", "Bounding boxes for the action bar.");
+
+  const sizes = [
+    { width: 1440, height: 900 },
+    { width: 1280, height: 820 },
+    { width: 1024, height: 768 },
+  ];
+
+  const measure = async (label: string) => {
+    const toast = page.locator('ol[aria-live="polite"] li').first();
+    const bar = page.getByRole("toolbar", { name: "Proposal actions" }).first();
+    await expect(toast).toBeVisible();
+    await expect(page.getByRole("toolbar", { name: "Proposal actions" })).toHaveCount(1);
+    await page.waitForTimeout(350);
+    const toastBox = await toast.boundingBox();
+    const barBox = await bar.boundingBox();
+    if (!toastBox || !barBox) throw new Error(`missing boxes at ${label}`);
+    const overlaps =
+      toastBox.x < barBox.x + barBox.width &&
+      toastBox.x + toastBox.width > barBox.x &&
+      toastBox.y < barBox.y + barBox.height &&
+      toastBox.y + toastBox.height > barBox.y;
+    // Print the measured boxes so the report can quote them without screenshots.
+    console.log(
+      `[toast] ${label} toast=${Math.round(toastBox.x)},${Math.round(toastBox.y)} ${Math.round(toastBox.width)}x${Math.round(
+        toastBox.height,
+      )} bar=${Math.round(barBox.x)},${Math.round(barBox.y)} ${Math.round(barBox.width)}x${Math.round(barBox.height)}`,
+    );
+    expect(overlaps, `toast overlaps the action bar at ${label}`).toBe(false);
+  };
+
+  const runAtSize = async (mode: string, size: { width: number; height: number }) => {
+    await page.setViewportSize(size);
+    await page.goto("/inbox/toast-clear");
+    await expect(page.getByRole("button", { name: "Approve", exact: true })).toBeVisible();
+    await page.keyboard.press("a");
+    await expect(page).toHaveURL(/\/inbox\/toast-next$/);
+    await measure(`${mode} ${size.width}x${size.height}`);
+    await page.keyboard.press("z");
+    await expect(page).toHaveURL(/\/inbox\/toast-clear$/);
+  };
+
+  try {
+    for (const size of sizes) await runAtSize("sidebar", size);
+
+    await page.goto("/settings");
+    await page.getByText("Floating", { exact: true }).click();
+    await expect(page.getByTestId("floating-nav")).toBeVisible();
+
+    for (const size of sizes) await runAtSize("floating", size);
+  } finally {
+    for (const id of ["toast-clear", "toast-next"]) {
+      fs.rmSync(path.join(vaultPath(), "inbox", `${id}.md`), { force: true });
+      fs.rmSync(path.join(vaultPath(), "tech", `${id}.md`), { force: true });
+    }
   }
 });
 
@@ -287,7 +522,8 @@ test("selects with x and approves the selection", async ({ page }) => {
     await expect(page.getByText("1 selected", { exact: true })).toBeVisible();
 
     await page.getByRole("button", { name: "Approve selected", exact: true }).click();
-    await expect(page.getByText("Approved 1 · 0 kept for review", { exact: true })).toBeVisible();
+    await expect(page.getByText("Approved 1 note", { exact: true })).toBeVisible();
+    await expect(page.getByText("Approved 1 · 0 kept for review", { exact: true })).toBeVisible({ timeout: 10_000 });
     await expect(page.locator("[data-proposal-id]")).toHaveCount(1);
   } finally {
     for (const id of ids) {

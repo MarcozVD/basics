@@ -13,20 +13,6 @@ import { useResolvedDockEdge } from "@/lib/navigation";
 import { formatRelativeTime } from "@/lib/relative-time";
 import { cn } from "@/lib/utils";
 
-/** Turn an API validation error into field-level messages for the edit modal. */
-export function issuesToErrors(issues: unknown): Record<string, string> {
-  const errors: Record<string, string> = {};
-  if (!Array.isArray(issues)) return errors;
-  for (const issue of issues) {
-    if (!issue || typeof issue !== "object") continue;
-    const { path, message } = issue as { path?: unknown; message?: unknown };
-    if (!Array.isArray(path) || path.length === 0 || typeof message !== "string") continue;
-    const key = path[0] === "data" && path.length > 1 ? String(path[1]) : String(path[0]);
-    errors[key] = message;
-  }
-  return errors;
-}
-
 function ActionBadge({ action }: { action: "create" | "update" }) {
   const { t } = useI18n();
   return (
@@ -159,6 +145,9 @@ export function ProposalDetail({
 
   return (
     <div data-proposal-detail={proposal.id} className={cn("flex min-h-0 flex-col", panel && "h-full", className)}>
+      <p role="status" aria-live="polite" className="sr-only">
+        {armed ? t("proposal.rejectConfirmAnnounce") : ""}
+      </p>
       <header className={cn(panel && "px-4 pt-4")}>
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <ActionBadge action={proposal.meta.action} />
@@ -223,20 +212,22 @@ interface ProposalEditModalProps {
   onOpenChange: (open: boolean) => void;
   errors: Record<string, string>;
   pending: boolean;
+  /** A draft from a failed queued request, restored over the proposal on open. */
+  initial?: { data: NoteData; body: string };
   onSubmit: (data: NoteData, body: string) => void;
 }
 
 /** Edit frontmatter and body, then approve the proposal in one step. */
-export function ProposalEditModal({ proposal, open, onOpenChange, errors, pending, onSubmit }: ProposalEditModalProps) {
+export function ProposalEditModal({ proposal, open, onOpenChange, errors, pending, initial, onSubmit }: ProposalEditModalProps) {
   const { t } = useI18n();
   const [data, setData] = useState<NoteData | null>(null);
   const [body, setBody] = useState("");
 
   useEffect(() => {
     if (!open) return;
-    setData(proposal.data);
-    setBody(proposal.body);
-  }, [open, proposal]);
+    setData(initial?.data ?? proposal.data);
+    setBody(initial?.body ?? proposal.body);
+  }, [open, proposal, initial]);
 
   return (
     <CenterMorphModal open={open} onOpenChange={onOpenChange}>
