@@ -46,8 +46,9 @@ anything; backlinks are computed from them, and unresolved links are reported by
    `record_project_outcome` it proposes project lessons and tech-note extensions.
 3. **Inbox.** The proposal lands in `inbox/` with `proposed_by`, `reason` and the proposed frontmatter and body. Nothing
    in the vault changes yet. `list_proposals` shows what is waiting.
-4. **Approve.** You review the diff in the web UI or with `basics inbox show`, then approve or reject. On approval the
-   note is written, `source` records who proposed it and the note gets its `updated` date.
+4. **Approve.** You review the diff in the web UI or with `basics inbox show`, then approve or reject. In the web UI the
+   write waits 6 seconds, and **Undo (Z)** cancels it. On approval the note is written, `source` records who proposed it and
+   the note gets its `updated` date.
 
 Agents never write into the vault directly: the only MCP tools that produce changes are the two proposal tools. The
 same loop applies to pack updates, which arrive as `pack:<name>@<version>` proposals.

@@ -1,5 +1,4 @@
-import type { ApproveAllRequest, NoteData, ProposalSummary } from "@marcozvd/basics-core";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import type { ApproveAllRequest, ApproveAllResponse, ProposalSummary, RejectAllResponse } from "@marcozvd/basics-core";
 import { Inbox as InboxIcon, LoaderCircle, Package } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
@@ -11,12 +10,11 @@ import { Checkbox } from "@/components/motion/checkbox";
 import { Tabs, TabsList, TabsTrigger } from "@/components/motion/tabs";
 import { PAGE_SECTIONS, Page, Reveal } from "@/components/page";
 import { PageHeader } from "@/components/page-header";
-import { issuesToErrors, ProposalDetail, ProposalEditModal } from "@/components/proposal-detail";
+import { ProposalDetail, ProposalEditModal } from "@/components/proposal-detail";
 import { ErrorState, Loading } from "@/components/state";
 import { Button as LinkButton } from "@/components/ui/button";
 import { type TranslationKey, useI18n } from "@/i18n";
 import { agentColor, agentInitial } from "@/lib/agent-color";
-import { ApiRequestError, approveAllProposals, approveProposal, rejectAllProposals, rejectProposal } from "@/lib/api";
 import { EASE_OUT, SPRING_LAYOUT } from "@/lib/ease";
 import { useIntentNavigate } from "@/lib/intent-navigate";
 import { useIntro } from "@/lib/intro";
@@ -25,15 +23,12 @@ import { useFirstPaint, useProgressiveCount } from "@/lib/progressive";
 import { useInbox, useProposal, useStats } from "@/lib/queries";
 import { formatRelativeTime } from "@/lib/relative-time";
 import { useReturnFocus } from "@/lib/return-focus";
+import { type BulkMode, useReviewQueue } from "@/lib/review-queue";
 import { useRouteSearchParams } from "@/lib/route-query";
-import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 
 type Filter = "all" | "create" | "update";
-type ApproveAllMode = "pack" | "header" | "selection";
-type ApproveAllVariables = { request: ApproveAllRequest; mode: ApproveAllMode };
 type RejectMode = "all" | "selection";
-type RejectVariables = { request: ApproveAllRequest; mode: RejectMode };
 
 const README_PROPOSE = "https://marcozvd.github.io/basics/guide/mcp-clients.html";
 const WIDE_QUERY = "(min-width: 1280px)";
@@ -188,7 +183,7 @@ export function InboxPage() {
   const detailRoute = useMatch("/inbox/:id") !== null;
   const wide = useWideInbox();
   const reduce = useReducedMotion() ?? false;
-  const queryClient = useQueryClient();
+  const { pendingIds, busy: queueBusy, queueApprove, queueReject, queueApproveAll, queueRejectAll } = useReviewQueue();
   const inbox = useInbox();
   const stats = useStats();
   const vaultEmpty = stats.data?.total === 0;
@@ -342,111 +337,85 @@ export function InboxPage() {
   useEffect(() => () => window.clearTimeout(armTimer.current), []);
   useEffect(() => () => window.clearTimeout(packTimer.current), []);
 
-  const invalidate = () => {
-    void queryClient.invalidateQueries({ queryKey: ["inbox"] });
-    void queryClient.invalidateQueries({ queryKey: ["notes"] });
-    void queryClient.invalidateQueries({ queryKey: ["stats"] });
+  /** Select the next proposal at once and return a restore for undo or failure. */
+  const advanceSelection = (id: string): (() => void) | undefined => {
+    const index = visible.findIndex((proposal) => proposal.id === id);
+    if (index < 0) return undefined;
+    setSelected(Math.min(index + 1, visible.length - 1));
+    return () => setSelected(index);
   };
 
-  const approve = useMutation({
-    mutationFn: (id: string) => approveProposal(id),
-    onSuccess: (note) => {
-      invalidate();
-      toast.success(t("proposal.approved"), {
-        label: t("inbox.openNote"),
-        onClick: () => navigate({ pathname: `/notes/${encodeURIComponent(note.id)}`, search: "" }),
-      });
-    },
-    onError: (error) => {
-      if (error instanceof ApiRequestError && error.status === 404) {
-        invalidate();
-        toast.error(t("proposal.gone"));
-        return;
-      }
-      if (error instanceof ApiRequestError && error.status === 409) {
-        toast.error(t("inbox.approveConflict"));
-        return;
-      }
-      toast.error(t("inbox.approveFailed"));
-    },
-  });
+  const titleOf = (proposal: ProposalSummary) => proposal.title || proposal.id;
 
-  const editApprove = useMutation({
-    mutationFn: (input: { id: string; data: NoteData; body: string }) => approveProposal(input.id, input),
-    onSuccess: () => {
-      setEditOpen(false);
-      invalidate();
-      toast.success(t("proposal.approved"));
-    },
-    onError: (error) => {
-      if (error instanceof ApiRequestError && error.status === 404) {
-        setEditOpen(false);
-        invalidate();
-        toast.error(t("proposal.gone"));
-        return;
-      }
-      if (error instanceof ApiRequestError && error.status === 400) {
-        setErrors(issuesToErrors(error.body.issues));
-        return;
-      }
-      if (error instanceof ApiRequestError && error.status === 409) {
-        toast.error(t("inbox.approveConflict"));
-        return;
-      }
-      toast.error(t("proposal.approveFailed"));
-    },
-  });
+  const approveCurrent = (id: string) => {
+    const proposal = visible.find((item) => item.id === id);
+    if (!proposal || pendingIds.has(id)) return;
+    const restore = advanceSelection(id);
+    queueApprove({ id, title: titleOf(proposal), callbacks: { onUndo: restore, onError: restore } });
+  };
 
-  const reject = useMutation({
-    mutationFn: (id: string) => rejectProposal(id),
-    onSuccess: () => {
-      invalidate();
-      toast.success(t("proposal.rejected"));
-    },
-    onError: (error) => {
-      if (error instanceof ApiRequestError && error.status === 404) {
-        invalidate();
-        toast.error(t("proposal.gone"));
-        return;
-      }
-      toast.error(t("inbox.rejectFailed"));
-    },
-  });
+  const rejectNow = (proposal: ProposalSummary) => {
+    if (pendingIds.has(proposal.id)) return;
+    const restore = advanceSelection(proposal.id);
+    queueReject({ id: proposal.id, title: titleOf(proposal), callbacks: { onUndo: restore, onError: restore } });
+  };
 
-  const approveAll = useMutation({
-    mutationFn: ({ request }: ApproveAllVariables) => approveAllProposals(request),
-    onSuccess: (data, variables) => {
-      invalidate();
-      if (variables.mode === "selection") {
-        // Only the ones that failed stay listed and stay selected.
-        setPicked(new Set(data.failed.map((failure) => failure.id)));
-        const message = t("inbox.approveAllResult", { approved: data.approved.length, kept: data.failed.length });
-        if (data.approved.length) toast.success(message);
-        else toast.error(message);
-        return;
-      }
-      if (variables.mode === "pack" && data.failed.length === 0) {
-        toast.success(t("inbox.approveAllDone", { count: data.approved.length }));
-        return;
-      }
-      const message = t("inbox.approveAllResult", { approved: data.approved.length, kept: data.failed.length });
-      if (data.approved.length) toast.success(message);
-      else toast.error(message);
-    },
-    onError: () => toast.error(t("inbox.approveAllFailed")),
-  });
+  const approveAllNow = (mode: BulkMode) => {
+    if (queueBusy) return;
+    const ids = visible.map((proposal) => proposal.id);
+    queueApproveAll({
+      request: approveAllRequest(),
+      ids,
+      count: ids.length,
+      mode,
+      callbacks: {
+        onSuccess: (result) => {
+          if (mode !== "selection") return;
+          const data = result as ApproveAllResponse;
+          setPicked(new Set(data.failed.map((failure) => failure.id)));
+        },
+      },
+    });
+  };
 
-  const rejectAll = useMutation({
-    mutationFn: ({ request }: RejectVariables) => rejectAllProposals(request),
-    onSuccess: (data, variables) => {
-      invalidate();
-      if (variables.mode === "selection") setPicked(new Set(data.failed.map((failure) => failure.id)));
-      const message = t("inbox.rejectAllResult", { rejected: data.rejected.length, kept: data.failed.length });
-      if (data.rejected.length) toast.success(message);
-      else toast.error(message);
-    },
-    onError: () => toast.error(t("inbox.rejectAllFailed")),
-  });
+  const approveSelectionNow = () => {
+    if (queueBusy || pickedIds.length === 0) return;
+    queueApproveAll({
+      request: { ids: pickedIds },
+      ids: pickedIds,
+      count: pickedIds.length,
+      mode: "selection",
+      callbacks: {
+        onSuccess: (result) => {
+          const data = result as ApproveAllResponse;
+          setPicked(new Set(data.failed.map((failure) => failure.id)));
+        },
+      },
+    });
+  };
+
+  const rejectSelectionNow = () => {
+    if (queueBusy) return;
+    const ids = [...pickedIds];
+    queueRejectAll({
+      request: { ids },
+      ids,
+      count: ids.length,
+      mode: "selection",
+      callbacks: {
+        onSuccess: (result) => {
+          const data = result as RejectAllResponse;
+          setPicked(new Set(data.failed.map((failure) => failure.id)));
+        },
+      },
+    });
+  };
+
+  const rejectVisibleNow = () => {
+    if (queueBusy) return;
+    const ids = visible.map((proposal) => proposal.id);
+    queueRejectAll({ request: approveAllRequest(), ids, count: ids.length, mode: "header" });
+  };
 
   const arm = (id: string) => {
     window.clearTimeout(armTimer.current);
@@ -458,17 +427,19 @@ export function InboxPage() {
     if (armed === id) {
       window.clearTimeout(armTimer.current);
       setArmed(null);
-      reject.mutate(id);
+      const proposal = visible.find((item) => item.id === id);
+      if (proposal) rejectNow(proposal);
       return;
     }
     arm(id);
   };
 
-  const requestApproveAll = (pack: string, version: string, key: string) => {
+  const requestApproveAll = (pack: string, version: string, key: string, ids: string[]) => {
     if (armedPack === key) {
       window.clearTimeout(packTimer.current);
       setArmedPack(null);
-      approveAll.mutate({ request: { pack, version }, mode: "pack" });
+      if (queueBusy) return;
+      queueApproveAll({ request: { pack, version }, ids, count: ids.length, mode: "pack" });
       return;
     }
     window.clearTimeout(packTimer.current);
@@ -517,8 +488,8 @@ export function InboxPage() {
   const confirmReject = () => {
     const mode = rejectOpen;
     setRejectOpen(null);
-    if (mode === "selection") rejectAll.mutate({ request: { ids: pickedIds }, mode: "selection" });
-    else if (mode === "all") rejectAll.mutate({ request: approveAllRequest(), mode: "all" });
+    if (mode === "selection") rejectSelectionNow();
+    else if (mode === "all") rejectVisibleNow();
   };
 
   const rejectCount = rejectOpen === "selection" ? pickedVisible.length : approveAllCount;
@@ -574,11 +545,11 @@ export function InboxPage() {
         event.preventDefault();
         togglePick(focused.id);
       } else if (event.key.toLowerCase() === "a") {
-        if (approve.isPending || reject.isPending) return;
+        if (pendingIds.has(focused.id)) return;
         event.preventDefault();
-        approve.mutate(focused.id);
+        approveCurrent(focused.id);
       } else if (event.key.toLowerCase() === "r") {
-        if (approve.isPending || reject.isPending) return;
+        if (pendingIds.has(focused.id)) return;
         event.preventDefault();
         requestReject(focused.id);
       } else if (event.key.toLowerCase() === "e") {
@@ -608,10 +579,7 @@ export function InboxPage() {
     packGroups.length > 0 ? (
       <div className="flex flex-col gap-1.5">
         {packGroups.map((group) => {
-          const busy =
-            approveAll.isPending &&
-            approveAll.variables?.request.pack === group.name &&
-            approveAll.variables?.request.version === group.version;
+          const busy = queueBusy;
           const confirms = armedPack === group.from;
           return (
             <div
@@ -633,7 +601,14 @@ export function InboxPage() {
                 size="sm"
                 pressScale={0.97}
                 disabled={busy}
-                onClick={() => requestApproveAll(group.name, group.version, group.from)}
+                onClick={() =>
+                  requestApproveAll(
+                    group.name,
+                    group.version,
+                    group.from,
+                    group.proposals.map((proposal) => proposal.id),
+                  )
+                }
                 className={confirms ? "h-7 shrink-0 border-destructive/40 px-3 text-destructive" : "h-7 shrink-0 px-3"}
               >
                 {confirms ? t("inbox.approveAllConfirm") : t("inbox.approveAll")}
@@ -729,9 +704,9 @@ export function InboxPage() {
                     variant="primary"
                     size="sm"
                     pressScale={0.97}
-                    disabled={approveAll.isPending || rejectAll.isPending}
+                    disabled={queueBusy}
                     className="h-8 shrink-0"
-                    onClick={() => approveAll.mutate({ request: { ids: pickedIds }, mode: "selection" })}
+                    onClick={approveSelectionNow}
                   >
                     {t("inbox.approveSelected")}
                   </Button>
@@ -739,7 +714,7 @@ export function InboxPage() {
                     variant="secondary"
                     size="sm"
                     pressScale={0.97}
-                    disabled={approveAll.isPending || rejectAll.isPending}
+                    disabled={queueBusy}
                     className="h-8 shrink-0 border-destructive/40 text-destructive"
                     onClick={() => setRejectOpen("selection")}
                   >
@@ -757,7 +732,7 @@ export function InboxPage() {
                       variant="secondary"
                       size="sm"
                       pressScale={0.97}
-                      disabled={rejectAll.isPending}
+                      disabled={queueBusy}
                       className="h-8 shrink-0 border-destructive/40 text-destructive"
                       onClick={() => setRejectOpen("all")}
                     >
@@ -770,7 +745,7 @@ export function InboxPage() {
                       variant="primary"
                       size="sm"
                       pressScale={0.97}
-                      disabled={approveAll.isPending}
+                      disabled={queueBusy}
                       aria-haspopup="dialog"
                       aria-expanded={approveAllOpen}
                       onClick={() => setApproveAllOpen(true)}
@@ -830,8 +805,7 @@ export function InboxPage() {
                 <div className="grid gap-3 min-[640px]:grid-cols-2 min-[1280px]:grid-cols-1">
                   <AnimatePresence initial mode="popLayout">
                     {visible.slice(0, visibleWindow).map((proposal, index) => {
-                      const busy =
-                        (approve.isPending && approve.variables === proposal.id) || (reject.isPending && reject.variables === proposal.id);
+                      const busy = pendingIds.has(proposal.id);
                       return (
                         <motion.div
                           key={proposal.id}
@@ -896,14 +870,10 @@ export function InboxPage() {
               <ProposalDetail
                 variant="panel"
                 proposal={detail}
-                busy={
-                  (approve.isPending && approve.variables === current.id) ||
-                  (reject.isPending && reject.variables === current.id) ||
-                  editApprove.isPending
-                }
+                busy={pendingIds.has(current.id)}
                 armed={armed === current.id}
                 editButtonRef={editButtonRef}
-                onApprove={() => approve.mutate(current.id)}
+                onApprove={() => approveCurrent(current.id)}
                 onReject={() => requestReject(current.id)}
                 onEdit={openEdit}
               />
@@ -920,8 +890,20 @@ export function InboxPage() {
           open={editOpen}
           onOpenChange={setEditOpen}
           errors={errors}
-          pending={editApprove.isPending}
-          onSubmit={(data, body) => editApprove.mutate({ id: current.id, data, body })}
+          pending={false}
+          onSubmit={(data, body) => {
+            if (!current) return;
+            const id = current.id;
+            const restore = advanceSelection(id);
+            queueApprove({
+              id,
+              title: titleOf(current),
+              override: { data, body },
+              callbacks: { onUndo: restore, onError: restore },
+            });
+            setEditOpen(false);
+            setErrors({});
+          }}
         />
       ) : null}
 
@@ -945,10 +927,10 @@ export function InboxPage() {
               variant="primary"
               size="sm"
               pressScale={0.97}
-              disabled={approveAll.isPending}
+              disabled={queueBusy}
               onClick={() => {
                 setApproveAllOpen(false);
-                approveAll.mutate({ request: approveAllRequest(), mode: "header" });
+                approveAllNow("header");
               }}
             >
               {t("inbox.approveAll")}
@@ -977,7 +959,7 @@ export function InboxPage() {
               variant="primary"
               size="sm"
               pressScale={0.97}
-              disabled={rejectAll.isPending}
+              disabled={queueBusy}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={confirmReject}
             >

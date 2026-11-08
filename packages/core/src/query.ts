@@ -7,7 +7,7 @@ import { phraseParts, splitNegations } from "./negation.js";
 import { NOTE_TYPES, type Note, type NoteData, type NoteType, type Proposal, type TechData } from "./schema.js";
 import { expandSynonyms } from "./synonyms.js";
 import { firstParagraph, idf, tokens } from "./tokens.js";
-import { serializeNote, toId, type Vault } from "./vault.js";
+import { serializeNote, stampApproved, toId, type Vault } from "./vault.js";
 import type { LoadedIndex } from "./vector-index.js";
 
 export { tokens };
@@ -396,7 +396,7 @@ export function proposalDetail(vault: Vault, p: Proposal): ProposalDetail {
     meta: p.meta,
     data: p.data,
     body: p.body,
-    proposedText: serializeNote(withoutUpdated(p.data), p.body),
+    proposedText: serializeNote(withoutUpdated(stampApproved(p.data, p.meta)), p.body),
     current: current
       ? {
           data: current.data,

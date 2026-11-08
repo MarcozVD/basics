@@ -3,7 +3,7 @@ import path from "node:path";
 import { expect, test } from "@playwright/test";
 import { vaultPath } from "./helpers";
 
-function writeProposal(id: string, title: string, body: string) {
+function writeProposal(id: string, title: string, body: string, reason = "test") {
   const vault = vaultPath();
   const inboxFile = path.join(vault, "inbox", `${id}.md`);
   fs.rmSync(path.join(vault, "tech", `${id}.md`), { force: true });
@@ -21,7 +21,7 @@ function writeProposal(id: string, title: string, body: string) {
       "proposal:",
       "  action: create",
       "  proposed_by: e2e",
-      "  reason: test",
+      `  reason: ${reason}`,
       `  created: "${new Date().toISOString()}"`,
       "---",
       `# ${title}`,
@@ -43,25 +43,40 @@ async function settle(page: import("@playwright/test").Page) {
   );
 }
 
-test("home shows the agent loop and approves from the queue", async ({ page }) => {
+test("home shows the agent loop and reviews from the queue", async ({ page }) => {
   // create-note.spec runs before this file and leaves tech notes behind.
   for (const id of ["drizzle-orm", "hono"]) {
     fs.rmSync(path.join(vaultPath(), "tech", `${id}.md`), { force: true });
   }
 
-  await page.goto("/");
+  try {
+    await page.goto("/");
 
-  // Health is one line of live counts, not the old type tiles.
-  const health = page.getByTestId("health-line");
-  await expect(health).toContainText(/\d+ notes/);
-  await expect(page.locator('[data-stat="notes"]')).toBeVisible();
+    // Health is one line of live counts, not the old type tiles.
+    const health = page.getByTestId("health-line");
+    await expect(health).toContainText(/\d+ notes/);
+    await expect(page.locator('[data-stat="notes"]')).toBeVisible();
 
-  writeProposal("homeflow", "Home flow", "Proposal approved from the Home screen.");
+    writeProposal("homeflow", "Home flow", "Proposal reviewed from the Home screen.");
 
-  await expect(page.getByRole("button", { name: /homeflow/i })).toBeVisible();
-  await page.getByRole("button", { name: "Approve", exact: true }).click();
+    await expect(page.getByRole("button", { name: /homeflow/i })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Approve", exact: true })).toHaveCount(0);
 
-  await expect(page.getByTestId("inbox-strip")).toContainText("Inbox is clear");
+    await page.getByRole("button", { name: "Review", exact: true }).click();
+    await expect(page).toHaveURL(/\/inbox\/homeflow$/);
+    await expect(page.locator("[data-proposal-detail]")).toBeVisible();
+
+    // Review is navigation only: the proposal remains pending and no note is written.
+    expect(fs.existsSync(path.join(vaultPath(), "inbox", "homeflow.md"))).toBe(true);
+    expect(fs.existsSync(path.join(vaultPath(), "tech", "homeflow.md"))).toBe(false);
+
+    await page.getByRole("button", { name: "Back to Home" }).click();
+    await expect(page).toHaveURL(/\/$/);
+    await expect(page.getByTestId("inbox-strip")).toContainText("Home flow");
+  } finally {
+    fs.rmSync(path.join(vaultPath(), "inbox", "homeflow.md"), { force: true });
+    fs.rmSync(path.join(vaultPath(), "tech", "homeflow.md"), { force: true });
+  }
 });
 
 test("the get-set-up checklist leaves once notes, an agent and a project are in place", async ({ page, request }) => {
@@ -300,9 +315,11 @@ test("creates the missing note from the broken links line", async ({ page }) => 
   }
 });
 
-test("Home previews three proposals and links to the rest", async ({ page }) => {
+test("Home previews three proposals, clamps their reason and keeps Continue above the fold", async ({ page }) => {
   const ids = ["pending-1", "pending-2", "pending-3", "pending-4", "pending-5"];
-  for (const id of ids) writeProposal(id, `Proposal ${id}`, "Pending body.");
+  const longReason =
+    "This reason is deliberately long enough to wrap several times on the Home card so the one line clamp is visible in a real layout.";
+  for (const id of ids) writeProposal(id, `Proposal ${id}`, "Pending body.", id === "pending-1" ? longReason : "test");
   try {
     await page.setViewportSize({ width: 1280, height: 820 });
     await page.goto("/");
@@ -310,7 +327,27 @@ test("Home previews three proposals and links to the rest", async ({ page }) => 
     const strip = page.getByTestId("inbox-strip");
     await expect(strip).toBeVisible();
     await expect(strip.locator("[data-proposal-open]")).toHaveCount(3);
-    await expect(strip.getByRole("link", { name: /See all \(5\)/ })).toBeVisible();
+    await expect(strip.getByRole("link", { name: "Show all in Inbox (5)" })).toBeVisible();
+
+    const reason = strip.locator("[data-proposal-reason]").first();
+    const reasonBox = await reason.boundingBox();
+    const lineHeight = await reason.evaluate((element) => Number.parseFloat(getComputedStyle(element).lineHeight));
+    expect(reasonBox).not.toBeNull();
+    expect(reasonBox?.height ?? Number.POSITIVE_INFINITY).toBeLessThan(lineHeight * 1.75);
+
+    const continueHeading = page.getByRole("heading", { name: "Continue where you left off" });
+    const headingBox = await continueHeading.boundingBox();
+    const listBox = await page.getByTestId("continue-list").boundingBox();
+    expect(headingBox).not.toBeNull();
+    expect(listBox).not.toBeNull();
+    expect((headingBox?.y ?? Number.POSITIVE_INFINITY) + (headingBox?.height ?? 0)).toBeLessThan(820);
+    expect(listBox?.y ?? Number.POSITIVE_INFINITY).toBeLessThan(820);
+    console.log(
+      `[home] 1280x820 continue=${headingBox?.y},${headingBox?.height} list=${listBox?.y} reason=${reasonBox?.width}x${reasonBox?.height} line=${lineHeight}`,
+    );
+
+    await strip.getByRole("link", { name: "Show all in Inbox (5)" }).click();
+    await expect(page).toHaveURL(/\/inbox$/);
   } finally {
     for (const id of ids) {
       fs.rmSync(path.join(vaultPath(), "inbox", `${id}.md`), { force: true });
