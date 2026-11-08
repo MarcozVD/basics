@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, Check, Copy, GitFork, Inbox, Package, X } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import { ApprovalCard } from "@/components/agents/approval-card";
 import { Button } from "@/components/motion/button/base";
 import { Checkbox } from "@/components/motion/checkbox";
@@ -17,6 +17,7 @@ import { type TranslationKey, useI18n } from "@/i18n";
 import { agentColor, agentInitial } from "@/lib/agent-color";
 import { ApiRequestError, addPack, approveProposal, installPack, type Language, rejectProposal } from "@/lib/api";
 import { SPRING_LAYOUT } from "@/lib/ease";
+import { useIntentNavigate } from "@/lib/intent-navigate";
 import { useIntro } from "@/lib/intro";
 import { packProposer } from "@/lib/packs";
 import { useActivity, useConnectStatus, useInbox, useNotes, usePacks, useStats } from "@/lib/queries";
@@ -485,7 +486,7 @@ interface InboxStripProps {
  */
 function InboxStrip({ proposals, total, isPending, error, armed, busyId, onApprove, onReject }: InboxStripProps) {
   const { t, language } = useI18n();
-  const navigate = useNavigate();
+  const navigate = useIntentNavigate();
   const reduce = useReducedMotion() ?? false;
 
   if (isPending) {
@@ -648,7 +649,7 @@ function HealthDetail({ stat, label, value, text, children }: HealthDetailProps)
 /** One quiet line: how much is in the vault, and what needs attention. */
 function HealthLine({ stats }: { stats: ReturnType<typeof useStats> }) {
   const { t } = useI18n();
-  const navigate = useNavigate();
+  const navigate = useIntentNavigate();
   if (stats.isPending) {
     return (
       <section data-testid="health-line" aria-label={t("home.health")} className="flex min-h-6 items-center gap-3">
@@ -841,7 +842,7 @@ function ContinueSection({
 
 export function HomePage() {
   const { t, language } = useI18n();
-  const navigate = useNavigate();
+  const navigate = useIntentNavigate();
   const queryClient = useQueryClient();
 
   const stats = useStats();

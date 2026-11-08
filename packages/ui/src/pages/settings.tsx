@@ -2,7 +2,6 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowUpRight, Check, ChevronDown, Copy, FolderOpen, MonitorSmartphone } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { type KeyboardEvent as ReactKeyboardEvent, type ReactNode, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "react-router";
 import { Button } from "@/components/motion/button/base";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/motion/collapsible";
 import { Switch } from "@/components/motion/switch";
@@ -28,6 +27,7 @@ import { useEmbeddingsProgress } from "@/lib/events";
 import { useIntro } from "@/lib/intro";
 import { type DockEdge, type NavigationStyle, setDockEdge, setNavigationStyle, useNavigation } from "@/lib/navigation";
 import { queryKeys, useConnectStatus, useEmbeddings, useHealth } from "@/lib/queries";
+import { useRouteSearchParams } from "@/lib/route-query";
 import { type Theme, useTheme } from "@/lib/theme";
 import { toast } from "@/lib/toast";
 import { checkForUpdates, installUpdate, useUpdateState } from "@/lib/updater";
@@ -1086,7 +1086,7 @@ function AboutSection() {
 
 export function SettingsPage() {
   const t = useT();
-  const [params, setParams] = useSearchParams();
+  const [params, setParams] = useRouteSearchParams();
   const requested = params.get("section");
   const active: SectionId = isSection(requested) ? requested : "general";
   const reduce = useReducedMotion();

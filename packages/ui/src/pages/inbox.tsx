@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Inbox as InboxIcon, LoaderCircle, Package } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { Link, useMatch, useNavigate, useSearchParams } from "react-router";
+import { Link, useMatch } from "react-router";
 import { AnimatedNumber } from "@/components/motion/animated-number";
 import { Button } from "@/components/motion/button/base";
 import { CenterMorphModal, CenterMorphModalContent } from "@/components/motion/center-morph-modal";
@@ -18,12 +18,14 @@ import { type TranslationKey, useI18n } from "@/i18n";
 import { agentColor, agentInitial } from "@/lib/agent-color";
 import { ApiRequestError, approveAllProposals, approveProposal, rejectAllProposals, rejectProposal } from "@/lib/api";
 import { EASE_OUT, SPRING_LAYOUT } from "@/lib/ease";
+import { useIntentNavigate } from "@/lib/intent-navigate";
 import { useIntro } from "@/lib/intro";
 import { groupPackProposals, packProposer } from "@/lib/packs";
 import { useFirstPaint, useProgressiveCount } from "@/lib/progressive";
 import { useInbox, useProposal, useStats } from "@/lib/queries";
 import { formatRelativeTime } from "@/lib/relative-time";
 import { useReturnFocus } from "@/lib/return-focus";
+import { useRouteSearchParams } from "@/lib/route-query";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 
@@ -179,8 +181,8 @@ function InboxRow({
 
 export function InboxPage() {
   const { t } = useI18n();
-  const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useIntentNavigate();
+  const [searchParams, setSearchParams] = useRouteSearchParams();
   // This page can stay mounted for one render after the router enters `/inbox/:id`.
   // While that detail route owns the URL, the list must not write its own `?p=`.
   const detailRoute = useMatch("/inbox/:id") !== null;

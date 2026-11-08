@@ -106,6 +106,90 @@ export function currentNavigationEpoch(): number {
   return navigationEpoch;
 }
 
+/**
+ * The pathname the shell last committed. A `popstate` fires after the URL has already moved
+ * but before React Router commits, so this is the only way to tell a real route change from
+ * a history move that only changes the query.
+ */
+let committedPathname: string | null = null;
+
+/** Record the pathname of the route the shell has just rendered. */
+export function markCommittedPathname(pathname: string): void {
+  committedPathname = pathname;
+}
+
+type NavigationIntentListener = () => void;
+
+const intentListeners = new Set<NavigationIntentListener>();
+
+/**
+ * Run `listener` when an in-app navigation starts, synchronously inside the click, key press or
+ * popstate and before React commits it. A page that has already queued heavy rendering for the
+ * route being left can cancel it here; this is the only moment early enough to do so. Returns a
+ * disposer.
+ */
+export function onNavigationIntent(listener: NavigationIntentListener): () => void {
+  intentListeners.add(listener);
+  return () => {
+    intentListeners.delete(listener);
+  };
+}
+
+/**
+ * Signal an in-app navigation that did not start with a link activation: a shortcut, the
+ * command palette, a toast action or one of the history buttons. Call this synchronously
+ * before `navigate`, so deferred page work can abandon before React commits the route.
+ */
+export function beginNavigation(): void {
+  bumpNavigationEpoch();
+  for (const listener of intentListeners) listener();
+}
+
+/**
+ * The earliest moment an in-app navigation is observable: a link activation that changes the
+ * pathname, or a browser history move. React Router commits the new location a frame or more
+ * later, and by then the outgoing page may already be blocked in heavy work of its own (the
+ * graph's first render), so the commit-time bump is too late to abandon it. Bumping on the
+ * click or popstate lets deferred boot steps see the departure before they start. A navigation
+ * that only changes the query keeps the same page (and its canvas) and must not count;
+ * modified clicks, downloads and external links are not in-app navigations either.
+ *
+ * The popstate listener is registered in the capture phase (and before React Router's own
+ * listener), because the URL has already moved when the event fires and the router's listener
+ * would otherwise process the history move first.
+ *
+ * Returns a disposer for the shell to uninstall on unmount.
+ */
+export function observeNavigationIntent(): () => void {
+  const onClick = (event: MouseEvent) => {
+    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    const anchor = (event.target as Element | null)?.closest?.("a[href]");
+    if (!(anchor instanceof HTMLAnchorElement)) return;
+    if (anchor.hasAttribute("download")) return;
+    if (anchor.target && anchor.target !== "_self") return;
+    const url = new URL(anchor.href, window.location.href);
+    if (url.origin !== window.location.origin || url.pathname === window.location.pathname) return;
+    beginNavigation();
+  };
+  const onPopState = () => {
+    const pathname = window.location.pathname;
+    // The first observation after load has nothing to compare against; the shell render
+    // records the committed pathname, so this only happens before its first effect.
+    if (committedPathname === null) {
+      committedPathname = pathname;
+      return;
+    }
+    if (pathname === committedPathname) return;
+    beginNavigation();
+  };
+  document.addEventListener("click", onClick, true);
+  window.addEventListener("popstate", onPopState, true);
+  return () => {
+    document.removeEventListener("click", onClick, true);
+    window.removeEventListener("popstate", onPopState, true);
+  };
+}
+
 /** Pixels the incoming page starts from, on the side it travels from. */
 export const PAGE_ENTER_OFFSET = 12;
 /** Pixels the outgoing page travels towards the opposite side. */

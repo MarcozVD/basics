@@ -1,15 +1,7 @@
 import { Menu } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { type CSSProperties, memo, type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import {
-  type Location,
-  type NavigationType,
-  UNSAFE_LocationContext,
-  useLocation,
-  useNavigate,
-  useNavigationType,
-  useOutlet,
-} from "react-router";
+import { type Location, type NavigationType, UNSAFE_LocationContext, useLocation, useNavigationType, useOutlet } from "react-router";
 import { AppCommandPalette } from "@/components/app/command-palette";
 import { FloatingNav } from "@/components/app/floating-nav";
 import { NewNoteDialog } from "@/components/app/new-note-dialog";
@@ -24,11 +16,14 @@ import { recordNavigation, saveScroll, scrollFor, useHistoryShortcuts } from "@/
 import { isDesktop, isMacos } from "@/lib/desktop";
 import { useDesktopShell } from "@/lib/desktop-shell";
 import { EASE_IN, EASE_OUT } from "@/lib/ease";
+import { useIntentNavigate } from "@/lib/intent-navigate";
 import { DOCK_SPACE, DOCK_SPACE_VERTICAL, DOCK_VERTICAL_MIN, type DockEdge, setDockEdge, useNavigation } from "@/lib/navigation";
 import {
   bumpNavigationEpoch,
   markBackNavigation,
+  markCommittedPathname,
   markNavigated,
+  observeNavigationIntent,
   PAGE_ENTER_MS,
   PAGE_ENTER_OFFSET,
   PAGE_EXIT_MS,
@@ -124,9 +119,12 @@ function useMedia(query: string): boolean {
 export function Layout() {
   const { t } = useI18n();
   const location = useLocation();
-  const navigate = useNavigate();
+  const navigate = useIntentNavigate();
   const navigationType = useNavigationType();
   const outlet = useOutlet();
+  // The popstate listener cannot ask the router where it is before the router handles the
+  // same event; the last committed pathname tells it whether the history move changed the page.
+  markCommittedPathname(location.pathname);
   const agentStatus = useAgentRunStatus();
   const onRecommend = location.pathname === "/recommend";
   const reduce = useReducedMotion();
@@ -215,6 +213,9 @@ export function Layout() {
   useGlobalShortcuts();
   // Alt+Left/Right and mouse back/forward stay inside the app, in the browser and the desktop.
   useHistoryShortcuts();
+  // A link activation that changes the route is known before React commits it; tell deferred
+  // page work now, so it can abandon a boot instead of finishing it for the page being left.
+  useEffect(() => observeNavigationIntent(), []);
   // No browser behaviour in the app: Ctrl+F searches here, reload/print/source/zoom/...
   // are swallowed, and the native context menu only survives in editable fields.
   useDesktopShell(desktop);

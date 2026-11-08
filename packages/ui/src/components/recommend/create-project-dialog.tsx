@@ -3,7 +3,6 @@
 import type { NoteData, NoteDetail } from "@marcozvd/basics-core";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { type ComponentProps, type ReactNode, useEffect, useId, useRef, useState } from "react";
-import { useNavigate } from "react-router";
 import { Button } from "@/components/motion/button/base";
 import { CenterMorphModal, CenterMorphModalContent } from "@/components/motion/center-morph-modal";
 import { Input } from "@/components/motion/input";
@@ -12,6 +11,7 @@ import { LinkField, StackField } from "@/components/note-form/field-input";
 import { type TranslationKey, useT } from "@/i18n";
 import { ApiRequestError, createNote, getNote, saveNote } from "@/lib/api";
 import { type Field, TEMPLATES } from "@/lib/fields";
+import { useIntentNavigate } from "@/lib/intent-navigate";
 import { slugify } from "@/lib/slug";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
@@ -173,7 +173,7 @@ export function CreateProjectDialog({
   prefill: CreateProjectPrefill;
 }) {
   const t = useT();
-  const navigate = useNavigate();
+  const navigate = useIntentNavigate();
   const queryClient = useQueryClient();
   const statusLabelId = useId();
   const descriptionId = useId();

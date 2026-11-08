@@ -1,7 +1,7 @@
 import type { NoteData } from "@marcozvd/basics-core";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router";
+import { Link, useParams } from "react-router";
 import { Page } from "@/components/page";
 import { PageHeader } from "@/components/page-header";
 import { issuesToErrors, ProposalDetail, ProposalEditModal } from "@/components/proposal-detail";
@@ -9,6 +9,7 @@ import { ErrorState, Loading } from "@/components/state";
 import { useI18n } from "@/i18n";
 import { ApiRequestError, approveProposal, rejectProposal } from "@/lib/api";
 import { useBackTarget } from "@/lib/app-history";
+import { useIntentNavigate } from "@/lib/intent-navigate";
 import { useProposal } from "@/lib/queries";
 import { useReturnFocus } from "@/lib/return-focus";
 import { toast } from "@/lib/toast";
@@ -36,7 +37,7 @@ function GoneState({ message, back }: { message: string; back: string }) {
 export function ProposalPage() {
   const { id } = useParams();
   const { t } = useI18n();
-  const navigate = useNavigate();
+  const navigate = useIntentNavigate();
   const queryClient = useQueryClient();
   const proposalQuery = useProposal(id);
   const proposal = proposalQuery.data;

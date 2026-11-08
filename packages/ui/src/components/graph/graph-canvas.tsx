@@ -5,7 +5,7 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { type Dispatch, type Ref, type SetStateAction, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { type TranslationKey, useT } from "@/i18n";
 import { EASE_OUT } from "@/lib/ease";
-import { currentNavigationEpoch } from "@/lib/page-transition";
+import { currentNavigationEpoch, onNavigationIntent } from "@/lib/page-transition";
 import { cn } from "@/lib/utils";
 import { type GraphCacheScope, type GraphPosition, recallGraph, rememberCamera, rememberGraph } from "./graph-cache";
 import { type GraphLayoutPosition, type GraphLayoutRun, type GraphLayoutStageOptions, startGraphLayout } from "./graph-layout";
@@ -53,6 +53,13 @@ export interface GraphCanvasProps {
   insets?: Insets;
   /** Where to restore the previous positions and camera from (full graph only). */
   cacheScope?: GraphCacheScope | null;
+  /**
+   * The navigation the page was entered with. The canvas may mount a few hundred
+   * milliseconds later (chunk, data), after the reader already left; deferred boot steps
+   * compare against this, not their own mount, so a late mount during the exit does not
+   * start a layout for a page that is on its way out.
+   */
+  navigationEpoch?: number;
   onNodeClick?: (id: string) => void;
   onBackgroundClick?: () => void;
   className?: string;
@@ -452,6 +459,8 @@ interface PersistentCanvas {
   dataRef: GraphData | null;
   /** Grouping plus the band titles `cy` was synced with; a change forces a re-sync. */
   layoutKey: string;
+  /** The label metrics were recalculated with the real font. */
+  fontsApplied: boolean;
   /** The last elements effect found the picture already mirrored in `cy`. */
   unchanged: boolean;
   /** Inputs of the class work that has already been applied to this picture. */
@@ -917,6 +926,7 @@ export default function GraphCanvas({
   selectedId = null,
   insets = NO_INSETS,
   cacheScope = null,
+  navigationEpoch,
   onNodeClick,
   onBackgroundClick,
   className,
@@ -928,7 +938,7 @@ export default function GraphCanvas({
   const cyRef = useRef<Core | null>(null);
   const firstRun = useRef(true);
   /** The navigation this mount belongs to; deferred boot steps bail if the shell has moved on. */
-  const mountEpoch = useRef(currentNavigationEpoch());
+  const mountEpoch = useRef(navigationEpoch ?? currentNavigationEpoch());
   /** The bridge this mount writes into; shared with the kept instance on a return. */
   const bridgeRef = useRef<CanvasBridge | null>(null);
   /** Per-mount timing record; null outside dev and the Playwright probe. */
@@ -937,6 +947,10 @@ export default function GraphCanvas({
   const layoutRun = useRef<GraphLayoutRun | null>(null);
   /** The frame scheduled between the element sync and the placement, if any. */
   const placeFrame = useRef<number | null>(null);
+  /** A frame with this mount's picture has reached the screen. */
+  const painted = useRef(false);
+  /** The click that leaves this route already dropped the unpainted instance. */
+  const abandoned = useRef(false);
   const [hover, setHover] = useState<Hover | null>(null);
   const [palette, setPalette] = useState<Palette | null>(null);
   // Creating the instance and feeding it elements are two heavy steps; let the first one
@@ -971,6 +985,12 @@ export default function GraphCanvas({
     const cy = cyRef.current;
     if (!cy) return;
     fitTo(cy, cy.elements(":visible"), bridge.insets, animate && !bridge.reduce);
+  };
+
+  /** This mount's picture is on screen: from here on leaving keeps the canvas instead of dropping a boot. */
+  const markPainted = () => {
+    painted.current = true;
+    perfFirstFrame(perfRecord.current);
   };
 
   /**
@@ -1072,6 +1092,10 @@ export default function GraphCanvas({
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
+    // The page was left while the canvas chunk was still loading: this effect is about to be
+    // torn down with the page. Building the renderer here would sync hundreds of elements and
+    // paint the whole picture inside the next page's frames; a return rebuilds from the cache.
+    if (mode === "full" && currentNavigationEpoch() !== mountEpoch.current) return;
     bridge.container = container;
     const initialPalette = readPalette();
     const large = data.nodes.length > LARGE_GRAPH;
@@ -1084,6 +1108,8 @@ export default function GraphCanvas({
       container.appendChild(kept.shell);
       // The instance still holds the picture and the camera it was left with.
       firstRun.current = false;
+      // It already reached the screen on an earlier visit; leaving again must keep it.
+      painted.current = true;
       perfCount("reuses");
       // Its container was detached for a while. The ResizeObserver below compares the kept
       // canvas box with the live one; a redundant resize here would repaint the whole renderer
@@ -1117,6 +1143,7 @@ export default function GraphCanvas({
           style: { palette: initialPalette, reduce },
           dataRef: null,
           layoutKey: "",
+          fontsApplied: false,
           unchanged: false,
           appliedVisibility: null,
           appliedQuery: null,
@@ -1130,6 +1157,27 @@ export default function GraphCanvas({
       (window as { __basicsCy?: Core }).__basicsCy = cy;
     }
     setPalette(initialPalette);
+
+    // The element sync has queued cytoscape's first full render (or is about to). A link click
+    // that leaves this route is the last moment early enough to cancel it: destroying the
+    // unpainted instance inside the click drops the queued frame before it lands in the next
+    // page's budget. A picture that already painted is kept for the next visit instead.
+    const abandonBoot = () => {
+      if (abandoned.current || painted.current || mode !== "full") return;
+      if (currentNavigationEpoch() === mountEpoch.current) return;
+      abandoned.current = true;
+      layoutRun.current?.cancel();
+      layoutRun.current = null;
+      if (placeFrame.current !== null) {
+        cancelAnimationFrame(placeFrame.current);
+        placeFrame.current = null;
+      }
+      if (bridge.cache) rememberCamera(bridge.cache, { zoom: cy.zoom(), pan: { ...cy.pan() } });
+      cy.destroy();
+      if (persistent?.cy === cy) persistent = null;
+      cyRef.current = null;
+    };
+    const unsubscribeIntent = onNavigationIntent(abandonBoot);
 
     const hoverFrom = (node: NodeSingular): Hover => {
       const position = node.renderedPosition();
@@ -1185,9 +1233,28 @@ export default function GraphCanvas({
         const target = event.target as NodeSingular;
         if (target.isNode?.() && !target.data("bandLabel") && !target.data("spacer")) bridge.onNodeClick?.(target.id());
       });
-      // Geist may load after the first paint; redraw labels with the real font.
+      // Geist may load after the first paint; redraw labels with the real font. A ready
+      // promise that resolves after the page was left must not restyle a detached canvas:
+      // that recalculated every label and repainted the whole graph inside the next page's
+      // frame. The skip leaves `fontsApplied` false, so the next visit applies it instead.
+      const applyFontStyle = () => {
+        if (cy.destroyed()) return;
+        cy.style().update();
+        if (persistent?.cy === cy) persistent.fontsApplied = true;
+      };
       void document.fonts?.ready.then(() => {
-        if (!cy.destroyed()) cy.style().update();
+        if (cy.destroyed() || !bridge.container) return;
+        if (mode === "full" && currentNavigationEpoch() !== mountEpoch.current) return;
+        applyFontStyle();
+      });
+    } else if (!kept.fontsApplied) {
+      // A kept instance whose font pass was skipped while it was detached: apply it when Geist
+      // is ready, once, and only while it is still attached.
+      void document.fonts?.ready.then(() => {
+        if (cy.destroyed() || !bridge.container || kept.fontsApplied) return;
+        if (mode === "full" && currentNavigationEpoch() !== mountEpoch.current) return;
+        cy.style().update();
+        kept.fontsApplied = true;
       });
     }
 
@@ -1204,8 +1271,11 @@ export default function GraphCanvas({
     return () => {
       observer.disconnect();
       resize.disconnect();
+      unsubscribeIntent();
       bridge.container = null;
       cyRef.current = null;
+      // The leaving click already dropped this unpainted instance and its queued render.
+      if (abandoned.current) return;
       // Leaving the page must abandon the boot: a worker layout, a pending placement or a
       // glide that outlives the mount would block the next page on the main thread.
       const wasRunning = layoutRun.current !== null;
@@ -1215,6 +1285,16 @@ export default function GraphCanvas({
         cy.stop();
         cy.elements().stop();
         gliding.delete(cy);
+        // A boot that never painted a frame has no picture worth keeping, and its queued
+        // element sync, font restyle or first full render would otherwise run inside the
+        // next page's frames. Dropping it is the only way to cancel cytoscape's own render
+        // loop; the next visit rebuilds from the position cache.
+        if (!painted.current) {
+          if (bridge.cache) rememberCamera(bridge.cache, { zoom: cy.zoom(), pan: { ...cy.pan() } });
+          cy.destroy();
+          persistent = null;
+          return;
+        }
         // Only the camera is worth keeping from an unfinished picture; the next visit
         // rebuilds it instead of continuing a half-applied layout.
         if (wasRunning) {
@@ -1269,7 +1349,7 @@ export default function GraphCanvas({
     if (persistent?.cy === cy) persistent.unchanged = unchanged;
     if (unchanged) {
       perfPhase(perfRecord.current, "reuse", performance.now() - effectStart);
-      perfFirstFrame(perfRecord.current);
+      markPainted();
       if (!layoutRun.current) perfSettled(perfRecord.current, "cache");
       return;
     }
@@ -1293,7 +1373,7 @@ export default function GraphCanvas({
     const boxedChanged = lastBoxed.current !== boxed;
     lastBoxed.current = boxed;
     if (!first && changed === 0 && !boxedChanged && !freshInstance) {
-      perfFirstFrame(perfRecord.current);
+      markPainted();
       // A layout still running for this very picture settles it, not this effect run.
       if (!layoutRun.current) perfSettled(perfRecord.current, "cache");
       return;
@@ -1304,6 +1384,9 @@ export default function GraphCanvas({
     const frame = requestAnimationFrame(() => {
       placeFrame.current = null;
       if (cyRef.current !== cy || cy.destroyed()) return;
+      // The reader may have left between the sync above and this frame: placing the picture
+      // and its first full render would land in the next page's budget.
+      if (mode === "full" && currentNavigationEpoch() !== mountEpoch.current) return;
       const placeStart = performance.now();
       const scope = bridge.cache;
       // First look at this data: reuse the last visit's positions so a return is instant.
@@ -1337,7 +1420,7 @@ export default function GraphCanvas({
           toggleLabelCulling(cy);
           rememberGraphState(cy, scope);
           perfPhase(perfRecord.current, "place", performance.now() - placeStart);
-          perfFirstFrame(perfRecord.current);
+          markPainted();
           perfSettled(perfRecord.current, "cache");
           return;
         }
@@ -1351,7 +1434,7 @@ export default function GraphCanvas({
           toggleDetailLabels(cy);
           rememberGraphState(cy, scope);
           perfPhase(perfRecord.current, "place", performance.now() - placeStart);
-          perfFirstFrame(perfRecord.current);
+          markPainted();
           perfSettled(perfRecord.current, "layout");
           return;
         }
@@ -1363,7 +1446,7 @@ export default function GraphCanvas({
         });
         fitVisible(false);
         perfPhase(perfRecord.current, "place", performance.now() - placeStart);
-        perfFirstFrame(perfRecord.current);
+        markPainted();
         settleFlatGraph(cy, seeds, false, true);
         return;
       }
@@ -1371,7 +1454,7 @@ export default function GraphCanvas({
         cy.nodes().removeStyle("font-size");
         runLayout(cy, { randomize: true, animate: false, compact: true, fit: () => fitVisible(false) });
         perfPhase(perfRecord.current, "place", performance.now() - placeStart);
-        perfFirstFrame(perfRecord.current);
+        markPainted();
         perfSettled(perfRecord.current, "layout");
         return;
       }
@@ -1382,7 +1465,7 @@ export default function GraphCanvas({
         toggleDetailLabels(cy);
         rememberGraphState(cy, scope);
         perfPhase(perfRecord.current, "place", performance.now() - placeStart);
-        perfFirstFrame(perfRecord.current);
+        markPainted();
         perfSettled(perfRecord.current, "layout");
         return;
       }
@@ -1394,7 +1477,7 @@ export default function GraphCanvas({
       const refit = first || boxedChanged || freshInstance;
       if (refit) fitVisible(false);
       perfPhase(perfRecord.current, "place", performance.now() - placeStart);
-      perfFirstFrame(perfRecord.current);
+      markPainted();
       settleFlatGraph(cy, seeds, freshInstance, refit);
     });
     placeFrame.current = frame;

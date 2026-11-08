@@ -12,7 +12,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router";
+import { Link } from "react-router";
 import { EXPORT_TARGETS, ExportModal } from "@/components/export-modal";
 import { Button } from "@/components/motion/button/base";
 import { Input } from "@/components/motion/input";
@@ -24,12 +24,14 @@ import { ErrorState, Loading } from "@/components/state";
 import { type TranslationKey, useI18n } from "@/i18n";
 import { exportStack, getNote, saveNote } from "@/lib/api";
 import { EASE_OUT, SPRING_LAYOUT } from "@/lib/ease";
+import { useIntentNavigate } from "@/lib/intent-navigate";
 import { useIntro } from "@/lib/intro";
 import { useFirstPaint, useProgressiveCount } from "@/lib/progressive";
 import { queryKeys, useNotes } from "@/lib/queries";
 import { rememberRecentItem } from "@/lib/recent-notes";
 import { formatCompactRelativeTime, formatFullDateTime, formatRelativeTime } from "@/lib/relative-time";
 import { useReturnFocus } from "@/lib/return-focus";
+import { useRouteSearchParams } from "@/lib/route-query";
 import { toast } from "@/lib/toast";
 import { tintStyle, typeColor } from "@/lib/type-color";
 import { cn } from "@/lib/utils";
@@ -679,7 +681,7 @@ function ProjectDetail({
 
 export function ProjectsPage() {
   const { t } = useI18n();
-  const navigate = useNavigate();
+  const navigate = useIntentNavigate();
   const queryClient = useQueryClient();
   const wide = useWide();
   const reduce = useReducedMotion() ?? false;
@@ -688,7 +690,7 @@ export function ProjectsPage() {
   const intro = useIntro("projects", notes.isSuccess ? Boolean(notes.data?.length) : true);
   const [searchText, setSearchText] = useState("");
   const [selected, setSelected] = useState(0);
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useRouteSearchParams();
   const searchRef = useRef<HTMLInputElement>(null);
   const lastParam = useRef<string | null>(null);
   const pendingParam = useRef<string | null>(null);

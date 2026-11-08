@@ -1,7 +1,8 @@
 import { useEffect, useMemo } from "react";
-import { type NavigationType, useLocation, useNavigate } from "react-router";
+import { NavigationType, useLocation } from "react-router";
 import { type TranslationKey, useI18n } from "@/i18n";
 import { isEditableTarget } from "@/lib/desktop-shell";
+import { useIntentNavigate } from "@/lib/intent-navigate";
 import { setNextDirection } from "@/lib/page-transition";
 
 /**
@@ -21,6 +22,12 @@ export interface HistoryEntry {
   pathname: string;
   search: string;
   scroll: number;
+  /**
+   * The browser's index for this entry, from React Router's history state. It lets a pop to an
+   * entry the router never rendered (rapid clicks outrun React) keep the entries ahead of it
+   * instead of treating the pop as a new push and dropping the forward stack.
+   */
+  idx?: number;
 }
 
 const STORAGE_KEY = "basics:app-history";
@@ -61,22 +68,81 @@ function persist(): void {
   }
 }
 
+/** The browser history index React Router stores in `history.state`, when it is available. */
+function browserIndex(): number | undefined {
+  if (typeof window === "undefined") return undefined;
+  const state = window.history.state as { idx?: unknown } | null;
+  return typeof state?.idx === "number" ? state.idx : undefined;
+}
+
+/**
+ * Insert an entry at the browser index it occupies. A push drops anything at or ahead of the
+ * slot (the browser truncated that forward stack); a pop keeps the entries ahead, so a forward
+ * press right after the pop still works.
+ */
+function insertEntry(entry: HistoryEntry, navigationType: NavigationType): void {
+  const idx = entry.idx;
+  if (idx !== undefined) {
+    if (navigationType !== "POP") {
+      store.entries = store.entries.filter((candidate) => candidate.idx === undefined || candidate.idx < idx);
+    }
+    const same = store.entries.findIndex((candidate) => candidate.idx === idx);
+    if (same >= 0) {
+      store.entries[same] = entry;
+      store.index = same;
+      return;
+    }
+    let insertAt = store.entries.length;
+    for (let position = 0; position < store.entries.length; position += 1) {
+      const candidate = store.entries[position];
+      if (candidate?.idx !== undefined && candidate.idx > idx) {
+        insertAt = position;
+        break;
+      }
+    }
+    store.entries.splice(insertAt, 0, entry);
+    store.index = insertAt;
+    return;
+  }
+  // No browser index (an entry restored from an older session): fall back to cursor order.
+  if (navigationType === "POP" && store.index >= 0) {
+    store.entries.splice(store.index, 0, entry);
+    store.index = Math.min(store.index, store.entries.length - 1);
+  } else if (navigationType === "REPLACE" && store.index >= 0) {
+    store.entries[store.index] = entry;
+  } else {
+    const kept = store.index >= 0 ? store.entries.slice(0, store.index + 1) : [];
+    kept.push(entry);
+    store.entries = kept;
+    store.index = store.entries.length - 1;
+  }
+}
+
+/** Keep the mirror bounded without leaving its cursor past the end. */
+function trimStore(): void {
+  if (store.entries.length <= MAX_ENTRIES) return;
+  const overflow = store.entries.length - MAX_ENTRIES;
+  store.entries.splice(0, overflow);
+  store.index = Math.max(0, store.index - overflow);
+}
+
 /** Mirror one router navigation. Idempotent per key, so a double render records once. */
 export function recordNavigation(key: string, pathname: string, search: string, navigationType: NavigationType): void {
+  const idx = browserIndex();
   const existing = store.entries.findIndex((entry) => entry.key === key);
   if (existing >= 0) {
     const entry = store.entries[existing];
-    if (entry && navigationType === "REPLACE") {
-      entry.pathname = pathname;
-      entry.search = search;
+    if (entry) {
+      if (navigationType === "REPLACE") {
+        entry.pathname = pathname;
+        entry.search = search;
+      }
+      if (idx !== undefined) entry.idx = idx;
     }
     store.index = existing;
   } else {
-    // A push (or a pop to an entry we never recorded) drops anything ahead of the cursor.
-    const kept = store.index >= 0 ? store.entries.slice(0, store.index + 1) : [];
-    kept.push({ key, pathname, search, scroll: 0 });
-    store.entries = kept.slice(-MAX_ENTRIES);
-    store.index = store.entries.length - 1;
+    insertEntry({ key, pathname, search, scroll: 0, idx }, navigationType);
+    trimStore();
   }
   persist();
 }
@@ -85,6 +151,29 @@ export function recordNavigation(key: string, pathname: string, search: string, 
 export function saveScroll(key: string, scroll: number): void {
   const entry = store.entries.find((candidate) => candidate.key === key);
   if (entry && entry.scroll !== scroll) entry.scroll = scroll;
+}
+
+/**
+ * Record the history entry the browser is on before the app asks it to move. Rapid clicks can
+ * change the URL faster than React renders, so the mirror may not know the current entry yet;
+ * without this the last push would be missing from the forward stack after a back press.
+ */
+export function recordCurrentLocation(): void {
+  if (typeof window === "undefined") return;
+  const state = window.history.state as { key?: unknown } | null;
+  if (typeof state?.key !== "string") return;
+  recordNavigation(state.key, window.location.pathname, window.location.search, NavigationType.Pop);
+}
+
+/**
+ * Record a location the browser just popped to. `popstate` fires before React Router commits,
+ * so doing this here moves the mirror cursor immediately; a forward press in that gap no longer
+ * sees the old cursor (still at the end of the stack). An entry the router never rendered is
+ * inserted at its browser index, keeping the entries ahead of it as the forward stack.
+ */
+export function recordPop(key: string | null | undefined, pathname: string, search: string): void {
+  if (!key) return;
+  recordNavigation(key, pathname, search, NavigationType.Pop);
 }
 
 /** The saved offset for a history entry. */
@@ -148,7 +237,7 @@ export interface BackTarget {
 export function useBackTarget(): BackTarget | null {
   const { t } = useI18n();
   const location = useLocation();
-  const navigate = useNavigate();
+  const navigate = useIntentNavigate();
   const { pathname, key } = location;
   return useMemo(() => {
     const previous = previousEntry();
@@ -169,8 +258,11 @@ export function useBackTarget(): BackTarget | null {
 
 /** Alt+Left/Right and the mouse back/forward buttons, in the browser and the desktop app. */
 export function useHistoryShortcuts(): void {
-  const navigate = useNavigate();
+  const navigate = useIntentNavigate();
   useEffect(() => {
+    const onPopState = (event: PopStateEvent) => {
+      recordPop((event.state as { key?: string } | null)?.key, window.location.pathname, window.location.search);
+    };
     const onKeyDown = (event: KeyboardEvent) => {
       if (!event.altKey || event.ctrlKey || event.metaKey) return;
       if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
@@ -178,6 +270,9 @@ export function useHistoryShortcuts(): void {
       if (isEditableTarget(event.target)) return;
       // Cancel the browser's own history even at the ends, so the app is never left.
       event.preventDefault();
+      // React may not have rendered the latest push yet. Record it before moving, so the
+      // entry we leave is still in the mirror and becomes the forward stack.
+      recordCurrentLocation();
       if (event.key === "ArrowLeft") {
         if (canGoBack()) navigate(-1);
       } else if (canGoForward()) {
@@ -191,6 +286,7 @@ export function useHistoryShortcuts(): void {
       // history move on both, so the app is never left.
       event.preventDefault();
       if (event.type !== "auxclick") return;
+      recordCurrentLocation();
       if (event.button === 3) {
         if (canGoBack()) navigate(-1);
       } else if (canGoForward()) {
@@ -198,10 +294,12 @@ export function useHistoryShortcuts(): void {
       }
     };
     window.addEventListener("keydown", onKeyDown, true);
+    window.addEventListener("popstate", onPopState, true);
     window.addEventListener("mouseup", onMouseButton);
     window.addEventListener("auxclick", onMouseButton);
     return () => {
       window.removeEventListener("keydown", onKeyDown, true);
+      window.removeEventListener("popstate", onPopState, true);
       window.removeEventListener("mouseup", onMouseButton);
       window.removeEventListener("auxclick", onMouseButton);
     };

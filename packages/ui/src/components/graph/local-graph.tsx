@@ -1,7 +1,7 @@
 import { lazy, Suspense, useMemo } from "react";
-import { useNavigate } from "react-router";
 import { Loading } from "@/components/state";
 import { useT } from "@/i18n";
+import { useIntentNavigate } from "@/lib/intent-navigate";
 import { useGraph } from "@/lib/queries";
 import { neighborhood } from "./graph-model";
 
@@ -13,7 +13,7 @@ const FRAME = "h-60 rounded-2xl border border-border bg-muted/30";
 /** Depth-1 mini graph around a note; clicking a neighbour opens it. */
 export function LocalGraph({ id }: { id: string }) {
   const t = useT();
-  const navigate = useNavigate();
+  const navigate = useIntentNavigate();
   const graph = useGraph(false);
   const size = useMemo(() => (graph.data ? neighborhood(graph.data, id).size : 0), [graph.data, id]);
 

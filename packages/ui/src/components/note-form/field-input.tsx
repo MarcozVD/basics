@@ -11,7 +11,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { useNavigate } from "react-router";
 import { Input } from "@/components/motion/input";
 import {
   MultiSelect,
@@ -28,6 +27,7 @@ import { type TranslationKey, useT } from "@/i18n";
 import { ApiRequestError, createNote } from "@/lib/api";
 import type { Field, TemplateOptions } from "@/lib/fields";
 import { TEMPLATES } from "@/lib/fields";
+import { useIntentNavigate } from "@/lib/intent-navigate";
 import { useLayers, useNotes } from "@/lib/queries";
 import { slugify } from "@/lib/slug";
 import { toast } from "@/lib/toast";
@@ -121,7 +121,7 @@ export function LinkField({
   createOptions?: TemplateOptions;
 }) {
   const t = useT();
-  const navigate = useNavigate();
+  const navigate = useIntentNavigate();
   const queryClient = useQueryClient();
   const notes = useNotes(field.linkType ? { type: field.linkType } : {});
   const values = linkItems(value);
@@ -432,7 +432,7 @@ function StackLayerRow({
   onRemove: () => void;
 }) {
   const t = useT();
-  const navigate = useNavigate();
+  const navigate = useIntentNavigate();
   const queryClient = useQueryClient();
   const [query, setQuery] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);

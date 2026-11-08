@@ -37,24 +37,23 @@ async function waitForHealth(port: number): Promise<void> {
   throw new Error(`budget server on ${port} did not start`);
 }
 
-async function arm(page: Page): Promise<void> {
-  await page.evaluate(() => {
-    const win = window as unknown as {
-      __budget?: BudgetSample;
-      __budgetObserver?: PerformanceObserver;
-    };
-    if (!win.__budget) {
-      const created: BudgetSample = { t0: 0, long: [], frames: [] };
-      win.__budget = created;
-      win.__budgetObserver = new PerformanceObserver((list) => {
-        for (const entry of list.getEntries()) created.long.push({ start: entry.startTime, duration: entry.duration });
-      });
-      win.__budgetObserver.observe({ entryTypes: ["longtask"] });
-    }
-    const sample = win.__budget;
-    document.addEventListener(
-      "click",
-      () => {
+async function arm(page: Page, trigger: "click" | "keydown" = "click", key?: string): Promise<void> {
+  await page.evaluate(
+    ({ trigger, key }) => {
+      const win = window as unknown as {
+        __budget?: BudgetSample;
+        __budgetObserver?: PerformanceObserver;
+      };
+      if (!win.__budget) {
+        const created: BudgetSample = { t0: 0, long: [], frames: [] };
+        win.__budget = created;
+        win.__budgetObserver = new PerformanceObserver((list) => {
+          for (const entry of list.getEntries()) created.long.push({ start: entry.startTime, duration: entry.duration });
+        });
+        win.__budgetObserver.observe({ entryTypes: ["longtask"] });
+      }
+      const sample = win.__budget;
+      const start = () => {
         sample.t0 = performance.now();
         sample.long.length = 0;
         sample.frames.length = 0;
@@ -63,10 +62,20 @@ async function arm(page: Page): Promise<void> {
           if (performance.now() - sample.t0 < 450) requestAnimationFrame(tick);
         };
         requestAnimationFrame(tick);
-      },
-      { capture: true, once: true },
-    );
-  });
+      };
+      if (trigger === "click") {
+        document.addEventListener("click", start, { capture: true, once: true });
+        return;
+      }
+      const onKeyDown = (event: KeyboardEvent) => {
+        if (key !== undefined && event.key !== key) return;
+        document.removeEventListener("keydown", onKeyDown, true);
+        start();
+      };
+      document.addEventListener("keydown", onKeyDown, true);
+    },
+    { trigger, key },
+  );
 }
 
 function readBudget(sample: BudgetSample) {
@@ -245,6 +254,44 @@ test.describe("page budget", () => {
 
     const sample = await page.evaluate(() => (window as unknown as { __budget: BudgetSample }).__budget);
     expectBudget(sample);
+  });
+
+  test("leaving the graph with a G-chord during its first layout does not block the next page", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 820 });
+    await page.goto("/");
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    await page.waitForTimeout(500);
+    const sidebar = page.getByTestId("sidebar");
+
+    // A shortcut does not go through a link click: the helper has to signal the same intent.
+    await sidebar.getByRole("link", { name: "Graph", exact: true }).click();
+    await page.waitForTimeout(700);
+    await arm(page, "keydown", "i");
+    await page.keyboard.press("g");
+    await page.keyboard.press("i");
+    await expect(page).toHaveURL(/\/inbox\b/);
+    await page.waitForTimeout(700);
+
+    expectBudget(await page.evaluate(() => (window as unknown as { __budget: BudgetSample }).__budget));
+  });
+
+  test("leaving the graph with Alt+Left during its first layout does not block the next page", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 820 });
+    await page.goto("/");
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    await page.waitForTimeout(500);
+    const sidebar = page.getByTestId("sidebar");
+
+    // A history move is only observable through popstate: the capture listener must signal
+    // before React Router handles the same event.
+    await sidebar.getByRole("link", { name: "Graph", exact: true }).click();
+    await page.waitForTimeout(700);
+    await arm(page, "keydown", "ArrowLeft");
+    await page.keyboard.press("Alt+ArrowLeft");
+    await expect(page).toHaveURL(/\/$/);
+    await page.waitForTimeout(700);
+
+    expectBudget(await page.evaluate(() => (window as unknown as { __budget: BudgetSample }).__budget));
   });
 
   test("returning to the graph and leaving it stays inside the budget", async ({ page }) => {

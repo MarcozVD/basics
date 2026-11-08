@@ -2,7 +2,7 @@ import type { GraphData, GraphNode, GraphNodeType, NoteType } from "@marcozvd/ba
 import { Crosshair, FilePlus2, Layers, Scan, Search, SquareArrowOutUpRight, Waypoints, X } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import { lazy, type KeyboardEvent as ReactKeyboardEvent, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router";
+import { Link } from "react-router";
 import { type GraphCacheScope, type GraphLayoutMode, graphCacheKey } from "@/components/graph/graph-cache";
 import type { GraphCanvasHandle, Insets } from "@/components/graph/graph-canvas";
 import { GRAPH_TYPES, layerSlice, matchNodes, neighborhood } from "@/components/graph/graph-model";
@@ -20,8 +20,9 @@ import { Button as LinkButton } from "@/components/ui/button";
 import { type TranslationKey, useT } from "@/i18n";
 import { modChord } from "@/lib/desktop";
 import { EASE_OUT, SPRING_PRESS } from "@/lib/ease";
+import { useIntentNavigate } from "@/lib/intent-navigate";
 import { DOCK_SPACE, DOCK_SPACE_VERTICAL, useResolvedDockEdge } from "@/lib/navigation";
-import { PAGE_ENTER_MS, PAGE_REDUCED_MS } from "@/lib/page-transition";
+import { currentNavigationEpoch, PAGE_ENTER_MS, PAGE_REDUCED_MS } from "@/lib/page-transition";
 import { useGraph, useHealth, useLayers, useNote, useNotes, useStats } from "@/lib/queries";
 import { cn } from "@/lib/utils";
 
@@ -51,7 +52,7 @@ const typeColor = (type: GraphNodeType) => (type === "missing" ? "var(--destruct
 
 export function GraphPage() {
   const t = useT();
-  const navigate = useNavigate();
+  const navigate = useIntentNavigate();
   const reduce = useReducedMotion() ?? false;
   // The floating bar's edge decides where the toolbar, the fit area and the drawer sit.
   const dockEdge = useResolvedDockEdge();
@@ -72,6 +73,9 @@ export function GraphPage() {
   // The canvas waits out the page's enter transition: cytoscape's chunk and its first layout
   // are the heaviest work in the app, and the transition should own the first frames.
   const [canvasReady, setCanvasReady] = useState(false);
+  // The navigation this page was entered with. Captured here, before the canvas chunk and the
+  // graph data arrive, so a canvas that mounts after the reader left can tell it is too late.
+  const [navigationEpoch] = useState(() => currentNavigationEpoch());
 
   const graph = useGraph(broken);
   const layers = useLayers();
@@ -288,6 +292,7 @@ export function GraphPage() {
               ref={canvasRef}
               data={data}
               mode="full"
+              navigationEpoch={navigationEpoch}
               cacheScope={cacheScope}
               visibleIds={visibleIds}
               query={search}

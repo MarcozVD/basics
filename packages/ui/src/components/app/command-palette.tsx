@@ -22,13 +22,13 @@ import {
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { type KeyboardEvent as ReactKeyboardEvent, type ReactNode, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { useNavigate } from "react-router";
 import { type TranslationKey, useI18n } from "@/i18n";
 import { searchCommands } from "@/lib/command-search";
 import { PALETTE_SEARCH_EVENT } from "@/lib/desktop-shell";
 import { EASE_OUT } from "@/lib/ease";
 import { useOnOpen } from "@/lib/hooks/use-on-open";
 import { useRowCursor } from "@/lib/hooks/use-row-cursor";
+import { useIntentNavigate } from "@/lib/intent-navigate";
 import { PresenceGate } from "@/lib/presence-gate";
 import { useHealth, useInbox, useNotes } from "@/lib/queries";
 import { readRecentItems } from "@/lib/recent-notes";
@@ -74,7 +74,7 @@ export function AppCommandPalette() {
   const notes = useNotes();
   const health = useHealth();
   const vault = health.data?.vault ?? "";
-  const navigate = useNavigate();
+  const navigate = useIntentNavigate();
   const reduce = useReducedMotion();
 
   const [open, setOpen] = useState(false);

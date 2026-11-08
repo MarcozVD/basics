@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useNavigate } from "react-router";
+import { useIntentNavigate } from "@/lib/intent-navigate";
 
 /** Routes reachable with the two-key `g` sequences. */
 export const SHORTCUT_ROUTES: Record<string, string> = {
@@ -24,7 +24,7 @@ function isTypingTarget(target: EventTarget | null): boolean {
 
 /** `g` + key navigation, ignored while typing and with modifiers held, plus the settings chord. */
 export function useGlobalShortcuts() {
-  const navigate = useNavigate();
+  const navigate = useIntentNavigate();
 
   useEffect(() => {
     let armedAt = 0;
