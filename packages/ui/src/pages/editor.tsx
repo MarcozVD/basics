@@ -5,7 +5,7 @@ import CodeMirror, { EditorView } from "@uiw/react-codemirror";
 import { Check, ChevronDown, MoreHorizontal, Trash2 } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { Link, useBlocker, useNavigate, useParams } from "react-router";
+import { Link, useBlocker, useParams } from "react-router";
 import { LocalGraph } from "@/components/graph/local-graph";
 import { ActionSwapButton } from "@/components/motion/action-swap";
 import { Alert, AlertAction, AlertContent, AlertDescription, AlertIcon, AlertTitle } from "@/components/motion/alert";
@@ -25,6 +25,7 @@ import { type TranslationKey, useI18n } from "@/i18n";
 import { ApiRequestError, deleteNote as deleteNoteApi, saveNote } from "@/lib/api";
 import { useBackTarget } from "@/lib/app-history";
 import { SPRING_SWAP } from "@/lib/ease";
+import { useIntentNavigate } from "@/lib/intent-navigate";
 import { type CheckTone, lastCheckChips, tailLines } from "@/lib/last-checks";
 import { queryKeys, useActivity, useNote, useNotes } from "@/lib/queries";
 import { rememberRecentItem } from "@/lib/recent-notes";
@@ -93,7 +94,7 @@ function readLocalGraph(): boolean {
 
 function ConnectionRow({ id, broken }: { id: string; broken: boolean }) {
   const t = useI18n().t;
-  const navigate = useNavigate();
+  const navigate = useIntentNavigate();
   const notes = useNotes();
   const summary = notes.data?.find((note) => note.id === id);
   const title = summary?.title || id;
@@ -193,7 +194,7 @@ function LastChecks({ checks }: { checks: Record<string, LastCheck> }) {
 export function EditorPage() {
   const { id } = useParams();
   const { t, language } = useI18n();
-  const navigate = useNavigate();
+  const navigate = useIntentNavigate();
   const queryClient = useQueryClient();
   const reduce = useReducedMotion() ?? false;
   const wide = useWideEditor();

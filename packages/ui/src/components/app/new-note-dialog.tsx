@@ -4,7 +4,6 @@ import type { NoteData, NoteSummary, NoteType } from "@marcozvd/basics-core";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown } from "lucide-react";
 import { type ComponentProps, type ReactNode, useEffect, useId, useRef, useState } from "react";
-import { useNavigate } from "react-router";
 import { Button } from "@/components/motion/button/base";
 import { CenterMorphModal, CenterMorphModalContent } from "@/components/motion/center-morph-modal";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/motion/collapsible";
@@ -14,6 +13,7 @@ import { LinkField, StackField } from "@/components/note-form/field-input";
 import { type TranslationKey, useT } from "@/i18n";
 import { ApiRequestError, createNote } from "@/lib/api";
 import { type Field, TEMPLATES } from "@/lib/fields";
+import { useIntentNavigate } from "@/lib/intent-navigate";
 import { queryKeys, useLayers } from "@/lib/queries";
 import { useReturnFocus } from "@/lib/return-focus";
 import { slugify } from "@/lib/slug";
@@ -167,7 +167,7 @@ function DialogLinkField({ label, id, ...linkProps }: { label: string; id: strin
  */
 export function NewNoteDialog() {
   const t = useT();
-  const navigate = useNavigate();
+  const navigate = useIntentNavigate();
   const queryClient = useQueryClient();
   const layers = useLayers();
   const typeLabelId = useId();

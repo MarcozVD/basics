@@ -1,8 +1,8 @@
 import { type ReactNode, useMemo } from "react";
 import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
-import { useNavigate } from "react-router";
 import remarkGfm from "remark-gfm";
 import { useT } from "@/i18n";
+import { useIntentNavigate } from "@/lib/intent-navigate";
 import { useNotes } from "@/lib/queries";
 import { NotePreview, TypeDot } from "./note-preview";
 
@@ -59,7 +59,7 @@ const PROSE = [
 
 function WikiLink({ id, children }: { id: string; children: ReactNode }) {
   const t = useT();
-  const navigate = useNavigate();
+  const navigate = useIntentNavigate();
   const notes = useNotes();
   const summary = notes.data?.find((note) => note.id === id);
   const missing = notes.data !== undefined && summary === undefined;

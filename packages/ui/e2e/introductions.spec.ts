@@ -111,7 +111,7 @@ test("an Inbox with a proposal moves its intro behind the ?", async ({ page }) =
   try {
     await page.goto("/inbox");
     await expect(page.getByRole("heading", { level: 1, name: "Inbox" })).toBeVisible();
-    await expect(page.getByText("Proposed layer for the intro", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Proposed layer for the intro" })).toBeVisible();
 
     await expect(page.getByText(INTRO.inbox, { exact: true })).toHaveCount(0);
     const help = page.getByRole("button", { name: HELP });

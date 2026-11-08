@@ -2,7 +2,7 @@ import type { NoteType } from "@marcozvd/basics-core";
 import { ArrowDownUp, Layers, LayoutGrid, LayoutList, Package, Plus, Search, SearchX } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Link, useLocation, useNavigate, useSearchParams } from "react-router";
+import { Link, useLocation } from "react-router";
 import { AnimatedNumber } from "@/components/motion/animated-number";
 import { Button } from "@/components/motion/button/base";
 import { CARD_TARGET_CLASS, Card, CardContent, CardFooter, CardHeader } from "@/components/motion/card";
@@ -17,10 +17,12 @@ import { Button as LinkButton } from "@/components/ui/button";
 import { type TranslationKey, useT } from "@/i18n";
 import { modChord } from "@/lib/desktop";
 import { EASE_OUT, SPRING_LAYOUT, SPRING_PRESS } from "@/lib/ease";
+import { useIntentNavigate } from "@/lib/intent-navigate";
 import { useIntro } from "@/lib/intro";
 import { useFirstPaint, useProgressiveCount } from "@/lib/progressive";
 import { useLayers, useNotes, useSearch, useStats } from "@/lib/queries";
 import { formatCompactRelativeTime } from "@/lib/relative-time";
+import { useRouteSearchParams } from "@/lib/route-query";
 import { cn } from "@/lib/utils";
 
 const TYPE_ORDER: NoteType[] = ["tech", "practice", "check", "profile", "project", "layer"];
@@ -134,12 +136,12 @@ function sortRows(rows: Row[], sort: Sort): Row[] {
 
 export function ExplorePage() {
   const t = useT();
-  const navigate = useNavigate();
+  const navigate = useIntentNavigate();
   const { pathname } = useLocation();
   const reduce = useReducedMotion() ?? false;
   const searchRef = useRef<HTMLInputElement>(null);
 
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useRouteSearchParams();
   const typeParam = searchParams.get("type");
   const type = typeParam && TYPE_ORDER.includes(typeParam as NoteType) ? (typeParam as NoteType) : undefined;
   const layer = searchParams.get("layer") ?? undefined;
