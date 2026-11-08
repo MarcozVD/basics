@@ -26,28 +26,6 @@ function seedActivity(count: number): () => void {
   };
 }
 
-/** Temporarily empty the inbox so Home renders its compact one-line strip; returns a restore function. */
-function clearInbox(): () => void {
-  const dir = path.join(vaultPath(), "inbox");
-  const previous: { name: string; body: string }[] = [];
-  if (fs.existsSync(dir)) {
-    for (const name of fs.readdirSync(dir)) {
-      if (name.endsWith(".md")) previous.push({ name, body: fs.readFileSync(path.join(dir, name), "utf8") });
-    }
-  }
-  fs.mkdirSync(dir, { recursive: true });
-  for (const name of fs.readdirSync(dir)) {
-    if (name.endsWith(".md")) fs.rmSync(path.join(dir, name), { force: true });
-  }
-  return () => {
-    fs.mkdirSync(dir, { recursive: true });
-    for (const name of fs.readdirSync(dir)) {
-      if (name.endsWith(".md")) fs.rmSync(path.join(dir, name), { force: true });
-    }
-    for (const file of previous) fs.writeFileSync(path.join(dir, file.name), file.body);
-  };
-}
-
 /** Wait for the route to render, then for the late Geist swap so measurements are stable. */
 async function settle(page: import("@playwright/test").Page) {
   await page.waitForFunction(() => document.querySelector("main h1") !== null);
@@ -62,41 +40,22 @@ async function settle(page: import("@playwright/test").Page) {
 interface LayoutMetrics {
   h1Left: number | null;
   mainLeft: number | null;
-  panelBottom: number | null;
-  gridBottom: number | null;
-  mainClientHeight: number;
-  mainScrollHeight: number;
-  panelClientHeight: number | null;
-  panelScrollHeight: number | null;
-  rowHeight: number | null;
 }
 
 async function measureHome(page: import("@playwright/test").Page): Promise<LayoutMetrics> {
   return page.evaluate(() => {
     const main = document.querySelector<HTMLElement>("main");
     const mainBox = main?.getBoundingClientRect();
-    const panelBox = document.querySelector<HTMLElement>('[data-testid="content-panel"]')?.getBoundingClientRect();
     const h1 = document.querySelector<HTMLElement>("h1")?.getBoundingClientRect();
-    const grid = document.querySelector<HTMLElement>('[data-testid="home-grid"]')?.getBoundingClientRect();
-    const panel = document.querySelector<HTMLElement>('[data-testid="activity-panel"]');
-    const row = panel?.querySelector("li")?.getBoundingClientRect();
     return {
       h1Left: h1 ? h1.left : null,
       mainLeft: mainBox ? mainBox.left : null,
-      panelBottom: panelBox ? panelBox.bottom : null,
-      gridBottom: grid ? grid.bottom : null,
-      mainClientHeight: main?.clientHeight ?? 0,
-      mainScrollHeight: main?.scrollHeight ?? 0,
-      panelClientHeight: panel ? panel.clientHeight : null,
-      panelScrollHeight: panel ? panel.scrollHeight : null,
-      rowHeight: row ? row.height : null,
     };
   });
 }
 
-test("Home fills the content panel and caps the activity panel on desktop sizes", async ({ page }) => {
-  const restoreActivity = seedActivity(60);
-  const restoreInbox = clearInbox();
+test("Home keeps the page gutter and scrolls as one column on desktop sizes", async ({ page }) => {
+  const restoreActivity = seedActivity(6);
   try {
     for (const { width, height, gutter } of [
       { width: 1280, height: 820, gutter: 40 },
@@ -104,7 +63,7 @@ test("Home fills the content panel and caps the activity panel on desktop sizes"
     ]) {
       await page.setViewportSize({ width, height });
       await page.goto("/");
-      await expect(page.getByTestId("activity-panel")).toBeVisible();
+      await expect(page.getByTestId("continue-list")).toBeVisible();
       await settle(page);
 
       const m = await measureHome(page);
@@ -114,25 +73,11 @@ test("Home fills the content panel and caps the activity panel on desktop sizes"
       expect(m.h1Left).not.toBeNull();
       expect((m.h1Left as number) - (m.mainLeft as number)).toBe(gutter);
 
-      if (width >= 1024) {
-        // The wide layout fills the panel: the page never scrolls and the grid's
-        // bottom stays above the panel's bottom edge.
-        expect(m.mainScrollHeight).toBeLessThanOrEqual(m.mainClientHeight + 1);
-        expect(m.gridBottom).not.toBeNull();
-        expect(m.panelBottom).not.toBeNull();
-        expect(m.gridBottom as number).toBeLessThanOrEqual(m.panelBottom as number);
-        expect(m.panelClientHeight).not.toBeNull();
-        expect(m.panelScrollHeight as number).toBeGreaterThan(m.panelClientHeight as number);
-      } else {
-        // Below 1024 the stacked layout caps the panel at ~8 rows and lets it scroll.
-        expect(m.rowHeight).not.toBeNull();
-        const cap = (m.rowHeight as number) * 8;
-        expect(m.panelClientHeight as number).toBeLessThanOrEqual(cap + 2);
-        expect(m.panelScrollHeight as number).toBeGreaterThan(m.panelClientHeight as number);
-      }
+      // Home is a single column now: there is no grid or nested activity panel to cap.
+      await expect(page.getByTestId("activity-panel")).toHaveCount(0);
+      await expect(page.getByTestId("home-grid")).toHaveCount(0);
     }
   } finally {
-    restoreInbox();
     restoreActivity();
   }
 });

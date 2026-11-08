@@ -92,11 +92,12 @@ test("an empty vault installs the starter packs and Home shows counts", async ({
   // Notes are installed, so the first step ticks from real state.
   await expect(page.getByTestId("home-getting-started")).toHaveAttribute("aria-label", "1 of 3 steps done");
 
-  const stats = (await (await request.get("/api/stats")).json()) as { total: number; counts: Record<string, number> };
+  const stats = (await (await request.get("/api/stats")).json()) as { total: number; brokenLinks: unknown[] };
   expect(stats.total).toBeGreaterThan(0);
-  expect(stats.counts.tech).toBeGreaterThan(0);
-  await expect(page.locator('[data-stat="tech"]')).toContainText(String(stats.counts.tech));
-  await expect(page.locator('[data-stat="practice"]')).toContainText(String(stats.counts.practice));
+  // Home's health line replaces the old per-type tiles with the vault total.
+  await expect(page.getByTestId("health-line")).toBeVisible();
+  await expect(page.locator('[data-stat="notes"]')).toContainText(String(stats.total));
+  await expect(page.locator('[data-stat="broken"]')).toBeVisible();
 
   await page.goto("/?packs=1");
   await expect(page.getByRole("heading", { name: "All starter packs are installed" })).toBeVisible();

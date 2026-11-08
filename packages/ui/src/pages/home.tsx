@@ -1,34 +1,42 @@
-import type { ActivityEvent, LayerSummary, NoteType, PackInfo, ProposalSummary } from "@marcozvd/basics-core";
+import type { ActivityEvent, PackInfo, ProposalSummary } from "@marcozvd/basics-core";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, Check, Copy, GitFork, Inbox, Package } from "lucide-react";
+import { ArrowRight, Check, Copy, GitFork, Inbox, Package, X } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { type ReactNode, type RefObject, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { ApprovalCard } from "@/components/agents/approval-card";
-import { AnimatedNumber } from "@/components/motion/animated-number";
 import { Button } from "@/components/motion/button/base";
 import { Checkbox } from "@/components/motion/checkbox";
 import { Loader } from "@/components/motion/loader";
 import { MorphPopover, MorphPopoverContent, MorphPopoverTrigger } from "@/components/motion/popover-morph";
 import { Tabs, TabsList, TabsTrigger } from "@/components/motion/tabs";
-import { TextReveal } from "@/components/motion/text-reveal";
-import { Tooltip } from "@/components/motion/tooltip";
-import { PAGE_SECTIONS, Page, Reveal } from "@/components/page";
+import { PAGE_SECTIONS, Page } from "@/components/page";
 import { PageHeader } from "@/components/page-header";
 import { ErrorState, Loading } from "@/components/state";
 import { type TranslationKey, useI18n } from "@/i18n";
 import { agentColor, agentInitial } from "@/lib/agent-color";
 import { ApiRequestError, addPack, approveProposal, installPack, type Language, rejectProposal } from "@/lib/api";
 import { SPRING_LAYOUT } from "@/lib/ease";
+import { useIntro } from "@/lib/intro";
 import { packProposer } from "@/lib/packs";
-import { useActivity, useConnectStatus, useInbox, useLayers, useNotes, usePacks, useStats } from "@/lib/queries";
+import { useActivity, useConnectStatus, useInbox, useNotes, usePacks, useStats } from "@/lib/queries";
+import { type RecentItem, readRecentItems } from "@/lib/recent-notes";
 import { formatCompactRelativeTime, formatFullDateTime, formatRelativeTime } from "@/lib/relative-time";
 import { toast } from "@/lib/toast";
-import { tintStyle, typeColor } from "@/lib/type-color";
 import { cn } from "@/lib/utils";
 
-const TYPE_ORDER: NoteType[] = ["tech", "practice", "check", "profile", "project", "layer"];
-const REVEAL_KEY = "basics-home-revealed";
+const SETUP_KEY = "basics:setup-dismissed";
+const CONTINUE_ROWS = 5;
+const ACTIVITY_ROWS = 3;
+/** Loading skeletons reserve their rows so late data does not move the page. */
+const CONTINUE_ROW_HEIGHT = 44;
+const ACTIVITY_ROW_HEIGHT = 32;
+
+const POPOVER_ACTION =
+  "shrink-0 rounded-md px-1.5 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring";
+
+const HEALTH_LINK =
+  "rounded-sm underline decoration-border/60 underline-offset-2 transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring";
 
 // Tools whose activity has a localized verb; anything else falls back to its raw name.
 const verbKeys: Partial<Record<string, TranslationKey>> = {
@@ -85,336 +93,11 @@ function groupActivity(events: ActivityEvent[]): ActivityGroup[] {
   return groups;
 }
 
-interface EdgeFade {
-  top: boolean;
-  bottom: boolean;
-}
-
-/** Height of the edge fade on the activity scroll panel. */
-const FADE_PX = 24;
-/** Below 1024 the stacked layout caps the activity panel at about this many rows. */
-const ACTIVITY_ROWS = 8;
-/**
- * A hair of slack under the wide activity panel so sub-pixel rounding can never
- * turn the exact fill into a scrollbar on `<main>`. Home drops its own `pb-8`
- * from 1024 up, so this is the whole bottom rhythm the panel leaves behind.
- */
-const PAGE_BOTTOM_PX = 4;
-
-/** Mask that fades only the edges where the list still has content to scroll to. */
-function activityMask({ top, bottom }: EdgeFade): string | undefined {
-  if (top && bottom) {
-    return `linear-gradient(to bottom, transparent 0, #000 ${FADE_PX}px, #000 calc(100% - ${FADE_PX}px), transparent 100%)`;
-  }
-  if (top) return `linear-gradient(to bottom, transparent 0, #000 ${FADE_PX}px)`;
-  if (bottom) return `linear-gradient(to bottom, #000 0, #000 calc(100% - ${FADE_PX}px), transparent 100%)`;
-  return undefined;
-}
-
-interface HomeLayoutSize {
-  /** Exact height for the Home grid on wide screens; undefined in the stacked layout. */
-  gridHeight?: number;
-  /** Row cap for the activity panel on narrow screens; undefined on wide screens. */
-  activityMaxHeight?: number;
-}
-
-/**
- * Size Home so nothing overflows the panel.
- *
- * At 1024 and up the grid (inbox strip excluded) fills the space `<main>` has
- * between the page header and the panel's bottom edge, and the activity panel fills
- * its own column — measuring the grid keeps the title block, the inbox strip and
- * language-dependent wrapping out of the calculation. Below 1024 everything
- * stacks: the grid keeps its natural height and the activity panel is capped at
- * about 8 measured rows so it scrolls on its own instead of growing the page.
- */
-function useHomeLayoutSize(
-  gridRef: RefObject<HTMLElement | null>,
-  activityRef: RefObject<HTMLElement | null>,
-  attachKey: number,
-): HomeLayoutSize {
-  const [size, setSize] = useState<HomeLayoutSize>({});
-
-  // Layout effect so the columns never paint at the wrong height first.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: re-measure when the grid mounts or its content changes.
-  useLayoutEffect(() => {
-    const grid = gridRef.current;
-    const main = (grid ?? activityRef.current)?.closest("main");
-    if (!main) return;
-    let cancelled = false;
-    const apply = (next: HomeLayoutSize) => {
-      if (cancelled) return;
-      setSize((prev) => (prev.gridHeight === next.gridHeight && prev.activityMaxHeight === next.activityMaxHeight ? prev : next));
-    };
-    const measure = () => {
-      if (cancelled) return;
-      const panel = activityRef.current;
-      const activeGrid = gridRef.current;
-      // Row height (and therefore the 8-row cap) can change with the content or wrapping.
-      const row = panel?.querySelector("li");
-      const rowHeight = row?.getBoundingClientRect().height ?? 0;
-      const cap = rowHeight > 0 ? Math.round(rowHeight * ACTIVITY_ROWS) : undefined;
-      if (window.innerWidth < 1024 || !activeGrid) {
-        // `activityMaxHeight`, not a fixed height, keeps short lists compact while long ones scroll.
-        apply({ activityMaxHeight: cap });
-        return;
-      }
-      const offset = activeGrid.getBoundingClientRect().top - main.getBoundingClientRect().top + main.scrollTop;
-      // `main.clientHeight` is the panel's inner height: the page brings its own bottom rhythm.
-      const available = Math.round(main.clientHeight - offset - PAGE_BOTTOM_PX);
-      // Wide layout: the grid fills the remaining space, and the activity panel fills its column.
-      apply(available > 0 ? { gridHeight: available } : { activityMaxHeight: cap });
-    };
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(main);
-    if (grid) observer.observe(grid);
-    if (activityRef.current) observer.observe(activityRef.current);
-    // The title block and the inbox strip above the grid are what move its top edge.
-    const pageHeader = main.querySelector("h1")?.closest("header");
-    if (pageHeader) observer.observe(pageHeader);
-    const strip = main.querySelector<HTMLElement>('[data-testid="inbox-strip"]');
-    if (strip) observer.observe(strip);
-    const gridParent = grid?.parentElement;
-    if (gridParent) observer.observe(gridParent);
-    window.addEventListener("resize", measure);
-    void document.fonts?.ready.then(measure);
-    return () => {
-      cancelled = true;
-      observer.disconnect();
-      window.removeEventListener("resize", measure);
-    };
-  }, [gridRef, activityRef, attachKey]);
-
-  return size;
-}
-
-function useRevealOnce(): boolean {
-  const [reveal] = useState(() => {
-    try {
-      return sessionStorage.getItem(REVEAL_KEY) !== "1";
-    } catch {
-      return true;
-    }
-  });
-  useEffect(() => {
-    if (!reveal) return;
-    try {
-      sessionStorage.setItem(REVEAL_KEY, "1");
-    } catch {
-      // Private mode: animating every mount is acceptable.
-    }
-  }, [reveal]);
-  return reveal;
-}
-
 function SectionLabel({ children, id }: { children: string; id?: string }) {
   return (
     <h2 id={id} className="text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
       {children}
     </h2>
-  );
-}
-
-function TypeChip({ id, type }: { id: string; type: NoteType | undefined }) {
-  const navigate = useNavigate();
-  return (
-    <button
-      type="button"
-      onClick={() => navigate(`/notes/${encodeURIComponent(id)}`)}
-      className="inline-flex h-5 max-w-48 min-w-0 items-center rounded-full px-2 font-mono text-[10px] transition-opacity hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-      style={tintStyle(typeColor(type))}
-    >
-      <span className="truncate">{id}</span>
-    </button>
-  );
-}
-
-const POPOVER_ACTION =
-  "shrink-0 rounded-md px-1.5 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring";
-
-/** Gap between the blocks stacked in Home's side column (matches the column's `gap-4`). */
-const COLUMN_GAP = 16;
-
-interface StatItemProps {
-  label: string;
-  value: number;
-  stat: string;
-  /** Note-type color for the leading dot. */
-  dot?: string;
-  /** Destructive emphasis; only ever set when the value is above zero. */
-  alert?: boolean;
-  /** One-line explanation shown on hover and keyboard focus. */
-  hint?: string;
-  onClick?: () => void;
-  /** Popover details; a function receives `close` for actions that leave the popover. */
-  children?: ReactNode | ((close: () => void) => ReactNode);
-}
-
-/**
- * Compact `label number` stat for Home's health strip: no card chrome, one line,
- * wrapping gracefully; a popover trigger when it has details and a value.
- */
-function StatItem({ label, value, stat, dot, alert, hint, onClick, children }: StatItemProps) {
-  const { t } = useI18n();
-  const [open, setOpen] = useState(false);
-  const body = (
-    <span className="inline-flex min-w-0 max-w-full items-baseline gap-1.5">
-      {dot ? <span aria-hidden="true" className="size-1.5 shrink-0 self-center rounded-full" style={{ backgroundColor: dot }} /> : null}
-      <span className={`min-w-0 truncate text-[11px] ${alert ? "text-destructive-text" : "text-muted-foreground"}`}>{label}</span>
-      <AnimatedNumber
-        value={value}
-        startOnView={false}
-        duration={0.5}
-        className={`font-mono text-xs font-semibold ${alert ? "text-destructive-text" : "text-foreground"}`}
-      />
-    </span>
-  );
-
-  const className =
-    "inline-flex max-w-full min-w-0 items-baseline rounded-md px-1 py-0.5 transition-colors hover:bg-muted/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring";
-
-  let content: ReactNode;
-  if (children === undefined || value === 0) {
-    content = onClick ? (
-      <button type="button" data-stat={stat} data-alert={alert ? "true" : undefined} onClick={onClick} className={className}>
-        {body}
-      </button>
-    ) : (
-      <div
-        // A definition with no actions still needs a keyboard stop so the hint is reachable.
-        tabIndex={hint ? 0 : undefined}
-        role={hint ? "note" : undefined}
-        data-stat={stat}
-        data-alert={alert ? "true" : undefined}
-        className={className}
-      >
-        {body}
-      </div>
-    );
-  } else {
-    content = (
-      <MorphPopover open={open} onOpenChange={setOpen}>
-        <MorphPopoverTrigger>
-          <button
-            type="button"
-            data-stat={stat}
-            data-alert={alert ? "true" : undefined}
-            aria-label={`${label}: ${value} — ${t("home.showDetails")}`}
-            className={className}
-          >
-            {body}
-          </button>
-        </MorphPopoverTrigger>
-        <MorphPopoverContent side="top" align="start" className="w-80 p-2">
-          {typeof children === "function" ? children(() => setOpen(false)) : children}
-        </MorphPopoverContent>
-      </MorphPopover>
-    );
-  }
-
-  if (!hint) return content;
-  return (
-    <Tooltip content={hint} side="top" disabled={open}>
-      {content}
-    </Tooltip>
-  );
-}
-
-interface LayerRowProps {
-  layer: LayerSummary;
-  /** Resolved tech list for the popover (id, title, kind). */
-  techs: { id: string; title: string; kind?: string }[];
-  /** Largest tech count across all layers, for the proportional bar. */
-  max: number;
-}
-
-/**
- * One layer as a compact row: colour dot, name (truncated with a title tooltip),
- * the tech count in tabular mono and a thin proportional bar. A layer with techs
- * opens the same tech list (with its own scroll) the old tile did; an empty layer
- * is a plain row, as before.
- */
-function LayerRow({ layer, techs, max }: LayerRowProps) {
-  const { t } = useI18n();
-  const navigate = useNavigate();
-  const [open, setOpen] = useState(false);
-  const title = layer.title || layer.id;
-  const count = layer.techs.length;
-
-  const body = (
-    <>
-      <span className="flex min-w-0 items-baseline gap-2">
-        <span aria-hidden="true" className="size-1.5 shrink-0 self-center rounded-full" style={{ backgroundColor: typeColor("layer") }} />
-        <span className="min-w-0 flex-1 truncate text-xs" title={title}>
-          {title}
-        </span>
-        <AnimatedNumber value={count} startOnView={false} duration={0.5} className="shrink-0 font-mono text-[10px] text-muted-foreground" />
-      </span>
-      <span aria-hidden="true" className="mt-1 block h-px w-full overflow-hidden rounded-full bg-border/60">
-        <span className="block h-full rounded-full bg-muted-foreground/50" style={{ width: `${max > 0 ? (count / max) * 100 : 0}%` }} />
-      </span>
-    </>
-  );
-
-  const className =
-    "flex w-full min-w-0 flex-col rounded-lg px-1.5 py-1 text-left transition-colors hover:bg-muted/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring";
-
-  // An empty layer stays a plain row, exactly like the old empty tile: there is no
-  // tech list to open and nothing to filter for.
-  if (count === 0) {
-    return (
-      <div data-stat={`layer-${layer.id}`} className={className}>
-        {body}
-      </div>
-    );
-  }
-
-  return (
-    <MorphPopover className="w-full" open={open} onOpenChange={setOpen}>
-      <MorphPopoverTrigger>
-        <button
-          type="button"
-          data-stat={`layer-${layer.id}`}
-          aria-label={`${title}: ${count} — ${t("home.showDetails")}`}
-          className={className}
-        >
-          {body}
-        </button>
-      </MorphPopoverTrigger>
-      <MorphPopoverContent side="top" align="start" className="w-80 p-2">
-        <div className="flex flex-col">
-          <ul className="flex max-h-[18rem] flex-col gap-0.5 overflow-y-auto overscroll-contain p-1">
-            {techs.map((tech) => (
-              <li key={tech.id}>
-                <button
-                  type="button"
-                  data-layer-tech={tech.id}
-                  onClick={() => {
-                    setOpen(false);
-                    navigate(`/notes/${encodeURIComponent(tech.id)}`);
-                  }}
-                  className="flex w-full items-baseline gap-2 rounded-md px-1.5 py-1 text-left transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
-                >
-                  <span className="min-w-0 flex-1 truncate text-xs">{tech.title}</span>
-                  {tech.kind ? <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{tech.kind}</span> : null}
-                </button>
-              </li>
-            ))}
-          </ul>
-          <div className="mt-1 border-t border-border/60 pt-1">
-            <Link
-              to={`/explore?type=tech&layer=${encodeURIComponent(layer.id)}`}
-              onClick={() => setOpen(false)}
-              className="flex w-full items-center justify-between gap-2 rounded-md px-1.5 py-1 text-[11px] font-medium text-primary-text transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
-            >
-              {t("home.viewInExplore")}
-              <ArrowRight aria-hidden="true" className="size-3.5" />
-            </Link>
-          </div>
-        </div>
-      </MorphPopoverContent>
-    </MorphPopover>
   );
 }
 
@@ -705,13 +388,29 @@ interface GettingStartedProps {
 }
 
 /**
- * Compact first-run checklist: three real signals, each with its own way in.
- * It leaves the page on its own once all three read as done; no dismiss, no tour.
+ * One quiet line while a first-run step is still open: the next step, its way in,
+ * and a dismiss that remembers the choice on this device.
  */
 function GettingStarted({ notes, projects, packsVisible }: GettingStartedProps) {
   const { t } = useI18n();
   const connect = useConnectStatus();
   const connected = connect.data?.clients.some((client) => client.connected) ?? false;
+  const [dismissed, setDismissed] = useState(() => {
+    try {
+      return localStorage.getItem(SETUP_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+
+  const dismiss = () => {
+    setDismissed(true);
+    try {
+      localStorage.setItem(SETUP_KEY, "1");
+    } catch {
+      // Storage can be unavailable in private or restricted contexts.
+    }
+  };
 
   const steps = [
     {
@@ -734,41 +433,34 @@ function GettingStarted({ notes, projects, packsVisible }: GettingStartedProps) 
     },
   ];
   const done = steps.filter((step) => step.done).length;
-  if (done === steps.length) return null;
+  const next = steps.find((step) => !step.done);
+  if (!next || dismissed) return null;
 
   return (
     <section
       data-testid="home-getting-started"
       aria-label={t("home.steps.progress", { done })}
-      className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-border/60 bg-muted/30 px-3 py-2"
+      className="flex min-h-11 min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5 rounded-xl border border-border/60 bg-muted/30 px-3 py-1.5"
     >
       <h2 className="shrink-0 text-xs font-semibold">{t("home.steps.title")}</h2>
-      <ol className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
-        {steps.map((step, index) => (
-          <li key={step.key} className="flex min-w-0 items-center gap-1.5">
-            <span
-              aria-hidden="true"
-              className={cn(
-                "grid size-5 shrink-0 place-items-center rounded-full border text-[10px] font-semibold tabular-nums",
-                step.done ? "border-primary/40 bg-primary/10 text-primary" : "border-border text-muted-foreground",
-              )}
-            >
-              {step.done ? <Check className="size-3" /> : index + 1}
-            </span>
-            <span className={cn("truncate text-xs", step.done ? "text-muted-foreground" : "font-medium")}>{step.label}</span>
-            <span className="sr-only">{step.done ? t("home.steps.done") : t("home.steps.todo")}</span>
-            {step.done || !step.action ? null : (
-              <Link
-                to={step.action.to}
-                className="inline-flex shrink-0 items-center gap-0.5 rounded-sm text-[11px] text-muted-foreground underline decoration-border underline-offset-2 transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-              >
-                {step.action.label}
-                <ArrowRight className="size-3" aria-hidden="true" />
-              </Link>
-            )}
-          </li>
-        ))}
-      </ol>
+      <p className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{t("home.steps.next", { step: next.label })}</p>
+      {next.action ? (
+        <Link
+          to={next.action.to}
+          className="inline-flex shrink-0 items-center gap-0.5 rounded-sm text-[11px] text-muted-foreground underline decoration-border underline-offset-2 transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        >
+          {next.action.label}
+          <ArrowRight className="size-3" aria-hidden="true" />
+        </Link>
+      ) : null}
+      <button
+        type="button"
+        aria-label={t("home.steps.dismiss")}
+        onClick={dismiss}
+        className="grid size-6 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+      >
+        <X className="size-3.5" aria-hidden="true" />
+      </button>
     </section>
   );
 }
@@ -855,7 +547,6 @@ function InboxStrip({ proposals, total, isPending, error, armed, busyId, onAppro
             return (
               <motion.div
                 key={proposal.id}
-                layout={!reduce}
                 initial={reduce ? { opacity: 0 } : { opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.98 }}
@@ -914,18 +605,248 @@ function InboxStrip({ proposals, total, isPending, error, armed, busyId, onAppro
   );
 }
 
+interface HealthDetailProps {
+  /** Metric id for the `data-stat` hook and tests. */
+  stat: string;
+  /** Singular name used in the trigger's accessible name, e.g. "Broken links". */
+  label: string;
+  /** Count shown in the accessible name. */
+  value: number;
+  /** The already pluralized line the user reads. */
+  text: string;
+  children: (close: () => void) => ReactNode;
+}
+
+/**
+ * A health metric with details: above zero it opens the same list (and the same
+ * Open/Create actions) the old Home tile did; at zero it stays plain text.
+ */
+function HealthDetail({ stat, label, value, text, children }: HealthDetailProps) {
+  const { t } = useI18n();
+  const [open, setOpen] = useState(false);
+
+  return (
+    <MorphPopover open={open} onOpenChange={setOpen}>
+      <MorphPopoverTrigger>
+        <button
+          type="button"
+          data-stat={stat}
+          data-alert="true"
+          aria-label={`${label}: ${value} — ${t("home.showDetails")}`}
+          className={cn(HEALTH_LINK, "text-destructive-text")}
+        >
+          {text}
+        </button>
+      </MorphPopoverTrigger>
+      <MorphPopoverContent side="top" align="start" className="w-80 p-2">
+        {children(() => setOpen(false))}
+      </MorphPopoverContent>
+    </MorphPopover>
+  );
+}
+
+/** One quiet line: how much is in the vault, and what needs attention. */
+function HealthLine({ stats }: { stats: ReturnType<typeof useStats> }) {
+  const { t } = useI18n();
+  const navigate = useNavigate();
+  if (stats.isPending) {
+    return (
+      <section data-testid="health-line" aria-label={t("home.health")} className="flex min-h-6 items-center gap-3">
+        {[16, 20, 14].map((width) => (
+          <span
+            key={width}
+            aria-hidden="true"
+            className="h-3 rounded-full bg-muted motion-safe:animate-pulse"
+            style={{ width: `${width * 4}px` }}
+          />
+        ))}
+      </section>
+    );
+  }
+
+  if (stats.error) {
+    return (
+      <section data-testid="health-line" aria-label={t("home.health")} className="min-h-6">
+        <ErrorState error={stats.error} />
+      </section>
+    );
+  }
+
+  const total = stats.data?.total ?? 0;
+  const brokenLinks = stats.data?.brokenLinks ?? [];
+  const orphans = stats.data?.orphans ?? [];
+  const broken = brokenLinks.length;
+  const orphanCount = orphans.length;
+
+  return (
+    <section
+      data-testid="health-line"
+      aria-label={t("home.health")}
+      className="flex min-h-6 min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground"
+    >
+      <Link data-stat="notes" to="/explore" className={HEALTH_LINK}>
+        {t(total === 1 ? "home.health.notesOne" : "home.health.notes", { count: total })}
+      </Link>
+      <span aria-hidden="true" className="text-border">
+        ·
+      </span>
+      {broken > 0 ? (
+        <HealthDetail
+          stat="broken"
+          label={t("home.brokenLinks")}
+          value={broken}
+          text={t(broken === 1 ? "home.health.brokenOne" : "home.health.broken", { count: broken })}
+        >
+          {(close) => (
+            <ul className="flex flex-col gap-0.5 p-1">
+              {brokenLinks.map((link) => (
+                <li key={`${link.from}-${link.to}`} data-broken-link={link.to} className="flex min-w-0 items-center gap-1">
+                  <span className="min-w-0 flex-1 truncate px-1.5 font-mono text-[11px] text-muted-foreground">
+                    {link.from} <span className="text-foreground/50">→</span> {link.to}
+                  </span>
+                  <button
+                    type="button"
+                    aria-label={t("home.brokenLinkOpen", { id: link.from })}
+                    onClick={() => {
+                      close();
+                      navigate(`/notes/${encodeURIComponent(link.from)}`);
+                    }}
+                    className={POPOVER_ACTION}
+                  >
+                    {t("home.brokenLinkOpenShort")}
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={t("home.brokenLinkCreate", { id: link.to })}
+                    onClick={() => {
+                      close();
+                      window.dispatchEvent(new CustomEvent("basics:new-note", { detail: { id: link.to } }));
+                    }}
+                    className={cn(POPOVER_ACTION, "text-primary-text")}
+                  >
+                    {t("home.brokenLinkCreateShort")}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </HealthDetail>
+      ) : (
+        <span data-stat="broken">{t("home.health.broken", { count: 0 })}</span>
+      )}
+      <span aria-hidden="true" className="text-border">
+        ·
+      </span>
+      {orphanCount > 0 ? (
+        <HealthDetail
+          stat="orphans"
+          label={t("home.orphans")}
+          value={orphanCount}
+          text={t(orphanCount === 1 ? "home.health.orphanOne" : "home.health.orphans", { count: orphanCount })}
+        >
+          {(close) => (
+            <ul className="flex flex-col gap-0.5 p-1">
+              {orphans.map((id) => (
+                <li key={id}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      close();
+                      navigate(`/notes/${encodeURIComponent(id)}`);
+                    }}
+                    className="w-full truncate rounded-md px-1.5 py-1 text-left font-mono text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
+                  >
+                    {id}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </HealthDetail>
+      ) : (
+        <span data-stat="orphans">{t("home.health.orphans", { count: 0 })}</span>
+      )}
+    </section>
+  );
+}
+
+interface ContinueItem {
+  id: string;
+  title: string;
+  type: string;
+  time: string;
+}
+
+function ContinueSection({
+  items,
+  pending,
+  error,
+  language,
+}: {
+  items: ContinueItem[];
+  pending: boolean;
+  error: Error | null;
+  language: string;
+}) {
+  const { t } = useI18n();
+
+  return (
+    <section aria-labelledby="home-continue-label" className="min-w-0">
+      <SectionLabel id="home-continue-label">{t("home.continue")}</SectionLabel>
+      <div data-testid="continue-list" className="mt-1 flex min-w-0 flex-col">
+        {pending ? (
+          <div role="status" aria-label={t("state.loading")} className="flex flex-col">
+            <span className="sr-only">{t("state.loading")}</span>
+            {["a", "b", "c", "d", "e"].map((row) => (
+              <div
+                key={row}
+                aria-hidden="true"
+                className="flex items-center border-b border-border/50 px-0.5 last:border-0"
+                style={{ minHeight: CONTINUE_ROW_HEIGHT }}
+              >
+                <span className="h-3 w-1/3 rounded-full bg-muted motion-safe:animate-pulse" />
+              </div>
+            ))}
+          </div>
+        ) : error ? (
+          <ErrorState error={error} />
+        ) : (
+          <ul className="flex min-w-0 flex-col">
+            {items.map((item) => (
+              <li key={item.id} className="border-b border-border/50 last:border-0">
+                <Link
+                  to={item.type === "project" ? `/projects?p=${encodeURIComponent(item.id)}` : `/notes/${encodeURIComponent(item.id)}`}
+                  className="flex items-center gap-3 px-0.5 transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
+                  style={{ minHeight: CONTINUE_ROW_HEIGHT }}
+                >
+                  <span className="min-w-0 flex-1 truncate text-sm">{item.title}</span>
+                  {item.time ? (
+                    <time
+                      dateTime={item.time}
+                      title={formatFullDateTime(item.time, language)}
+                      className="shrink-0 whitespace-nowrap font-mono text-[10px] text-muted-foreground"
+                    >
+                      {formatRelativeTime(item.time, language)}
+                    </time>
+                  ) : null}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </section>
+  );
+}
+
 export function HomePage() {
   const { t, language } = useI18n();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const reduce = useReducedMotion() ?? false;
-  const reveal = useRevealOnce();
 
   const stats = useStats();
   const inbox = useInbox();
   const notes = useNotes();
-  const layers = useLayers();
-  const timeline = useActivity({ limit: 20 });
   const dayActivity = useActivity({ limit: 200 });
   const connectStatus = useConnectStatus();
   const [searchParams] = useSearchParams();
@@ -937,6 +858,10 @@ export function HomePage() {
   const projectsTotal = stats.data?.counts.project ?? 0;
   const stepsComplete = notesTotal > 0 && projectsTotal > 0 && (connectStatus.data?.clients.some((client) => client.connected) ?? false);
   const showSteps = Boolean(stats.data) && !stepsComplete;
+
+  // Questions about a normal vault are still loading when Home first paints, so treat the
+  // description as settled rather than showing it and pulling it away a frame later.
+  const intro = useIntro("home", stats.isSuccess ? notesTotal > 0 : true);
 
   const [selectedPacks, setSelectedPacks] = useState<Set<string>>(new Set());
   const [packLanguage, setPackLanguage] = useState<Language>(language);
@@ -952,23 +877,26 @@ export function HomePage() {
   const armTimer = useRef<number | undefined>(undefined);
   useEffect(() => () => window.clearTimeout(armTimer.current), []);
 
-  const typeById = useMemo(() => new Map((notes.data ?? []).map((note) => [note.id, note.type])), [notes.data]);
-  const techById = useMemo(
-    () => new Map((notes.data ?? []).map((note) => [note.id, { id: note.id, title: note.title || note.id, kind: note.kind }])),
-    [notes.data],
-  );
-  const layerTechs = useMemo(() => {
-    const map = new Map<string, { id: string; title: string; kind?: string }[]>();
-    for (const layer of layers.data ?? []) {
-      map.set(
-        layer.id,
-        layer.techs
-          .map((id) => techById.get(id) ?? { id, title: id, kind: undefined })
-          .sort((a, b) => a.title.localeCompare(b.title) || a.id.localeCompare(b.id)),
-      );
+  const noteById = useMemo(() => new Map((notes.data ?? []).map((note) => [note.id, note])), [notes.data]);
+  const [history] = useState<RecentItem[]>(() => readRecentItems());
+
+  const continueItems = useMemo<ContinueItem[]>(() => {
+    const seen = new Set<string>();
+    const items: ContinueItem[] = [];
+    const push = (note: { id: string; title?: string; type: string }, time: string) => {
+      if (items.length >= CONTINUE_ROWS || seen.has(note.id)) return;
+      seen.add(note.id);
+      items.push({ id: note.id, title: note.title || note.id, type: note.type, time });
+    };
+    // Local opens first, then top up with the vault's recently updated notes so the
+    // list keeps its full height when this device only has one or two opens.
+    for (const entry of history) {
+      const note = noteById.get(entry.id);
+      if (note) push(note, entry.opened);
     }
-    return map;
-  }, [layers.data, techById]);
+    for (const note of stats.data?.recent ?? []) push(note, note.updated ?? "");
+    return items;
+  }, [history, noteById, stats.data]);
 
   const proposals = useMemo<ProposalSummary[]>(
     () => [...(inbox.data ?? [])].sort((a, b) => Date.parse(b.meta.created) - Date.parse(a.meta.created)).slice(0, 3),
@@ -976,84 +904,9 @@ export function HomePage() {
   );
   const pendingTotal = inbox.data?.length ?? 0;
 
-  const groups = useMemo(() => groupActivity(timeline.data ?? []), [timeline.data]);
-
-  const gridRef = useRef<HTMLDivElement>(null);
-  const activityRef = useRef<HTMLElement>(null);
-  const rightRef = useRef<HTMLDivElement>(null);
-  const healthRef = useRef<HTMLElement>(null);
-  const layersRef = useRef<HTMLElement>(null);
-  const recentRef = useRef<HTMLElement>(null);
-  const recentHeightRef = useRef(0);
-  // At 1024-1439 Recently edited is the last block in the side column, so it shows
-  // only while it still fits above the panel's bottom edge; below 1024 and from 1440 up it always shows.
-  const [showRecent, setShowRecent] = useState(true);
-  const [activityFade, setActivityFade] = useState<EdgeFade>({ top: false, bottom: false });
-  const layoutSize = useHomeLayoutSize(gridRef, activityRef, groups.length + (showPacks ? 1000 : 0) + (showSteps ? 2000 : 0));
-  // biome-ignore lint/correctness/useExhaustiveDependencies: re-attach whenever the list renders — ResizeObserver then covers size changes.
-  useEffect(() => {
-    const el = activityRef.current;
-    if (!el) return;
-    const update = () => {
-      const scrollable = el.scrollHeight > el.clientHeight;
-      setActivityFade((prev) => {
-        const next: EdgeFade = {
-          top: el.scrollTop > 0,
-          bottom: scrollable && el.scrollTop < el.scrollHeight - el.clientHeight - 1,
-        };
-        return prev.top === next.top && prev.bottom === next.bottom ? prev : next;
-      });
-    };
-    update();
-    const observer = new ResizeObserver(update);
-    observer.observe(el);
-    el.addEventListener("scroll", update, { passive: true });
-    return () => {
-      observer.disconnect();
-      el.removeEventListener("scroll", update);
-    };
-  }, [groups.length]);
-
-  // Recently edited only sits in the side column between 1024 and 1439; keep it
-  // visible while the health strip plus the layers list still leave it room.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: re-measure when the stats or layers data changes.
-  useEffect(() => {
-    const col = rightRef.current;
-    if (!col) return;
-    let cancelled = false;
-    const measure = () => {
-      if (cancelled) return;
-      if (window.innerWidth < 1024 || window.innerWidth >= 1440) {
-        setShowRecent((prev) => (prev ? prev : true));
-        return;
-      }
-      const recent = recentRef.current;
-      const measured = recent?.getBoundingClientRect().height ?? 0;
-      if (measured > 0) recentHeightRef.current = measured;
-      const healthHeight = healthRef.current?.offsetHeight ?? 0;
-      const layersHeight = layersRef.current?.offsetHeight ?? 0;
-      const used = healthHeight + (layersHeight > 0 ? COLUMN_GAP + layersHeight : 0);
-      const fits = used + COLUMN_GAP + recentHeightRef.current <= col.clientHeight + 1;
-      setShowRecent((prev) => (prev === fits ? prev : fits));
-    };
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(col);
-    const main = col.closest("main");
-    if (main) observer.observe(main);
-    if (healthRef.current) observer.observe(healthRef.current);
-    if (layersRef.current) observer.observe(layersRef.current);
-    // A new recent list changes the section's own height; re-measure so it can hide
-    // again instead of being clipped mid-row.
-    if (recentRef.current) observer.observe(recentRef.current);
-    window.addEventListener("resize", measure);
-    return () => {
-      cancelled = true;
-      observer.disconnect();
-      window.removeEventListener("resize", measure);
-    };
-  }, [stats.data, layers.data]);
-  const activityMaskImage = activityMask(activityFade);
+  const dailyGroups = useMemo(() => groupActivity((dayActivity.data ?? []).filter((event) => isToday(event.ts))), [dayActivity.data]);
+  const [showAllActivity, setShowAllActivity] = useState(false);
+  const activityGroups = showAllActivity ? dailyGroups : dailyGroups.slice(0, ACTIVITY_ROWS);
 
   const pendingCommunityPacks = useMemo(
     () =>
@@ -1061,11 +914,6 @@ export function HomePage() {
         (inbox.data ?? []).map((proposal) => packProposer(proposal.meta.proposed_by)?.name).filter((name): name is string => Boolean(name)),
       ),
     [inbox.data],
-  );
-
-  const agentsToday = useMemo(
-    () => new Set((dayActivity.data ?? []).filter((event) => isToday(event.ts)).map((event) => event.agent)).size,
-    [dayActivity.data],
   );
 
   const invalidate = () => {
@@ -1165,11 +1013,6 @@ export function HomePage() {
     return t(verbKeys[tool] ? key : "home.verb.other");
   };
 
-  const counts = stats.data?.counts;
-  const total = stats.data?.total ?? 0;
-  const pending = stats.data?.inbox ?? 0;
-  const layerList = layers.data ?? [];
-  const maxLayerCount = layerList.reduce((max, layer) => Math.max(max, layer.techs.length), 0);
   const busyId =
     approve.isPending && typeof approve.variables === "string"
       ? approve.variables
@@ -1178,290 +1021,176 @@ export function HomePage() {
         : undefined;
 
   return (
-    <Page className={`${PAGE_SECTIONS} min-[1024px]:pb-0`}>
-      <Reveal index={0}>
+    <Page className={PAGE_SECTIONS}>
+      <div className="flex flex-col gap-3">
         <PageHeader
-          title={reveal ? <TextReveal text={t("home.title")} stagger={0.06} blur={8} yOffset="30%" /> : t("home.title")}
-          description={
-            <>
-              <p>{t("home.intro")}</p>
-              <p className="font-mono text-[11px]">{t("home.summary", { total, inbox: pending, agents: agentsToday })}</p>
-            </>
-          }
+          title={t("home.title")}
+          description={intro.showIntro ? t("home.intro") : undefined}
+          hint={intro.showIntro ? undefined : t("home.intro")}
+          onDismissDescription={intro.showIntro ? intro.dismiss : undefined}
         />
-      </Reveal>
-
-      {showSteps ? (
-        <Reveal index={1}>
-          <GettingStarted notes={notesTotal} projects={projectsTotal} packsVisible={showPacks} />
-        </Reveal>
-      ) : null}
+        {/* Health belongs with the title: once the intro moves behind `?` it should not
+            leave a blank section between the heading and the counts. */}
+        {showPacks ? null : <HealthLine stats={stats} />}
+      </div>
 
       {showPacks ? (
-        <Reveal index={1}>
-          <StarterPacks
-            packs={packs.data}
-            pending={packs.isPending}
-            error={packs.error}
-            language={language}
-            packLanguage={packLanguage}
-            selected={selectedPacks}
-            installing={install.isPending}
-            pendingPacks={pendingCommunityPacks}
-            onToggle={togglePack}
-            onLanguageChange={setPackLanguage}
-            onInstall={() => install.mutate([...selectedPacks])}
-          />
-        </Reveal>
+        <>
+          {showSteps ? (
+            <div>
+              <GettingStarted notes={notesTotal} projects={projectsTotal} packsVisible />
+            </div>
+          ) : null}
+          <div>
+            <StarterPacks
+              packs={packs.data}
+              pending={packs.isPending}
+              error={packs.error}
+              language={language}
+              packLanguage={packLanguage}
+              selected={selectedPacks}
+              installing={install.isPending}
+              pendingPacks={pendingCommunityPacks}
+              onToggle={togglePack}
+              onLanguageChange={setPackLanguage}
+              onInstall={() => install.mutate([...selectedPacks])}
+            />
+          </div>
+        </>
       ) : (
         <>
-          <InboxStrip
-            proposals={proposals}
-            total={pendingTotal}
-            isPending={inbox.isPending}
-            error={inbox.error}
-            armed={armed}
-            busyId={busyId}
-            onApprove={(id) => approve.mutate(id)}
-            onReject={requestReject}
-          />
+          <div>
+            <InboxStrip
+              proposals={proposals}
+              total={pendingTotal}
+              isPending={inbox.isPending}
+              error={inbox.error}
+              armed={armed}
+              busyId={busyId}
+              onApprove={(id) => approve.mutate(id)}
+              onReject={requestReject}
+            />
+          </div>
 
-          <div
-            ref={gridRef}
-            data-testid="home-grid"
-            style={layoutSize.gridHeight ? { height: layoutSize.gridHeight } : undefined}
-            className="grid min-w-0 gap-6 min-[1024px]:min-h-0 min-[1024px]:grid-cols-[minmax(0,11fr)_minmax(0,9fr)] min-[1440px]:grid-cols-[minmax(0,40fr)_minmax(0,35fr)_minmax(0,25fr)] min-[1440px]:gap-5"
-          >
-            <section className="flex min-w-0 flex-col min-[1024px]:min-h-0">
-              <SectionLabel id="home-activity-label">{t("home.activity")}</SectionLabel>
-
-              {timeline.isPending ? (
-                <div className="mt-2">
-                  <Loading />
-                </div>
-              ) : timeline.error ? (
-                <div className="mt-2">
-                  <ErrorState error={timeline.error} />
-                </div>
-              ) : groups.length === 0 ? (
-                <div className="mt-2">
-                  <p className="text-sm text-muted-foreground">{t("home.noAgents")}</p>
-                  <div className="mt-2 flex items-start gap-1.5">
-                    <code className="min-w-0 rounded-md bg-muted/70 px-2 py-1 font-mono text-[10.5px] leading-4 break-all text-muted-foreground">
-                      claude mcp add --transport http basics {window.location.origin}/mcp
-                    </code>
-                    <button
-                      type="button"
-                      aria-label={t("home.copy")}
-                      title={t("home.copy")}
-                      onClick={() => void copyMcp()}
-                      className="grid size-7 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-                    >
-                      <Copy className="size-3.5" aria-hidden="true" />
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <section
-                  ref={activityRef}
-                  // A scrollable region must be reachable from the keyboard so arrow keys can scroll it.
-                  // biome-ignore lint/a11y/noNoninteractiveTabindex: focusable scroll container, labelled by the section heading.
-                  tabIndex={0}
-                  aria-labelledby="home-activity-label"
-                  data-testid="activity-panel"
-                  className="mt-2 min-h-0 flex-1 overflow-y-auto overscroll-contain focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-                  style={{
-                    maxHeight: layoutSize.activityMaxHeight,
-                    WebkitMaskImage: activityMaskImage,
-                    maskImage: activityMaskImage,
-                  }}
-                >
-                  <ul className="mt-1 flex flex-col">
-                    <AnimatePresence initial={false}>
-                      {groups.map((group) => (
-                        <motion.li
-                          key={group.key}
-                          layout={!reduce}
-                          initial={reduce ? { opacity: 0 } : { opacity: 0, y: -6 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={reduce ? { opacity: 0 } : { opacity: 0 }}
-                          transition={reduce ? { duration: 0 } : { type: "spring", stiffness: 420, damping: 34 }}
-                          className="flex items-start gap-2 border-b border-border/50 py-1.5 last:border-0"
-                        >
-                          <time
-                            className="w-10 shrink-0 pt-0.5 text-right font-mono text-[10px] whitespace-nowrap text-muted-foreground"
-                            dateTime={group.event.ts}
-                            title={formatFullDateTime(group.event.ts, language)}
-                          >
-                            {formatCompactRelativeTime(group.event.ts)}
-                          </time>
-                          <span
-                            aria-hidden="true"
-                            className="mt-0.5 grid size-[18px] shrink-0 place-items-center rounded-md font-mono text-[10px] font-semibold text-[#111113]"
-                            style={{ backgroundColor: agentColor(group.event.agent) }}
-                          >
-                            {agentInitial(group.event.agent)}
-                          </span>
-                          <div className="min-w-0 flex-1">
-                            <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 text-xs">
-                              <span className="font-medium">{group.event.agent}</span>
-                              <span className="text-muted-foreground">{verbFor(group)}</span>
-                              {group.count > 1 && group.event.tool !== "get_note" ? (
-                                <span className="font-mono text-[11px] text-muted-foreground">×{group.count}</span>
-                              ) : null}
-                              {group.event.tool === "search_vault" && group.detail ? (
-                                <span className="font-mono text-[11px] text-muted-foreground">“{group.detail}”</span>
-                              ) : null}
-                            </div>
-                            {group.noteIds.length > 0 ? (
-                              <div className="mt-1 flex flex-wrap gap-1">
-                                {group.noteIds.slice(0, 6).map((id) => (
-                                  <TypeChip key={id} id={id} type={typeById.get(id)} />
-                                ))}
-                                {group.noteIds.length > 6 ? (
-                                  <span className="self-center font-mono text-[10px] text-muted-foreground">
-                                    +{group.noteIds.length - 6}
-                                  </span>
-                                ) : null}
-                              </div>
-                            ) : null}
-                          </div>
-                        </motion.li>
-                      ))}
-                    </AnimatePresence>
-                  </ul>
-                </section>
-              )}
-            </section>
-
-            <div
-              ref={rightRef}
-              className="flex min-w-0 flex-col gap-4 min-[1024px]:min-h-0 min-[1024px]:overflow-hidden min-[1440px]:contents"
-            >
-              <div className="flex min-w-0 shrink-0 flex-col gap-4 min-[1440px]:min-h-0 min-[1440px]:overflow-y-auto">
-                <section ref={healthRef} aria-label={t("home.health")} className="min-w-0">
-                  <SectionLabel>{t("home.health")}</SectionLabel>
-                  {stats.error ? (
-                    <div className="mt-2">
-                      <ErrorState error={stats.error} />
-                    </div>
-                  ) : null}
-                  <div data-testid="stats-strip" className="mt-2 flex flex-wrap items-baseline gap-x-4 gap-y-0.5">
-                    {TYPE_ORDER.map((type) => (
-                      <StatItem
-                        key={type}
-                        stat={type}
-                        label={t(`type.${type}` as TranslationKey)}
-                        dot={`var(--type-${type})`}
-                        value={counts?.[type] ?? 0}
-                        onClick={() => navigate(type === "project" ? "/projects" : `/explore?type=${type}`)}
-                      />
-                    ))}
-
-                    <StatItem
-                      stat="broken"
-                      label={t("home.brokenLinks")}
-                      hint={t("home.brokenLinks.hint")}
-                      value={stats.data?.brokenLinks.length ?? 0}
-                      alert={(stats.data?.brokenLinks.length ?? 0) > 0}
-                    >
-                      {(close) => (
-                        <ul className="flex flex-col gap-0.5 p-1">
-                          {(stats.data?.brokenLinks ?? []).map((link) => (
-                            <li key={`${link.from}-${link.to}`} data-broken-link={link.to} className="flex min-w-0 items-center gap-1">
-                              <span className="min-w-0 flex-1 truncate px-1.5 font-mono text-[11px] text-muted-foreground">
-                                {link.from} <span className="text-foreground/50">→</span> {link.to}
-                              </span>
-                              <button
-                                type="button"
-                                aria-label={t("home.brokenLinkOpen", { id: link.from })}
-                                onClick={() => navigate(`/notes/${encodeURIComponent(link.from)}`)}
-                                className={POPOVER_ACTION}
-                              >
-                                {t("home.brokenLinkOpenShort")}
-                              </button>
-                              <button
-                                type="button"
-                                aria-label={t("home.brokenLinkCreate", { id: link.to })}
-                                onClick={() => {
-                                  close();
-                                  window.dispatchEvent(new CustomEvent("basics:new-note", { detail: { id: link.to } }));
-                                }}
-                                className={`${POPOVER_ACTION} text-primary-text`}
-                              >
-                                {t("home.brokenLinkCreateShort")}
-                              </button>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </StatItem>
-
-                    <StatItem
-                      stat="orphans"
-                      label={t("home.orphans")}
-                      hint={t("home.orphans.hint")}
-                      value={stats.data?.orphans.length ?? 0}
-                      alert={(stats.data?.orphans.length ?? 0) > 0}
-                    >
-                      <ul className="flex flex-col gap-0.5 p-1">
-                        {(stats.data?.orphans ?? []).map((id) => (
-                          <li key={id}>
-                            <button
-                              type="button"
-                              onClick={() => navigate(`/notes/${encodeURIComponent(id)}`)}
-                              className="w-full truncate rounded-md px-1.5 py-1 text-left font-mono text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
-                            >
-                              {id}
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    </StatItem>
-                  </div>
-                </section>
-
-                {layerList.length > 0 ? (
-                  <section ref={layersRef} aria-label={t("home.layers")} className="min-w-0">
-                    <SectionLabel>{t("home.layers")}</SectionLabel>
-                    <div className="mt-2 grid min-w-0 grid-cols-2 gap-x-4 gap-y-1">
-                      {layerList.map((layer) => (
-                        <LayerRow key={layer.id} layer={layer} techs={layerTechs.get(layer.id) ?? []} max={maxLayerCount} />
-                      ))}
-                    </div>
-                  </section>
-                ) : null}
+          {/*
+            The proposal strip is the only async block above the rest, and its final height
+            depends on how many proposals exist. Nothing mounts below it until it resolves and
+            reports that height, so late proposals never push the rest of Home down.
+          */}
+          {inbox.isPending ? null : (
+            <>
+              <div>
+                <ContinueSection items={continueItems} pending={notes.isPending} error={notes.error} language={language} />
               </div>
 
-              <section
-                ref={recentRef}
-                data-testid="recent-section"
-                aria-label={t("home.recent")}
-                className={cn("shrink-0 min-w-0 min-[1440px]:min-h-0 min-[1440px]:overflow-y-auto", !showRecent && "hidden")}
-              >
-                <SectionLabel>{t("home.recent")}</SectionLabel>
-                <ul className="mt-1 flex min-w-0 flex-col min-[1024px]:max-[1439px]:[&>li:nth-child(n+6)]:hidden">
-                  {(stats.data?.recent ?? []).map((note) => (
-                    <li key={note.id} className="border-b border-border/50 last:border-0">
+              <div>
+                <section aria-labelledby="home-activity-label" className="min-w-0">
+                  <div className="flex min-h-6 items-baseline justify-between gap-3">
+                    <SectionLabel id="home-activity-label">{t("home.activity")}</SectionLabel>
+                    {dailyGroups.length > ACTIVITY_ROWS ? (
                       <button
                         type="button"
-                        onClick={() => navigate(`/notes/${encodeURIComponent(note.id)}`)}
-                        className="flex w-full min-w-0 items-baseline gap-2 py-1.5 text-left transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
+                        aria-expanded={showAllActivity}
+                        onClick={() => setShowAllActivity((open) => !open)}
+                        className="shrink-0 rounded-sm text-[11px] font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                       >
-                        <span
-                          aria-hidden="true"
-                          className="size-1.5 shrink-0 self-center rounded-full"
-                          style={{ backgroundColor: typeColor(note.type) }}
-                        />
-                        <span className="min-w-0 flex-1 truncate text-xs">{note.title || note.id}</span>
-                        <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{note.updated}</span>
+                        {showAllActivity ? t("home.activity.showLess") : t("home.activity.showAll", { count: dailyGroups.length })}
                       </button>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            </div>
-          </div>
+                    ) : null}
+                  </div>
+
+                  {dayActivity.isPending ? (
+                    <div role="status" aria-label={t("state.loading")} className="mt-1 flex flex-col">
+                      <span className="sr-only">{t("state.loading")}</span>
+                      {["a", "b", "c"].map((row) => (
+                        <span
+                          key={row}
+                          aria-hidden="true"
+                          className="flex items-center border-b border-border/50 last:border-0"
+                          style={{ minHeight: ACTIVITY_ROW_HEIGHT }}
+                        >
+                          <span className="h-3 w-1/2 rounded-full bg-muted motion-safe:animate-pulse" />
+                        </span>
+                      ))}
+                    </div>
+                  ) : dayActivity.error ? (
+                    <div className="mt-2">
+                      <ErrorState error={dayActivity.error} />
+                    </div>
+                  ) : dailyGroups.length === 0 ? (
+                    <div className="mt-2">
+                      <p className="text-sm text-muted-foreground">
+                        {t((dayActivity.data ?? []).length === 0 ? "home.noAgents" : "home.activity.quiet")}
+                      </p>
+                      <div className="mt-2 flex items-start gap-1.5">
+                        <code className="min-w-0 rounded-md bg-muted/70 px-2 py-1 font-mono text-[10.5px] leading-4 break-all text-muted-foreground">
+                          claude mcp add --transport http basics {window.location.origin}/mcp
+                        </code>
+                        <button
+                          type="button"
+                          aria-label={t("home.copy")}
+                          title={t("home.copy")}
+                          onClick={() => void copyMcp()}
+                          className="grid size-7 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                        >
+                          <Copy className="size-3.5" aria-hidden="true" />
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <ul
+                      data-testid="activity-list"
+                      className="mt-1 flex flex-col"
+                      style={{ minHeight: ACTIVITY_ROWS * ACTIVITY_ROW_HEIGHT }}
+                    >
+                      {activityGroups.map((group) => {
+                        const names = group.noteIds.slice(0, 2).map((id) => noteById.get(id)?.title || id);
+                        const more = group.noteIds.length - names.length;
+                        return (
+                          <li
+                            key={group.key}
+                            className="flex items-baseline gap-3 border-b border-border/50 py-1.5 last:border-0"
+                            style={{ minHeight: ACTIVITY_ROW_HEIGHT }}
+                          >
+                            <span className="min-w-0 flex-1 truncate text-xs">
+                              <span className="font-medium">{group.event.agent}</span>{" "}
+                              <span className="text-muted-foreground">{verbFor(group)}</span>
+                              {group.count > 1 && group.event.tool !== "get_note" ? (
+                                <span className="text-muted-foreground"> x{group.count}</span>
+                              ) : null}
+                              {group.event.tool === "search_vault" && group.detail ? (
+                                <span className="text-muted-foreground"> “{group.detail}”</span>
+                              ) : null}
+                              {names.length > 0 ? (
+                                <span className="text-muted-foreground">
+                                  {" "}
+                                  · {names.join(", ")}
+                                  {more > 0 ? ` +${more}` : ""}
+                                </span>
+                              ) : null}
+                            </span>
+                            <time
+                              className="shrink-0 font-mono text-[10px] whitespace-nowrap text-muted-foreground"
+                              dateTime={group.event.ts}
+                              title={formatFullDateTime(group.event.ts, language)}
+                            >
+                              {formatCompactRelativeTime(group.event.ts)}
+                            </time>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </section>
+              </div>
+
+              {showSteps ? (
+                <div>
+                  <GettingStarted notes={notesTotal} projects={projectsTotal} packsVisible={false} />
+                </div>
+              ) : null}
+            </>
+          )}
         </>
       )}
     </Page>

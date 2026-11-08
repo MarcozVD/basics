@@ -25,6 +25,7 @@ import {
   writeDesktopSettings,
 } from "@/lib/desktop";
 import { useEmbeddingsProgress } from "@/lib/events";
+import { useIntro } from "@/lib/intro";
 import { type DockEdge, type NavigationStyle, setDockEdge, setNavigationStyle, useNavigation } from "@/lib/navigation";
 import { queryKeys, useConnectStatus, useEmbeddings, useHealth } from "@/lib/queries";
 import { type Theme, useTheme } from "@/lib/theme";
@@ -359,12 +360,7 @@ function GeneralSection() {
             </Tabs>
           </fieldset>
         </Row>
-        <Row
-          title={t("nav.style.title")}
-          description={t("nav.style.description")}
-          status={<SavedHint visible={savedNavigation} />}
-          vertical
-        >
+        <Row title={t("nav.style.title")} description={t("nav.style.description")} status={<SavedHint visible={savedNavigation} />}>
           <ChoiceGroup<NavigationStyle>
             label={t("nav.style.title")}
             value={navigation.style}
@@ -1095,6 +1091,8 @@ export function SettingsPage() {
   const active: SectionId = isSection(requested) ? requested : "general";
   const reduce = useReducedMotion();
   const buttons = useRef<Array<HTMLButtonElement | null>>([]);
+  // Settings always has its content: there is no empty state, so the intro goes behind the `?`.
+  const intro = useIntro("settings", true);
 
   const select = (next: SectionId) => {
     setParams(next === "general" ? {} : { section: next }, { replace: true });
@@ -1115,7 +1113,12 @@ export function SettingsPage() {
   return (
     <Page className={PAGE_SECTIONS}>
       <Reveal index={0}>
-        <PageHeader title={t("settings.title")} description={t("settings.description")} />
+        <PageHeader
+          title={t("settings.title")}
+          description={intro.showIntro ? t("settings.description") : undefined}
+          hint={intro.showIntro ? undefined : t("settings.description")}
+          onDismissDescription={intro.showIntro ? intro.dismiss : undefined}
+        />
       </Reveal>
 
       <Reveal index={1}>

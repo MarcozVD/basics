@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { openRecommendLayers } from "./helpers";
 
 // The e2e server exposes a fake Claude Code CLI (serve.mjs) that emits Claude's `stream-json`
 // shape; no real agent runs. A description containing BASICS_E2E_SLEEP keeps the fake alive so
@@ -6,7 +7,7 @@ import { expect, test } from "@playwright/test";
 
 test("an agent plans the stack and its cited techs can be selected", async ({ page }) => {
   await page.goto("/recommend");
-  await expect(page.getByRole("button", { name: "Backend", exact: true })).toBeVisible();
+  await openRecommendLayers(page);
 
   await page.getByLabel("Describe the project", { exact: true }).fill("API REST para servir modelos de machine learning");
   await page.getByRole("button", { name: "Recommend", exact: true }).click();
@@ -32,7 +33,7 @@ test("an agent plans the stack and its cited techs can be selected", async ({ pa
 
 test("a running agent can be cancelled", async ({ page }) => {
   await page.goto("/recommend");
-  await expect(page.getByRole("button", { name: "Backend", exact: true })).toBeVisible();
+  await openRecommendLayers(page);
 
   await page.getByLabel("Describe the project", { exact: true }).fill("BASICS_E2E_SLEEP API REST lenta");
   await page.getByRole("button", { name: "Ask an agent", exact: true }).click();

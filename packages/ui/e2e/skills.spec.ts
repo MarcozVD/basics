@@ -6,9 +6,11 @@ test("lists the installed skills by area, in the fixed order", async ({ page }) 
   await page.goto("/skills");
 
   await expect(page.getByRole("heading", { name: "Skills", level: 1 })).toBeVisible();
+  // Skills has data, so its description sits behind the header's `?`, not under the title.
+  await expect(page.getByRole("button", { name: "Help" })).toBeVisible();
   await expect(
     page.getByText("Skills are instructions your coding agents load when a task matches them. Basics only reads them."),
-  ).toBeVisible();
+  ).toHaveCount(0);
   await expect(page.locator(section("frontend"))).toBeVisible();
 
   // Only the seeded areas render, always in the same order.
@@ -36,7 +38,11 @@ test("the agent filter and the search box narrow the list", async ({ page }) => 
   await page.goto("/skills");
   await expect(page.locator(section("frontend"))).toBeVisible();
 
-  await page.getByRole("button", { name: /^Codex/ }).click();
+  await page.getByRole("button", { name: "Filter by agent" }).click();
+  await page
+    .getByRole("listbox")
+    .getByRole("option", { name: /^Codex/ })
+    .click();
   await expect(page.locator(section("testing")).getByText("playwright-cli", { exact: true })).toBeVisible();
   await expect(page.locator(section("frontend"))).toHaveCount(0);
   await expect(page.locator(section("security"))).toHaveCount(0);
@@ -51,7 +57,7 @@ test("the agent filter and the search box narrow the list", async ({ page }) => 
 
   await page.getByRole("button", { name: "Clear filters" }).click();
   await expect(search).toHaveValue("");
-  await expect(page.getByRole("button", { name: /^All \d+$/ })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("button", { name: "Filter by agent" })).toContainText("All agents");
   await expect(page.locator(section("frontend"))).toBeVisible();
   await expect(page.locator(section("workflow"))).toBeVisible();
 });
@@ -60,8 +66,10 @@ test("an area override moves a skill, survives a reload and resets", async ({ pa
   await page.goto("/skills");
   await expect(page.locator(section("workflow")).getByText("caveman-tools", { exact: true })).toBeVisible();
 
+  // Change area lives with the rest of the row's details now.
+  await page.getByRole("button", { name: "Show details for caveman-tools" }).click();
   await page.getByRole("button", { name: "Change area for caveman-tools" }).click();
-  await page.getByRole("option", { name: "Data", exact: true }).click();
+  await page.getByRole("listbox").getByRole("option", { name: "Data", exact: true }).click();
 
   const data = page.locator(section("data"));
   await expect(data.getByText("caveman-tools", { exact: true })).toBeVisible();
@@ -70,6 +78,7 @@ test("an area override moves a skill, survives a reload and resets", async ({ pa
 
   await page.reload();
   await expect(page.locator(section("data")).getByText("caveman-tools", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Show details for caveman-tools" }).click();
   await expect(page.locator(section("data")).getByText("Changed by you")).toBeVisible();
 
   await page.getByRole("button", { name: "Reset the area of caveman-tools" }).click();
@@ -138,7 +147,11 @@ test("the area row filters one area and keeps it in the URL", async ({ page }) =
 
   // The area combines with the agent chips, and clearing filters drops it from the URL.
   await page.getByRole("button", { name: /^Security\s+\d+$/ }).click();
-  await page.getByRole("button", { name: /^Codex\s+\d+$/ }).click();
+  await page.getByRole("button", { name: "Filter by agent" }).click();
+  await page
+    .getByRole("listbox")
+    .getByRole("option", { name: /^Codex/ })
+    .click();
   await expect(page.getByText("No skills for this agent", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Clear filters" }).click();
   await expect(page).toHaveURL(/\/skills$/);

@@ -1,4 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
+import { openRecommendLayers } from "./helpers";
 
 // The e2e server exposes a fake Claude Code CLI (serve.mjs) that emits Claude's `stream-json`
 // shape. A description containing BASICS_E2E_SLOW makes it answer after a short delay, so a run
@@ -26,7 +27,7 @@ async function waitForPersistedRun(page: Page): Promise<void> {
 
 test("an agent answer survives leaving Recommend, a reload, and Clear removes it", async ({ page }) => {
   await page.goto("/recommend");
-  await expect(page.getByRole("button", { name: "Backend", exact: true })).toBeVisible();
+  await openRecommendLayers(page);
 
   await page.getByLabel("Describe the project", { exact: true }).fill("BASICS_E2E_SLOW API REST para servir modelos");
   await page.getByRole("button", { name: "Recommend", exact: true }).click();
@@ -66,7 +67,7 @@ test("an agent answer survives leaving Recommend, a reload, and Clear removes it
 
 test("a reload during a run marks it interrupted and Retry runs it again", async ({ page }) => {
   await page.goto("/recommend");
-  await expect(page.getByRole("button", { name: "Backend", exact: true })).toBeVisible();
+  await openRecommendLayers(page);
 
   await page.getByLabel("Describe the project", { exact: true }).fill("BASICS_E2E_SLEEP API REST lenta");
   const panel = await openPanel(page);

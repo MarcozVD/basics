@@ -1,6 +1,20 @@
 import type { Candidate, ExportFile, Recommendation } from "@marcozvd/basics-core";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Ban, Check, Copy, FileDown, Info, type LucideIcon, MessageSquareText, Plus, Sparkles, Star, X } from "lucide-react";
+import {
+  AlertTriangle,
+  Ban,
+  Check,
+  ChevronDown,
+  Copy,
+  FileDown,
+  Info,
+  type LucideIcon,
+  MessageSquareText,
+  Plus,
+  Sparkles,
+  Star,
+  X,
+} from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -30,6 +44,7 @@ import { enableEmbeddings, exportStack, recommend } from "@/lib/api";
 import { modChord } from "@/lib/desktop";
 import { EASE_OUT, SPRING_PANEL } from "@/lib/ease";
 import { useEmbeddingsProgress } from "@/lib/events";
+import { useIntro } from "@/lib/intro";
 import { DOCK_SPACE, useResolvedDockEdge } from "@/lib/navigation";
 import { queryKeys, useEmbeddings, useLayers, useStats } from "@/lib/queries";
 import { clearRecommend, updateAgent, updateRecommend, useRecommendStore } from "@/lib/recommend-store";
@@ -357,6 +372,7 @@ export function RecommendPage() {
   const [stackIds, setStackIds] = useState<string[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
+  const [layersOpen, setLayersOpen] = useState(false);
   const agentOpen = store.agent.open;
   const setAgentOpen = (open: boolean) => updateAgent({ open });
   const generateRef = useRef<HTMLButtonElement>(null);
@@ -365,6 +381,7 @@ export function RecommendPage() {
   useReturnFocus(createOpen, createRef);
 
   const { description, selectedLayers, perLayer, exportTab, recommendation } = store;
+  const intro = useIntro("recommend", Boolean(recommendation));
   const selected = useMemo(() => new Set(store.selected), [store.selected]);
   const setDescription = (value: string) => updateRecommend({ description: value });
   const setPerLayer = (value: number) => updateRecommend({ perLayer: value });
@@ -376,6 +393,12 @@ export function RecommendPage() {
     [layersQuery.data],
   );
   const activeLayers = selectedLayers ?? layerIds;
+  const allLayers = layerIds.length > 0 && activeLayers.length === layerIds.length;
+  const layersSummary = t(allLayers ? "recommend.layersSummary.all" : "recommend.layersSummary.some", {
+    count: perLayer,
+    selected: activeLayers.length,
+    total: layerIds.length,
+  });
 
   /** Only the opt-in prompt needs the embeddings state, so it is fetched lazily. */
   const embeddings = useEmbeddings(recommendation?.mode === "keywords");
@@ -489,7 +512,9 @@ export function RecommendPage() {
           <PageHeader
             title={t("page.recommend.title")}
             meta={recommendation ? <ModeIndicator mode={recommendation.mode} /> : null}
-            description={t("recommend.intro")}
+            description={intro.showIntro ? t("recommend.intro") : undefined}
+            hint={intro.showIntro ? undefined : t("recommend.intro")}
+            onDismissDescription={intro.showIntro ? intro.dismiss : undefined}
             action={
               <>
                 {recommendation?.mode === "keywords" ? (
@@ -595,69 +620,89 @@ export function RecommendPage() {
         </Reveal>
 
         <Reveal index={2}>
-          <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-            <fieldset
-              aria-label={t("recommend.layers")}
-              className="m-0 flex min-w-0 flex-1 basis-80 flex-wrap items-center gap-1.5 border-0 p-0"
-            >
-              <span className="mr-1 text-xs text-muted-foreground">{t("recommend.layers")}</span>
-              {(layersQuery.data ?? []).map((layer) => {
-                const active = activeLayers.includes(layer.id);
-                return (
-                  <motion.button
-                    key={layer.id}
-                    type="button"
-                    aria-pressed={active}
-                    onClick={() => toggleLayer(layer.id)}
-                    whileTap={reduce ? undefined : { scale: 0.97 }}
-                    className={cn(
-                      "inline-flex h-7 items-center gap-1 rounded-full border px-3 text-[12px] font-medium transition-colors",
-                      "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
-                      active
-                        ? "border-foreground/15 bg-foreground/[0.07] text-foreground"
-                        : "border-border text-muted-foreground hover:text-foreground",
-                    )}
-                  >
-                    {active && <Check className="size-3" aria-hidden="true" />}
-                    {layer.title || layer.id}
-                  </motion.button>
-                );
-              })}
-            </fieldset>
+          {layerIds.length > 0 ? (
+            <div className="flex flex-col items-start gap-3">
+              <button
+                type="button"
+                aria-expanded={layersOpen}
+                aria-controls="recommend-layers"
+                onClick={() => setLayersOpen((open) => !open)}
+                className="inline-flex h-7 max-w-full items-center gap-1.5 rounded-full border border-border px-3 text-[12px] text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              >
+                <ChevronDown
+                  aria-hidden="true"
+                  className={cn("size-3.5 shrink-0 transition-transform motion-reduce:transition-none", !layersOpen && "-rotate-90")}
+                />
+                <span className="truncate">{layersSummary}</span>
+              </button>
 
-            <div className="flex items-center gap-2">
-              <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                <span aria-hidden="true">{t("recommend.perLayer")}</span>
-                <Tooltip content={t("recommend.perLayer.hint")}>
-                  <button
-                    type="button"
-                    aria-label={t("recommend.perLayer.hint")}
-                    className="grid size-3.5 cursor-help place-items-center rounded-full text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              {layersOpen ? (
+                <div id="recommend-layers" className="flex w-full flex-wrap items-center gap-x-5 gap-y-2">
+                  <fieldset
+                    aria-label={t("recommend.layers")}
+                    className="m-0 flex min-w-0 flex-1 basis-80 flex-wrap items-center gap-1.5 border-0 p-0"
                   >
-                    <Info className="size-3" aria-hidden="true" />
-                  </button>
-                </Tooltip>
-              </span>
-              {/* The stepper's liquid geometry is drawn at 48px; scaled to the 32px filter row. */}
-              <div className="h-8 w-36">
-                <div className="w-[13.5rem] origin-top-left scale-[0.6667]">
-                  <AdaptiveStepper
-                    value={perLayer}
-                    onValueChange={setPerLayer}
-                    min={1}
-                    max={10}
-                    fill="var(--muted)"
-                    aria-label={t("recommend.perLayer")}
-                    formatLegend={(valueText) => t("recommend.perLayerLegend", { value: valueText })}
-                  >
-                    <AdaptiveStepperDecrement aria-label={t("recommend.decreasePerLayer")} />
-                    <AdaptiveStepperValue />
-                    <AdaptiveStepperIncrement aria-label={t("recommend.increasePerLayer")} />
-                  </AdaptiveStepper>
+                    <span className="mr-1 text-xs text-muted-foreground">{t("recommend.layers")}</span>
+                    {(layersQuery.data ?? []).map((layer) => {
+                      const active = activeLayers.includes(layer.id);
+                      return (
+                        <motion.button
+                          key={layer.id}
+                          type="button"
+                          aria-pressed={active}
+                          onClick={() => toggleLayer(layer.id)}
+                          whileTap={reduce ? undefined : { scale: 0.97 }}
+                          className={cn(
+                            "inline-flex h-7 items-center gap-1 rounded-full border px-3 text-[12px] font-medium transition-colors",
+                            "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+                            active
+                              ? "border-foreground/15 bg-foreground/[0.07] text-foreground"
+                              : "border-border text-muted-foreground hover:text-foreground",
+                          )}
+                        >
+                          {active && <Check className="size-3" aria-hidden="true" />}
+                          {layer.title || layer.id}
+                        </motion.button>
+                      );
+                    })}
+                  </fieldset>
+
+                  <div className="flex items-center gap-2">
+                    <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <span aria-hidden="true">{t("recommend.perLayer")}</span>
+                      <Tooltip content={t("recommend.perLayer.hint")}>
+                        <button
+                          type="button"
+                          aria-label={t("recommend.perLayer.hint")}
+                          className="grid size-3.5 cursor-help place-items-center rounded-full text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                        >
+                          <Info className="size-3" aria-hidden="true" />
+                        </button>
+                      </Tooltip>
+                    </span>
+                    {/* The stepper's liquid geometry is drawn at 48px; scaled to the 32px filter row. */}
+                    <div className="h-8 w-36">
+                      <div className="w-[13.5rem] origin-top-left scale-[0.6667]">
+                        <AdaptiveStepper
+                          value={perLayer}
+                          onValueChange={setPerLayer}
+                          min={1}
+                          max={10}
+                          fill="var(--muted)"
+                          aria-label={t("recommend.perLayer")}
+                          formatLegend={(valueText) => t("recommend.perLayerLegend", { value: valueText })}
+                        >
+                          <AdaptiveStepperDecrement aria-label={t("recommend.decreasePerLayer")} />
+                          <AdaptiveStepperValue />
+                          <AdaptiveStepperIncrement aria-label={t("recommend.increasePerLayer")} />
+                        </AdaptiveStepper>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              </div>
+              ) : null}
             </div>
-          </div>
+          ) : null}
         </Reveal>
 
         <AnimatePresence initial={false}>
@@ -700,7 +745,7 @@ export function RecommendPage() {
                 <Link to="/?packs=1">{t("recommend.emptyVault.action")}</Link>
               </LinkButton>
             </div>
-          ) : (
+          ) : run.isPending ? null : (
             <div className="flex flex-col gap-3 pt-2">
               <div className="flex flex-wrap items-center gap-1.5">
                 <span className="mr-1 text-xs text-muted-foreground">{t("recommend.examples")}</span>

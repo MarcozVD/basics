@@ -82,7 +82,8 @@ async function openFirstRowAndSettle(page: Page, noteType: string): Promise<Samp
 
 test("a type-filtered Explore keeps its filter while a check opens", async ({ page }) => {
   await page.goto("/explore?type=check");
-  await expect(page.getByRole("tab", { name: /^Check/ })).toHaveAttribute("aria-selected", "true");
+  // Type is a select now; its trigger carries the current type as its text.
+  await expect(page.getByRole("button", { name: "Filter by type" })).toContainText("Check");
   await expect(page.locator(ROWS).first()).toBeVisible();
   await expect(page.locator(OTHER_TYPE)).toHaveCount(0);
 
@@ -92,7 +93,7 @@ test("a type-filtered Explore keeps its filter while a check opens", async ({ pa
   for (const frame of onExplore) {
     expect(frame.foreign, JSON.stringify(frame)).toBe(0);
     expect(
-      frame.tabs.some((tab) => tab.startsWith("Check")),
+      frame.selects.some((trigger) => trigger.startsWith("Check")),
       JSON.stringify(frame),
     ).toBe(true);
   }
@@ -100,7 +101,7 @@ test("a type-filtered Explore keeps its filter while a check opens", async ({ pa
   await expect(page.getByLabel("Title", { exact: true })).toBeVisible();
   await page.goBack();
   await expect(page).toHaveURL(/\/explore\?type=check$/);
-  await expect(page.getByRole("tab", { name: /^Check/ })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("button", { name: "Filter by type" })).toContainText("Check");
   await expect(page.locator(OTHER_TYPE)).toHaveCount(0);
 });
 

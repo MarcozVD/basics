@@ -1,6 +1,6 @@
 import type { CheckStatus, ExportFile, LastCheck, NoteData, NoteDetail, NoteSummary } from "@marcozvd/basics-core";
 import { useMutation, useQueries, useQueryClient } from "@tanstack/react-query";
-import { ArrowDownUp, Check, ChevronDown, Copy, ExternalLink, FileDown, FolderKanban, Search, SearchX, UserRound, X } from "lucide-react";
+import { ArrowDownUp, Check, ChevronDown, Copy, ExternalLink, FileDown, FolderKanban, Search, SearchX, UserRound } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import {
   type KeyboardEvent as ReactKeyboardEvent,
@@ -24,8 +24,10 @@ import { ErrorState, Loading } from "@/components/state";
 import { type TranslationKey, useI18n } from "@/i18n";
 import { exportStack, getNote, saveNote } from "@/lib/api";
 import { EASE_OUT, SPRING_LAYOUT } from "@/lib/ease";
+import { useIntro } from "@/lib/intro";
 import { useFirstPaint, useProgressiveCount } from "@/lib/progressive";
 import { queryKeys, useNotes } from "@/lib/queries";
+import { rememberRecentItem } from "@/lib/recent-notes";
 import { formatCompactRelativeTime, formatFullDateTime, formatRelativeTime } from "@/lib/relative-time";
 import { useReturnFocus } from "@/lib/return-focus";
 import { toast } from "@/lib/toast";
@@ -34,6 +36,8 @@ import { cn } from "@/lib/utils";
 
 const STORAGE_KEY = "basics:projects";
 const WIDE_QUERY = "(min-width: 1280px)";
+/** Search and sort only earn their space once the list is long enough to look through. */
+const CHROME_MIN_PROJECTS = 8;
 
 type ProjectStatus = Extract<NoteData, { type: "project" }>["status"];
 type StatusFilter = "all" | ProjectStatus;
@@ -113,13 +117,6 @@ function isTypingTarget(target: EventTarget | null): boolean {
   const tag = target.tagName;
   if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
   return target.isContentEditable || target.closest(".cm-editor") !== null;
-}
-
-function middleTruncate(value: string, max = 42): string {
-  if (value.length <= max) return value;
-  const head = Math.ceil((max - 1) / 2);
-  const tail = Math.floor((max - 1) / 2);
-  return `${value.slice(0, head)}…${value.slice(-tail)}`;
 }
 
 function checkStats(checks: Record<string, LastCheck> | undefined) {
@@ -267,57 +264,12 @@ function CopyIconButton({ value, label }: { value: string; label: string }) {
   );
 }
 
-function StackSummary({ project, layerTitles }: { project: ProjectData; layerTitles: Map<string, string> }) {
-  const t = useI18n().t;
-  const entries = Object.entries(project.stack).filter(([, techs]) => techs.length > 0);
-  if (entries.length === 0) return <span className="text-[10px] text-muted-foreground">{t("projects.noStack")}</span>;
-
-  return (
-    <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-      {entries.map(([layer, techs]) => {
-        const name = layerTitles.get(layer) ?? layer;
-        return (
-          <span
-            key={layer}
-            title={t("projects.layerTechs", { layer: name, count: techs.length })}
-            className="inline-flex min-w-0 items-center gap-1 font-mono text-[10px] text-muted-foreground"
-          >
-            <span className="size-1.5 shrink-0 rounded-full" style={{ backgroundColor: typeColor("tech") }} aria-hidden="true" />
-            <span className="max-w-14 truncate">{name}</span>
-            <span className="tabular-nums text-foreground/75">{techs.length}</span>
-          </span>
-        );
-      })}
-    </span>
-  );
-}
-
-function ChecksSummary({ checks }: { checks: Record<string, LastCheck> | undefined }) {
-  const { t, language } = useI18n();
-  const stats = checkStats(checks);
-  if (!stats) return <span className="text-[10px] text-muted-foreground">{t("projects.noChecks")}</span>;
-
-  return (
-    <span className="inline-flex items-center gap-1 tabular-nums">
-      <span className="sr-only">{t("projects.checksSummary", { pass: stats.pass, fail: stats.fail })}</span>
-      <Check className="size-2.5 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
-      <span className="text-[10px] text-muted-foreground">{stats.pass}</span>
-      <span className="text-[10px] text-border">/</span>
-      <X className="size-2.5 text-destructive-text" aria-hidden="true" />
-      <span className="text-[10px] text-muted-foreground">{stats.fail}</span>
-      <span className="text-[10px] text-muted-foreground/70" title={formatFullDateTime(stats.latest, language)}>
-        · {formatCompactRelativeTime(stats.latest)}
-      </span>
-    </span>
-  );
-}
-
 function ProjectListRow({
   row,
   index,
   selected,
   reduce,
-  layerTitles,
+  noteById,
   onOpen,
   onChangeStatus,
 }: {
@@ -325,12 +277,18 @@ function ProjectListRow({
   index: number;
   selected: boolean;
   reduce: boolean;
-  layerTitles: Map<string, string>;
+  noteById: Map<string, NoteSummary>;
   onOpen: () => void;
   onChangeStatus: (status: ProjectStatus) => void;
 }) {
-  const { language } = useI18n();
-  const path = row.project.path;
+  const { t, language } = useI18n();
+  const failing = checkStats(row.project.last_checks)?.fail ?? 0;
+  const stackIds = [...new Set(Object.values(row.project.stack).flat())];
+  const missing = stackIds.filter((id) => noteById.get(id)?.type !== "tech").length;
+  const report = [
+    failing > 0 ? t(failing === 1 ? "projects.row.failingOne" : "projects.row.failing", { count: failing }) : null,
+    missing > 0 ? t(missing === 1 ? "projects.row.missingTechOne" : "projects.row.missingTech", { count: missing }) : null,
+  ].filter((line): line is string => Boolean(line));
 
   return (
     // A div, not a button: the row hosts the status menu and interactive
@@ -355,7 +313,7 @@ function ProjectListRow({
         event.preventDefault();
         onOpen();
       }}
-      className="relative flex w-full min-w-0 cursor-default flex-col gap-1.5 border-b border-border/60 px-3 py-3 text-left outline-none transition-colors hover:bg-muted/35 focus-visible:bg-muted/40"
+      className="relative flex w-full min-w-0 cursor-default flex-col gap-1 border-b border-border/60 px-3 py-2.5 text-left outline-none transition-colors hover:bg-muted/35 focus-visible:bg-muted/40"
     >
       {selected ? (
         <motion.span
@@ -373,28 +331,12 @@ function ProjectListRow({
           title={row.updated ? formatFullDateTime(row.updated, language) : undefined}
           className="shrink-0 font-mono text-[10px] text-muted-foreground"
         >
-          {row.updated ? formatCompactRelativeTime(row.updated) : "—"}
+          {row.updated ? formatCompactRelativeTime(row.updated) : "-"}
         </time>
         <StatusMenu status={row.project.status} title={row.title} onChange={onChangeStatus} />
       </span>
 
-      {path || row.project.profile ? (
-        <span className="relative z-10 flex min-w-0 items-center gap-2">
-          {path ? (
-            <span className="min-w-0 flex-1 truncate font-mono text-[10.5px] text-muted-foreground" title={path}>
-              {middleTruncate(path)}
-            </span>
-          ) : null}
-          {row.project.profile ? <ProfileChip id={row.project.profile} /> : null}
-        </span>
-      ) : null}
-
-      <span className="relative z-10 flex min-w-0 items-center gap-2">
-        <StackSummary project={row.project} layerTitles={layerTitles} />
-        <span className="ml-auto shrink-0">
-          <ChecksSummary checks={row.project.last_checks} />
-        </span>
-      </span>
+      {report.length > 0 ? <p className="relative z-10 truncate text-[10.5px] text-muted-foreground">{report.join(" · ")}</p> : null}
     </div>
   );
 }
@@ -743,6 +685,7 @@ export function ProjectsPage() {
   const reduce = useReducedMotion() ?? false;
   const notes = useNotes();
   const [prefs, setPrefs] = useState<ProjectsPrefs>(readPrefs);
+  const intro = useIntro("projects", notes.isSuccess ? Boolean(notes.data?.length) : true);
   const [searchText, setSearchText] = useState("");
   const [selected, setSelected] = useState(0);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -784,6 +727,16 @@ export function ProjectsPage() {
     }),
     [rows],
   );
+  /** A filter with nothing behind it would only produce an empty list. */
+  const visibleFilters = useMemo(() => STATUS_FILTERS.filter((status) => status === "all" || counts[status] > 0), [counts]);
+  const showChrome = rows.length >= CHROME_MIN_PROJECTS;
+
+  // A status filter can empty out after a row changes status while it is selected.
+  useEffect(() => {
+    if (!notes.isSuccess) return;
+    if (prefs.status === "all" || counts[prefs.status] > 0) return;
+    setPrefs((value) => ({ ...value, status: "all" }));
+  }, [notes.isSuccess, prefs.status, counts]);
 
   const visible = useMemo(() => {
     const needle = searchText.trim().toLowerCase();
@@ -909,8 +862,10 @@ export function ProjectsPage() {
   };
 
   const openRow = (index: number) => {
+    const row = visible[index];
+    if (row) rememberRecentItem(row.id);
     if (wide) setSelected(index);
-    else openNote(visible[index]);
+    else openNote(row);
   };
 
   useEffect(() => {
@@ -972,7 +927,7 @@ export function ProjectsPage() {
       if (event.metaKey || event.ctrlKey || event.altKey) return;
       if (isTypingTarget(event.target)) return;
 
-      if (event.key === "/") {
+      if (event.key === "/" && showChrome) {
         event.preventDefault();
         searchRef.current?.focus();
         return;
@@ -1034,7 +989,7 @@ export function ProjectsPage() {
       index={index}
       selected={index === selected}
       reduce={reduce}
-      layerTitles={layerTitles}
+      noteById={noteById}
       onOpen={() => openRow(index)}
       onChangeStatus={(status) => changeStatus(row, status)}
     />
@@ -1089,7 +1044,9 @@ export function ProjectsPage() {
         <PageHeader
           title={t("page.projects.title")}
           meta={<span className="text-xs text-muted-foreground">{t("projects.total", { count: rows.length })}</span>}
-          description={t("projects.intro")}
+          description={intro.showIntro ? t("projects.intro") : undefined}
+          hint={intro.showIntro ? undefined : t("projects.intro")}
+          onDismissDescription={intro.showIntro ? intro.dismiss : undefined}
           action={
             <div className="flex min-w-0 flex-wrap items-center gap-2 max-[640px]:w-full">
               <NewProjectButton />
@@ -1102,7 +1059,7 @@ export function ProjectsPage() {
                 variant="segment"
               >
                 <TabsList aria-label={t("projects.statusFilter")}>
-                  {STATUS_FILTERS.map((status) => (
+                  {visibleFilters.map((status) => (
                     <TabsTrigger key={status} value={status} className="gap-1.5 px-2.5 py-1 text-xs">
                       {statusLabel(status, t)}
                       <span className="font-mono text-[11px]">{counts[status]}</span>
@@ -1111,37 +1068,41 @@ export function ProjectsPage() {
                 </TabsList>
               </Tabs>
 
-              <Input
-                ref={searchRef}
-                aria-label={t("projects.searchPlaceholder")}
-                value={searchText}
-                onChange={(value) => {
-                  setSearchText(value);
-                  setSelected(0);
-                }}
-                onKeyDown={onSearchKeyDown}
-                placeholder={t("projects.searchPlaceholder")}
-                leftIcon={<Search className="size-3.5" aria-hidden="true" />}
-                className="w-full min-[640px]:w-56"
-                classNames={{ field: "h-9" }}
-              />
+              {showChrome ? (
+                <Input
+                  ref={searchRef}
+                  aria-label={t("projects.searchPlaceholder")}
+                  value={searchText}
+                  onChange={(value) => {
+                    setSearchText(value);
+                    setSelected(0);
+                  }}
+                  onKeyDown={onSearchKeyDown}
+                  placeholder={t("projects.searchPlaceholder")}
+                  leftIcon={<Search className="size-3.5" aria-hidden="true" />}
+                  className="w-full min-[640px]:w-56"
+                  classNames={{ field: "h-9" }}
+                />
+              ) : null}
 
-              <div className="flex h-9 items-center gap-1.5 rounded-xl border border-border bg-muted/50 px-2.5 text-xs text-muted-foreground">
-                <ArrowDownUp className="size-3.5" aria-hidden="true" />
-                <span className="sr-only">{t("projects.sort")}</span>
-                <Select
-                  value={prefs.sort}
-                  onValueChange={(value) => setPrefs((currentPrefs) => ({ ...currentPrefs, sort: value as Sort }))}
-                >
-                  <SelectTrigger className="min-w-32 border-0 bg-transparent px-0 text-xs shadow-none">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="updated">{t("projects.sort.updated")}</SelectItem>
-                    <SelectItem value="title">{t("projects.sort.title")}</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              {showChrome ? (
+                <div className="flex h-9 items-center gap-1.5 rounded-xl border border-border bg-muted/50 px-2.5 text-xs text-muted-foreground">
+                  <ArrowDownUp className="size-3.5" aria-hidden="true" />
+                  <span className="sr-only">{t("projects.sort")}</span>
+                  <Select
+                    value={prefs.sort}
+                    onValueChange={(value) => setPrefs((currentPrefs) => ({ ...currentPrefs, sort: value as Sort }))}
+                  >
+                    <SelectTrigger className="min-w-32 border-0 bg-transparent px-0 text-xs shadow-none">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="updated">{t("projects.sort.updated")}</SelectItem>
+                      <SelectItem value="title">{t("projects.sort.title")}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : null}
             </div>
           }
         />

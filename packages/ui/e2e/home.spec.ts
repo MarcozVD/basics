@@ -32,6 +32,17 @@ function writeProposal(id: string, title: string, body: string) {
   );
 }
 
+/** Wait for the route to render, then for the late Geist swap so measurements are stable. */
+async function settle(page: import("@playwright/test").Page) {
+  await page.waitForFunction(() => document.querySelector("main h1") !== null);
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        void document.fonts.ready.then(() => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+      }),
+  );
+}
+
 test("home shows the agent loop and approves from the queue", async ({ page }) => {
   // create-note.spec runs before this file and leaves tech notes behind.
   for (const id of ["drizzle-orm", "hono"]) {
@@ -40,9 +51,10 @@ test("home shows the agent loop and approves from the queue", async ({ page }) =
 
   await page.goto("/");
 
-  const techTile = page.locator('[data-stat="tech"]');
-  await expect(techTile).toContainText("Tech");
-  await expect(techTile).toContainText("9");
+  // Health is one line of live counts, not the old type tiles.
+  const health = page.getByTestId("health-line");
+  await expect(health).toContainText(/\d+ notes/);
+  await expect(page.locator('[data-stat="notes"]')).toBeVisible();
 
   writeProposal("homeflow", "Home flow", "Proposal approved from the Home screen.");
 
@@ -69,7 +81,7 @@ test("the get-set-up checklist leaves once notes, an agent and a project are in 
 
     await page.goto("/");
     // Home rendered with stats before we check the checklist took itself off the page.
-    await expect(page.locator('[data-stat="tech"]')).toBeVisible();
+    await expect(page.getByTestId("health-line")).toBeVisible();
     await expect(page.getByTestId("home-getting-started")).toHaveCount(0);
   } finally {
     fs.rmSync(file, { force: true });
@@ -77,33 +89,179 @@ test("the get-set-up checklist leaves once notes, an agent and a project are in 
   }
 });
 
-test("vault health shows every layer and opens its techs", async ({ page, request }) => {
-  const layers = (await (await request.get("/api/layers")).json()) as { id: string; title: string; techs: string[] }[];
-  const backend = layers.find((layer) => layer.id === "backend");
-  expect(backend).toBeTruthy();
-  if (!backend) return;
+/** Seed the vault's activity log with today's events; returns a restore function for the previous file. */
+function seedActivity(count: number): () => void {
+  const dir = path.join(vaultPath(), ".basics");
+  const file = path.join(dir, "activity.jsonl");
+  fs.mkdirSync(dir, { recursive: true });
+  const previous = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : null;
+  const now = Date.now();
+  const lines = Array.from({ length: count }, (_, index) =>
+    JSON.stringify({
+      // Alternating agents keep every event its own row instead of collapsing into groups.
+      ts: new Date(now - index * 60_000).toISOString(),
+      agent: index % 2 === 0 ? "claude-code" : "opencode",
+      tool: "get_note",
+      noteIds: ["fastapi"],
+    }),
+  );
+  fs.writeFileSync(file, `${lines.join("\n")}\n`);
+  return () => {
+    if (previous === null) fs.rmSync(file, { force: true });
+    else fs.writeFileSync(file, previous);
+  };
+}
 
-  await page.goto("/");
+test("Home keeps one column in reading order and drops the old type and layer blocks", async ({ page }) => {
+  const restore = seedActivity(6);
+  try {
+    for (const { width, height } of [
+      { width: 1280, height: 820 },
+      { width: 900, height: 760 },
+    ]) {
+      await page.setViewportSize({ width, height });
+      await page.goto("/");
+      await expect(page.getByTestId("health-line")).toBeVisible();
+      await expect(page.getByTestId("continue-list")).toBeVisible();
+      await expect(page.getByTestId("activity-list")).toBeVisible();
+      await settle(page);
 
-  const backendTile = page.locator('[data-stat="layer-backend"]');
-  await expect(backendTile).toContainText(backend.title);
-  await expect(backendTile.getByText(String(backend.techs.length), { exact: true })).toBeVisible();
+      const boxes = await page.evaluate(() => {
+        const rect = (selector: string) => {
+          const box = document.querySelector<HTMLElement>(selector)?.getBoundingClientRect();
+          return box ? { top: box.top, bottom: box.bottom, left: box.left, right: box.right } : null;
+        };
+        return {
+          h1: rect("main h1"),
+          health: rect('[data-testid="health-line"]'),
+          inbox: rect('[data-testid="inbox-strip"]'),
+          continue: rect('[data-testid="continue-list"]'),
+          activity: rect('[data-testid="activity-list"]'),
+        };
+      });
 
-  const infraTile = page.locator('[data-stat="layer-infra"]');
-  await expect(infraTile).toContainText("Infra");
-  await expect(infraTile.getByText("0", { exact: true })).toBeVisible();
-  await infraTile.click();
-  await expect(page.getByRole("dialog")).toHaveCount(0);
+      for (const [name, box] of Object.entries(boxes)) expect(box, `${name} at ${width}`).not.toBeNull();
+      if (!boxes.h1 || !boxes.health || !boxes.inbox || !boxes.continue || !boxes.activity) return;
 
-  await backendTile.click();
-  const fastapi = page.getByRole("dialog").locator('[data-layer-tech="fastapi"]');
-  await expect(fastapi).toContainText("FastAPI");
-  await expect(fastapi).toContainText("framework");
-  await fastapi.click();
-  await expect(page).toHaveURL(/\/notes\/fastapi$/);
+      // Reading order: title, health, proposals, continue, activity.
+      expect(boxes.h1.top, `health under title at ${width}`).toBeLessThan(boxes.health.top);
+      expect(boxes.health.top, `inbox under health at ${width}`).toBeLessThan(boxes.inbox.top);
+      expect(boxes.inbox.top, `continue under inbox at ${width}`).toBeLessThan(boxes.continue.top);
+      expect(boxes.continue.top, `activity under continue at ${width}`).toBeLessThan(boxes.activity.top);
+      // One column: every block starts on the same left edge.
+      expect(boxes.health.left, `health left at ${width}`).toBeCloseTo(boxes.inbox.left, 0);
+      expect(boxes.continue.left, `continue left at ${width}`).toBeCloseTo(boxes.inbox.left, 0);
+      expect(boxes.activity.left, `activity left at ${width}`).toBeCloseTo(boxes.inbox.left, 0);
+
+      // The type counts and the layer chart are gone from Home.
+      await expect(page.locator('[data-stat="tech"]')).toHaveCount(0);
+      await expect(page.locator('[data-stat^="layer-"]')).toHaveCount(0);
+    }
+  } finally {
+    restore();
+  }
 });
 
-test("creates the missing note from the broken links tile", async ({ page }) => {
+test("Continue tops up one local open with recently updated notes", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 820 });
+  // A single local open must not leave four empty rows: the list tops up from the vault.
+  await page.goto("/notes/fastapi");
+  await expect(page.getByLabel("Title", { exact: true })).toBeVisible();
+  await page.goto("/");
+  await expect(page.getByTestId("health-line")).toBeVisible();
+
+  const rows = page.getByTestId("continue-list").locator("li");
+  await expect(rows).toHaveCount(5);
+  // The device's own open stays first.
+  await expect(rows.first()).toContainText("FastAPI");
+});
+
+test("activity shows three plain rows and Show all expands in place", async ({ page }) => {
+  const restore = seedActivity(6);
+  try {
+    await page.setViewportSize({ width: 1280, height: 820 });
+    await page.goto("/");
+    await expect(page.getByTestId("activity-list")).toBeVisible();
+
+    const rows = page.getByTestId("activity-list").locator("li");
+    await expect(rows).toHaveCount(3);
+    await expect(rows.first()).toContainText("FastAPI");
+
+    await page.getByRole("button", { name: /Show all \(6\)/ }).click();
+    await expect(rows).toHaveCount(6);
+    await expect(page.getByRole("button", { name: "Show less" })).toBeVisible();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+  } finally {
+    restore();
+  }
+});
+
+test("Broken links is alarmed only while it has links and keeps its actions", async ({ page, request }) => {
+  const file = path.join(vaultPath(), "tech", "broken-alert-source.md");
+  fs.writeFileSync(
+    file,
+    [
+      "---",
+      "type: tech",
+      "kind: library",
+      "title: Broken alert source",
+      "layer: backend",
+      "---",
+      "# Broken alert source",
+      "",
+      "Depends on [[ghost-alert]].",
+      "",
+    ].join("\n"),
+  );
+  const stat = page.locator('[data-stat="broken"]');
+  const brokenCount = async () => {
+    const stats = (await (await request.get("/api/stats")).json()) as { brokenLinks: { from: string; to: string }[] };
+    return stats.brokenLinks.length;
+  };
+
+  try {
+    await page.setViewportSize({ width: 1280, height: 820 });
+    await page.goto("/");
+    await settle(page);
+
+    await expect.poll(brokenCount).toBeGreaterThan(0);
+    // The alert is real styling, not only a test hook.
+    await expect(stat).toHaveClass(/text-destructive-text/);
+    await expect(stat).toHaveAttribute("data-alert", "true");
+    await expect(stat).toContainText(/broken link/);
+
+    // Above zero the metric opens its details instead of linking to Explore.
+    await page.getByRole("button", { name: /^Broken links: \d+ — Show details$/ }).click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.locator('[data-broken-link="ghost-alert"]')).toBeVisible();
+    await expect(dialog.getByRole("button", { name: /^Open broken-alert-source/ })).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Create note ghost-alert" })).toBeVisible();
+    await page.keyboard.press("Escape");
+
+    fs.rmSync(file, { force: true });
+    await page.reload();
+    await settle(page);
+
+    // Alert styling tracks the value: shown exactly while it is above zero.
+    await expect
+      .poll(async () => {
+        const count = await brokenCount();
+        const marks = (await stat.getAttribute("class"))?.includes("text-destructive-text") ?? false;
+        return count > 0 ? marks : !marks;
+      })
+      .toBe(true);
+    if ((await brokenCount()) === 0) {
+      // At zero it is plain text: no alarm, no link and no details trigger.
+      await expect(stat).not.toHaveAttribute("data-alert", "true");
+      await expect(stat).not.toHaveAttribute("href");
+      await expect(page.getByRole("button", { name: /^Broken links:/ })).toHaveCount(0);
+    }
+  } finally {
+    fs.rmSync(file, { force: true });
+  }
+});
+
+test("creates the missing note from the broken links line", async ({ page }) => {
   const file = path.join(vaultPath(), "tech", "broken-source.md");
   fs.writeFileSync(
     file,
@@ -137,322 +295,6 @@ test("creates the missing note from the broken links tile", async ({ page }) => 
     await tile.click();
     await row.getByRole("button", { name: /^Open broken-source/ }).click();
     await expect(page).toHaveURL(/\/notes\/broken-source$/);
-  } finally {
-    fs.rmSync(file, { force: true });
-  }
-});
-
-/** Seed the vault's activity log; returns a restore function for the previous file. */
-function seedActivity(count: number): () => void {
-  const dir = path.join(vaultPath(), ".basics");
-  const file = path.join(dir, "activity.jsonl");
-  fs.mkdirSync(dir, { recursive: true });
-  const previous = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : null;
-  const now = Date.now();
-  const lines = Array.from({ length: count }, (_, index) =>
-    JSON.stringify({
-      // Alternating agents keep every event its own row instead of collapsing into groups.
-      ts: new Date(now - index * 60_000).toISOString(),
-      agent: index % 2 === 0 ? "claude-code" : "opencode",
-      tool: "get_note",
-      noteIds: ["fastapi"],
-    }),
-  );
-  fs.writeFileSync(file, `${lines.join("\n")}\n`);
-  return () => {
-    if (previous === null) fs.rmSync(file, { force: true });
-    else fs.writeFileSync(file, previous);
-  };
-}
-
-test("activity panel scrolls on its own instead of growing the page", async ({ page }) => {
-  const restore = seedActivity(60);
-  try {
-    await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto("/");
-
-    const panel = page.getByTestId("activity-panel");
-    await expect(panel).toBeVisible();
-    await expect(panel).toHaveAttribute("tabindex", "0");
-
-    // The panel sizes itself after the late Geist swap; measure only once layout has settled.
-    await page.evaluate(
-      () =>
-        new Promise<void>((resolve) => {
-          void document.fonts.ready.then(() => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
-        }),
-    );
-
-    const metrics = await page.evaluate(() => {
-      const activity = document.querySelector<HTMLElement>('[data-testid="activity-panel"]');
-      const main = document.querySelector<HTMLElement>("main");
-      return {
-        viewport: window.innerHeight,
-        documentHeight: document.scrollingElement?.scrollHeight ?? 0,
-        panelScrollHeight: activity?.scrollHeight ?? 0,
-        panelClientHeight: activity?.clientHeight ?? 0,
-        mainScrollHeight: main?.scrollHeight ?? 0,
-        mainClientHeight: main?.clientHeight ?? 0,
-      };
-    });
-
-    // The document never scrolls, and neither does <main>: the panel took the remaining space.
-    expect(metrics.documentHeight).toBeLessThanOrEqual(metrics.viewport + 1);
-    expect(metrics.mainScrollHeight).toBeLessThanOrEqual(metrics.mainClientHeight + 1);
-    expect(metrics.panelScrollHeight).toBeGreaterThan(metrics.panelClientHeight);
-
-    // The bottom fade appears only once the list extends past the panel.
-    const mask = await panel.evaluate((element) => getComputedStyle(element).maskImage);
-    expect(mask).not.toBe("none");
-
-    // The panel is focusable and scrolls with the keyboard.
-    await panel.focus();
-    await page.keyboard.press("End");
-    await expect.poll(() => panel.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
-  } finally {
-    restore();
-  }
-});
-
-/** Wait for the route to render, then for the late Geist swap so measurements are stable. */
-async function settle(page: import("@playwright/test").Page) {
-  await page.waitForFunction(() => document.querySelector("main h1") !== null);
-  await page.evaluate(
-    () =>
-      new Promise<void>((resolve) => {
-        void document.fonts.ready.then(() => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
-      }),
-  );
-}
-
-/** Temporarily empty the inbox so Home renders its one-line strip; returns a restore function. */
-function clearInbox(): () => void {
-  const dir = path.join(vaultPath(), "inbox");
-  const previous: { name: string; body: string }[] = [];
-  if (fs.existsSync(dir)) {
-    for (const name of fs.readdirSync(dir)) {
-      if (name.endsWith(".md")) previous.push({ name, body: fs.readFileSync(path.join(dir, name), "utf8") });
-    }
-  }
-  fs.mkdirSync(dir, { recursive: true });
-  for (const name of fs.readdirSync(dir)) {
-    if (name.endsWith(".md")) fs.rmSync(path.join(dir, name), { force: true });
-  }
-  return () => {
-    fs.mkdirSync(dir, { recursive: true });
-    for (const name of fs.readdirSync(dir)) {
-      if (name.endsWith(".md")) fs.rmSync(path.join(dir, name), { force: true });
-    }
-    for (const file of previous) fs.writeFileSync(path.join(dir, file.name), file.body);
-  };
-}
-
-test("Home fits the desktop window with an empty inbox", async ({ page }) => {
-  const restoreActivity = seedActivity(60);
-  const restoreInbox = clearInbox();
-  try {
-    for (const { width, height } of [
-      { width: 1280, height: 820 },
-      { width: 1100, height: 760 },
-    ]) {
-      await page.setViewportSize({ width, height });
-      await page.goto("/");
-      await expect(page.getByTestId("activity-panel")).toBeVisible();
-      await settle(page);
-
-      const m = await page.evaluate(() => {
-        const strip = document.querySelector<HTMLElement>('[data-testid="inbox-strip"]');
-        const panel = document.querySelector<HTMLElement>('[data-testid="activity-panel"]');
-        const main = document.querySelector<HTMLElement>("main");
-        const grid = document.querySelector<HTMLElement>('[data-testid="home-grid"]')?.getBoundingClientRect();
-        const panelBox = document.querySelector<HTMLElement>('[data-testid="content-panel"]')?.getBoundingClientRect();
-        return {
-          viewport: window.innerHeight,
-          documentHeight: document.scrollingElement?.scrollHeight ?? 0,
-          mainScrollHeight: main?.scrollHeight ?? 0,
-          mainClientHeight: main?.clientHeight ?? 0,
-          stripHeight: strip?.getBoundingClientRect().height ?? 0,
-          stripText: strip?.textContent ?? "",
-          panelScrollHeight: panel?.scrollHeight ?? 0,
-          panelClientHeight: panel?.clientHeight ?? 0,
-          gridBottom: grid?.bottom ?? 0,
-          panelBottom: panelBox?.bottom ?? 0,
-        };
-      });
-
-      // The page never scrolls and nothing runs past the panel's bottom edge.
-      expect(m.documentHeight).toBeLessThanOrEqual(m.viewport + 1);
-      expect(m.mainScrollHeight).toBeLessThanOrEqual(m.mainClientHeight + 1);
-      expect(m.gridBottom).toBeLessThanOrEqual(m.panelBottom);
-      // The empty inbox collapses to a single line.
-      expect(m.stripHeight).toBeLessThanOrEqual(56);
-      expect(m.stripText).toContain("Inbox is clear");
-      // The activity list is the only thing that scrolls.
-      expect(m.panelScrollHeight).toBeGreaterThan(m.panelClientHeight);
-    }
-  } finally {
-    restoreInbox();
-    restoreActivity();
-  }
-});
-
-/** Add `count` layer notes so Home renders a full layer list; returns a cleanup. */
-function seedLayers(count: number): () => void {
-  const dir = path.join(vaultPath(), "layers");
-  fs.mkdirSync(dir, { recursive: true });
-  const created: string[] = [];
-  for (let index = 1; index <= count; index += 1) {
-    const id = `e2e-layer-${index}`;
-    const file = path.join(dir, `${id}.md`);
-    if (fs.existsSync(file)) continue;
-    fs.writeFileSync(file, `---\ntype: layer\ntitle: E2E Layer ${index}\n---\n# E2E Layer ${index}\n`);
-    created.push(file);
-  }
-  return () => {
-    for (const file of created) fs.rmSync(file, { force: true });
-  };
-}
-
-test("Home shows every layer inside the panel with twelve layers", async ({ page }) => {
-  // examples/vault ships five layers; add seven to reach the owner's twelve.
-  const restoreLayers = seedLayers(7);
-  const restoreInbox = clearInbox();
-  const restoreActivity = seedActivity(60);
-  try {
-    for (const { width, height } of [
-      { width: 1280, height: 820 },
-      { width: 1100, height: 760 },
-    ]) {
-      await page.setViewportSize({ width, height });
-      await page.goto("/");
-      await expect(page.getByTestId("activity-panel")).toBeVisible();
-      await expect(page.locator('[data-stat^="layer-"]')).toHaveCount(12);
-      await settle(page);
-
-      const m = await page.evaluate(() => {
-        const panelBottom = document.querySelector<HTMLElement>('[data-testid="content-panel"]')?.getBoundingClientRect().bottom ?? 0;
-        const rows = [...document.querySelectorAll<HTMLElement>('[data-stat^="layer-"]')].map((row) => {
-          const rect = row.getBoundingClientRect();
-          return { top: rect.top, bottom: rect.bottom, text: row.textContent ?? "", visible: row.checkVisibility() };
-        });
-        return { panelBottom, rows };
-      });
-
-      // All twelve layers render and the last row clears the panel's bottom edge at both sizes.
-      expect(m.rows.length, `${width}x${height}`).toBe(12);
-      for (const row of m.rows) {
-        expect(row.text, `${width}x${height}`).not.toBe("");
-        expect(row.visible, `${row.text} visible at ${width}x${height}`).toBe(true);
-        expect(row.top, `${row.text} top at ${width}x${height}`).toBeGreaterThanOrEqual(0);
-        expect(row.bottom, `${row.text} bottom at ${width}x${height}`).toBeLessThanOrEqual(m.panelBottom);
-      }
-    }
-  } finally {
-    restoreActivity();
-    restoreInbox();
-    restoreLayers();
-  }
-});
-
-test("Home keeps the stats, layers and recent notes in three columns from 1440", async ({ page }) => {
-  // Seeded activity makes the first column as tall as the grid, so the row alignment is real.
-  const restoreActivity = seedActivity(60);
-  try {
-    await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto("/");
-    await expect(page.getByTestId("activity-panel")).toBeVisible();
-    await expect(page.locator('[data-stat^="layer-"]').first()).toBeVisible();
-    await settle(page);
-
-    const m = await page.evaluate(() => {
-      const rect = (selector: string) => {
-        const box = document.querySelector<HTMLElement>(selector)?.getBoundingClientRect();
-        return box ? { top: box.top, bottom: box.bottom, left: box.left, right: box.right } : null;
-      };
-      const activity = document.querySelector<HTMLElement>('[data-testid="activity-panel"]')?.getBoundingClientRect();
-      return {
-        activity: activity ? { top: activity.top, bottom: activity.bottom, left: activity.left, right: activity.right } : null,
-        health: rect('[aria-label="Vault health & shape"]'),
-        layers: rect('[aria-label="Layers"]'),
-        recent: rect('[data-testid="recent-section"]'),
-        panelBottom: document.querySelector<HTMLElement>('[data-testid="content-panel"]')?.getBoundingClientRect().bottom ?? 0,
-      };
-    });
-
-    expect(m.activity).not.toBeNull();
-    expect(m.health).not.toBeNull();
-    expect(m.layers).not.toBeNull();
-    expect(m.recent).not.toBeNull();
-    if (!m.activity || !m.health || !m.layers || !m.recent) return;
-
-    // Activity | stats above layers | recently edited, with all three starting on the same row.
-    expect(m.activity.right).toBeLessThan(m.health.left);
-    expect(m.health.left).toBeCloseTo(m.layers.left, 0);
-    expect(m.health.right).toBeCloseTo(m.layers.right, 0);
-    expect(m.layers.bottom).toBeLessThan(m.recent.bottom);
-    expect(m.layers.right).toBeLessThan(m.recent.left);
-    expect(m.recent.top).toBeCloseTo(m.health.top, 0);
-    expect(m.recent.bottom).toBeLessThanOrEqual(m.panelBottom);
-  } finally {
-    restoreActivity();
-  }
-});
-
-test("Broken links is alarmed only while it has links and keeps its actions", async ({ page, request }) => {
-  const file = path.join(vaultPath(), "tech", "broken-alert-source.md");
-  fs.writeFileSync(
-    file,
-    [
-      "---",
-      "type: tech",
-      "kind: library",
-      "title: Broken alert source",
-      "layer: backend",
-      "---",
-      "# Broken alert source",
-      "",
-      "Depends on [[ghost-alert]].",
-      "",
-    ].join("\n"),
-  );
-  const stat = page.locator('[data-stat="broken"]');
-  const alertMarks = stat.locator(".text-destructive-text");
-  const brokenCount = async () => {
-    const stats = (await (await request.get("/api/stats")).json()) as { brokenLinks: { from: string; to: string }[] };
-    return stats.brokenLinks.length;
-  };
-
-  try {
-    await page.setViewportSize({ width: 1280, height: 820 });
-    await page.goto("/");
-    await settle(page);
-
-    await expect.poll(brokenCount).toBeGreaterThan(0);
-    // The alert is real styling, not only a test hook.
-    await expect(alertMarks.first()).toBeVisible();
-    await expect(stat).toHaveAttribute("data-alert", "true");
-
-    // The popover still offers Open and Create.
-    await page.getByRole("button", { name: /^Broken links: \d+ — Show details$/ }).click();
-    const dialog = page.getByRole("dialog");
-    await expect(dialog.locator('[data-broken-link="ghost-alert"]')).toBeVisible();
-    await expect(dialog.getByRole("button", { name: /^Open broken-alert-source/ })).toBeVisible();
-    await expect(dialog.getByRole("button", { name: "Create note ghost-alert" })).toBeVisible();
-    await page.keyboard.press("Escape");
-
-    fs.rmSync(file, { force: true });
-    await page.reload();
-    await settle(page);
-
-    // Alert styling tracks the value: shown exactly while it is above zero.
-    await expect
-      .poll(async () => {
-        const count = await brokenCount();
-        const marks = await alertMarks.count();
-        return count > 0 ? marks > 0 : marks === 0;
-      })
-      .toBe(true);
-    if ((await brokenCount()) === 0) await expect(stat).not.toHaveAttribute("data-alert", "true");
   } finally {
     fs.rmSync(file, { force: true });
   }

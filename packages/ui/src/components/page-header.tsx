@@ -1,4 +1,4 @@
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, X } from "lucide-react";
 import { type ReactNode, useEffect, useRef } from "react";
 import { useNavigationType } from "react-router";
 import { Tooltip } from "@/components/motion/tooltip";
@@ -22,12 +22,16 @@ interface PageHeaderProps {
   description?: ReactNode;
   /** Help text behind the `?` button. */
   hint?: ReactNode;
+  /** Hide the page's description for good and move it behind the `?`. */
+  onDismissDescription?: () => void;
   /** The page's single primary action. */
   action?: ReactNode;
   /** Shown only on a detail view; names the destination it returns to. */
   back?: PageBack | null;
   /** A toolbar-sized title for a page that keeps its own sticky bar (the note editor). */
   compact?: boolean;
+  /** Extra classes for the title, e.g. to fade it out while the page's own heading is on screen. */
+  titleClassName?: string;
   className?: string;
   /** Extra controls that frame the header, such as a filter row. */
   children?: ReactNode;
@@ -38,7 +42,19 @@ interface PageHeaderProps {
  * an optional `?` hint and one primary action. Detail views add `back`; top-level
  * pages never do. Keeping it in one place is what makes the shell read as one app.
  */
-export function PageHeader({ title, meta, description, hint, action, back, compact, className, children }: PageHeaderProps) {
+export function PageHeader({
+  title,
+  meta,
+  description,
+  hint,
+  onDismissDescription,
+  action,
+  back,
+  compact,
+  titleClassName,
+  className,
+  children,
+}: PageHeaderProps) {
   const t = useT();
   const navigationType = useNavigationType();
   const titleRef = useRef<HTMLHeadingElement>(null);
@@ -81,6 +97,7 @@ export function PageHeader({ title, meta, description, hint, action, back, compa
                   className={cn(
                     "min-w-0 font-semibold tracking-tight focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring/60",
                     compact ? "truncate text-sm" : "text-xl",
+                    titleClassName,
                   )}
                 >
                   {title}
@@ -102,11 +119,25 @@ export function PageHeader({ title, meta, description, hint, action, back, compa
           ) : null}
 
           {description ? (
-            typeof description === "string" ? (
-              <p className="mt-1 max-w-[68ch] text-sm text-muted-foreground">{description}</p>
-            ) : (
-              <div className="mt-1 flex max-w-[68ch] flex-col gap-1 text-sm text-muted-foreground">{description}</div>
-            )
+            <div className="mt-1 flex max-w-[68ch] items-start gap-2">
+              <div className="min-w-0 flex-1">
+                {typeof description === "string" ? (
+                  <p className="text-sm text-muted-foreground">{description}</p>
+                ) : (
+                  <div className="flex flex-col gap-1 text-sm text-muted-foreground">{description}</div>
+                )}
+              </div>
+              {onDismissDescription ? (
+                <button
+                  type="button"
+                  aria-label={t("nav.dismissIntro")}
+                  onClick={onDismissDescription}
+                  className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                >
+                  <X className="size-3.5" aria-hidden="true" />
+                </button>
+              ) : null}
+            </div>
           ) : null}
         </div>
 

@@ -4,7 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import CodeMirror, { EditorView } from "@uiw/react-codemirror";
 import { Check, ChevronDown, MoreHorizontal, Trash2 } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Link, useBlocker, useNavigate, useParams } from "react-router";
 import { LocalGraph } from "@/components/graph/local-graph";
 import { ActionSwapButton } from "@/components/motion/action-swap";
@@ -27,7 +27,7 @@ import { useBackTarget } from "@/lib/app-history";
 import { SPRING_SWAP } from "@/lib/ease";
 import { type CheckTone, lastCheckChips, tailLines } from "@/lib/last-checks";
 import { queryKeys, useActivity, useNote, useNotes } from "@/lib/queries";
-import { rememberRecentNote } from "@/lib/recent-notes";
+import { rememberRecentItem } from "@/lib/recent-notes";
 import { formatRelativeTime } from "@/lib/relative-time";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
@@ -220,8 +220,53 @@ export function EditorPage() {
   useEffect(() => () => window.clearTimeout(savedTimer.current), []);
 
   useEffect(() => {
-    if (id) rememberRecentNote(id);
+    if (id) rememberRecentItem(id);
   }, [id]);
+
+  const titleRef = useRef<HTMLTextAreaElement | null>(null);
+  const [titleEl, setTitleEl] = useState<HTMLTextAreaElement | null>(null);
+  const [barTitle, setBarTitle] = useState(false);
+
+  const attachTitle = useCallback((node: HTMLTextAreaElement | null) => {
+    titleRef.current = node;
+    setTitleEl(node);
+  }, []);
+
+  // Grow the title with its content, so a long name wraps instead of clipping at 390px.
+  const resizeTitle = useCallback(() => {
+    const el = titleRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, []);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: resize whenever the title text changes.
+  useLayoutEffect(() => {
+    resizeTitle();
+  }, [data?.title, resizeTitle]);
+
+  // The toolbar title repeats the h1; keep it out of sight until the h1 scrolls behind the sticky bar.
+  useEffect(() => {
+    if (!titleEl) return;
+    const main = titleEl.closest("main");
+    if (!main) return;
+    const header = main.querySelector<HTMLElement>("[data-page-header]");
+    const update = () => {
+      const headerBottom = header?.getBoundingClientRect().bottom ?? 0;
+      setBarTitle(titleEl.getBoundingClientRect().bottom <= headerBottom + 1);
+    };
+    update();
+    main.addEventListener("scroll", update, { passive: true });
+    window.addEventListener("resize", update);
+    const observer = new ResizeObserver(update);
+    observer.observe(titleEl);
+    if (header) observer.observe(header);
+    return () => {
+      main.removeEventListener("scroll", update);
+      window.removeEventListener("resize", update);
+      observer.disconnect();
+    };
+  }, [titleEl]);
 
   useEffect(() => {
     const note = noteQuery.data;
@@ -424,6 +469,7 @@ export function EditorPage() {
       compact
       back={back}
       title={title}
+      titleClassName={cn("transition-opacity duration-150 motion-reduce:transition-none", !barTitle && "opacity-0")}
       meta={
         <Link
           to={`/explore?type=${note.type}`}
@@ -558,15 +604,26 @@ export function EditorPage() {
 
   const titleBlock = (
     <div className="mt-5">
-      <input
+      <textarea
+        ref={attachTitle}
+        rows={1}
         aria-label={t("field.title")}
         value={data.title ?? ""}
         placeholder={note.id}
-        onChange={(event) => {
-          setData({ ...data, title: event.target.value } as NoteData);
-          markDirty();
+        onKeyDown={(event) => {
+          // The title is one line even though it is a textarea (it wraps, it does not
+          // grow by newlines). Enter used to do nothing in the old input.
+          if (event.key === "Enter") event.preventDefault();
         }}
-        className="-mx-1.5 w-full rounded-lg bg-transparent px-1.5 text-[28px] leading-tight font-semibold tracking-[-0.02em] outline-none transition-colors placeholder:text-muted-foreground hover:bg-muted/40 focus-visible:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring/30"
+        onChange={(event) => {
+          // Pasted line breaks collapse to spaces, matching what the old single-line
+          // input did and keeping the stored title a single line.
+          const title = event.target.value.replace(/[\r\n]+/g, " ");
+          setData({ ...data, title } as NoteData);
+          markDirty();
+          resizeTitle();
+        }}
+        className="-mx-1.5 block w-full resize-none overflow-hidden rounded-lg bg-transparent px-1.5 text-[28px] leading-tight font-semibold tracking-[-0.02em] break-words outline-none transition-colors placeholder:text-muted-foreground hover:bg-muted/40 focus-visible:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring/30"
       />
       <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
         <TypeChip type={note.type} />

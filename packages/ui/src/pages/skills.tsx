@@ -12,6 +12,7 @@ import { ErrorState, Loading } from "@/components/state";
 import { type TranslationKey, useT } from "@/i18n";
 import { agentColor } from "@/lib/agent-color";
 import { deleteSkillArea, putSkillArea, SKILL_AGENTS, SKILL_AREAS, type SkillAgentId, type SkillArea, type SkillEntry } from "@/lib/api";
+import { useIntro } from "@/lib/intro";
 import { queryKeys, useConnectStatus, useSkills } from "@/lib/queries";
 import { toast } from "@/lib/toast";
 import { tintStyle } from "@/lib/type-color";
@@ -292,7 +293,6 @@ function SkillRow({
                   <AgentChip key={agent} agent={agent} />
                 ))}
                 {skill.plugin ? <Chip tone="muted">{t("skills.plugin", { plugin: skill.plugin })}</Chip> : null}
-                {skill.areaSource === "override" ? <Chip tone="primary">{t("skills.changedByYou")}</Chip> : null}
               </div>
               {skill.error ? (
                 <p className="mt-1 max-w-[72ch] text-xs text-destructive">{t("skills.rowError", { message: skill.error })}</p>
@@ -315,24 +315,30 @@ function SkillRow({
               />
             </span>
           </CollapsibleTrigger>
-          <AreaControl skill={skill} busy={busy} onChange={onChangeArea} onReset={onResetArea} />
         </div>
         <CollapsibleContent>
           <div className="px-4 pb-3">
-            <div className="flex flex-col gap-1.5 rounded-xl border border-border bg-muted/30 px-3 py-2">
-              <div className="flex items-center gap-2">
-                <span className="shrink-0 text-[11px] font-medium text-muted-foreground">{t("skills.path")}</span>
-                <code title={skill.path} className="min-w-0 flex-1 truncate font-mono text-[11px]">
-                  {skill.path}
-                </code>
-                <CopyPathButton value={skill.path} label={t("skills.copyPath")} />
-              </div>
-              {skill.version ? (
+            <div className="flex flex-col gap-2 rounded-xl border border-border bg-muted/30 px-3 py-2">
+              <div className="flex flex-col gap-1.5">
                 <div className="flex items-center gap-2">
-                  <span className="shrink-0 text-[11px] font-medium text-muted-foreground">{t("skills.version")}</span>
-                  <span className="font-mono text-[11px]">{skill.version}</span>
+                  <span className="shrink-0 text-[11px] font-medium text-muted-foreground">{t("skills.path")}</span>
+                  <code title={skill.path} className="min-w-0 flex-1 truncate font-mono text-[11px]">
+                    {skill.path}
+                  </code>
+                  <CopyPathButton value={skill.path} label={t("skills.copyPath")} />
                 </div>
-              ) : null}
+                {skill.version ? (
+                  <div className="flex items-center gap-2">
+                    <span className="shrink-0 text-[11px] font-medium text-muted-foreground">{t("skills.version")}</span>
+                    <span className="font-mono text-[11px]">{skill.version}</span>
+                  </div>
+                ) : null}
+              </div>
+              <div className="flex flex-wrap items-center gap-2 border-t border-border/60 pt-2">
+                <span className="shrink-0 text-[11px] font-medium text-muted-foreground">{t("skills.area")}</span>
+                <AreaControl skill={skill} busy={busy} onChange={onChangeArea} onReset={onResetArea} />
+                {skill.areaSource === "override" ? <Chip tone="primary">{t("skills.changedByYou")}</Chip> : null}
+              </div>
             </div>
           </div>
         </CollapsibleContent>
@@ -403,6 +409,8 @@ export function SkillsPage() {
   const skills = useMemo(() => skillsQuery.data?.skills ?? [], [skillsQuery.data]);
   const detected = useMemo(() => (skillsQuery.data?.agents ?? []).filter((entry) => entry.detected), [skillsQuery.data]);
   const normalizedQuery = normalize(query.trim());
+  // No skills installed is the empty state; once any exist, the intro moves behind the `?`.
+  const intro = useIntro("skills", skillsQuery.isSuccess ? skills.length > 0 : true);
 
   /** Agent chips count what the search leaves, whatever agent is selected. */
   const counts = useMemo(() => {
@@ -599,30 +607,14 @@ export function SkillsPage() {
   return (
     <Page className={PAGE_SECTIONS}>
       <Reveal index={0}>
-        <PageHeader title={t("page.skills.title")} description={t("skills.description")}>
+        <PageHeader
+          title={t("page.skills.title")}
+          description={intro.showIntro ? t("skills.description") : undefined}
+          hint={intro.showIntro ? undefined : t("skills.description")}
+          onDismissDescription={intro.showIntro ? intro.dismiss : undefined}
+        >
           <div className="flex flex-col gap-2">
             <div className="flex flex-wrap items-center gap-2">
-              <fieldset
-                className="m-0 flex min-w-0 flex-1 basis-60 flex-wrap items-center gap-1.5 border-0 p-0"
-                aria-label={t("skills.filters")}
-              >
-                <FilterChip selected={agent === "all"} count={counts.all} onClick={() => setAgent("all")}>
-                  {t("skills.filter.all")}
-                </FilterChip>
-                {SKILL_AGENTS.map((id) => (
-                  <FilterChip
-                    key={id}
-                    selected={agent === id}
-                    count={counts[id]}
-                    disabled={counts[id] === 0 && agent !== id}
-                    hint={id === "shared" ? t("skills.agent.shared.hint") : undefined}
-                    onClick={() => setAgent(id)}
-                  >
-                    {t(AGENT_LABEL[id])}
-                  </FilterChip>
-                ))}
-              </fieldset>
-
               <Input
                 type="search"
                 value={query}
@@ -638,6 +630,26 @@ export function SkillsPage() {
                   leftIcon: "left-2.5",
                 }}
               />
+
+              {detected.length > 0 && skills.length > 0 ? (
+                <Select value={agent} onValueChange={(value) => setAgent(value as AgentFilter)} className="w-full sm:w-48">
+                  <SelectTrigger
+                    aria-label={t("skills.filters")}
+                    title={t("skills.filters")}
+                    className="h-8 rounded-full border-border bg-muted/60 px-3 py-0 text-[13px]"
+                  >
+                    <span className="truncate">{agent === "all" ? t("skills.filter.allAgents") : t(AGENT_LABEL[agent])}</span>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">{`${t("skills.filter.allAgents")} (${counts.all})`}</SelectItem>
+                    {SKILL_AGENTS.map((id) => (
+                      <SelectItem key={id} value={id} disabled={counts[id] === 0 && agent !== id}>
+                        {`${t(AGENT_LABEL[id])} (${counts[id]})`}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : null}
             </div>
 
             {visibleAreas.length > 0 ? (
