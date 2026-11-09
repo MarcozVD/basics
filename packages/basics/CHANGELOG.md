@@ -1,5 +1,23 @@
 # @marcozvd/basics
 
+## 1.7.0
+
+### Minor Changes
+
+- e9ea41b: Make the review diff and Inbox easier to scan. New notes show a single unified diff, updates keep three lines of context around each change, and every proposal opens with a one-line summary. The summary names the layer note, so a Spanish vault reads the layer's own title. The Inbox can filter pending proposals by the agent that wrote them, Approve all follows the active filters and says what it will approve, and the bulk buttons stay in place when only one proposal is pending. Opening the Inbox focuses the selected row, arrows move through the list, and the command palette leads with Review next proposal when something is waiting.
+- f0bbdbe: Recommend now reads as a shortlist. Each pick shows the note's title, the layer it belongs to and the reasons it matched, with the numbers kept behind a per-card Why disclosure. A tech that fits several layers appears once, under its main layer, and says where else it fits. While a new ranking runs, the previous shortlist stays visible and dimmed instead of blanking the page, and avoid-when matches are a quiet warning line instead of a red border.
+- 05b8f50: Make the Inbox review loop safe. Approve, reject and Approve all wait 6 seconds before they are written: the toast names the note, shows Saving in 6 s and Undo (Z), and Z or Undo cancels the decision. Closing or reloading the tab inside that window cancels it too. Review toasts no longer cover the proposal's Reject, Edit and Approve bar. If Edit and approve fails, the editor comes back with your draft and the field errors. The proposal diff now shows the `source` line that approve writes, so the preview matches the file, and a proposer named `agent:x` no longer becomes `agent:agent:x`. Home no longer approves without a diff: its button is Review, which opens the proposal, and it shows at most three proposals with Show all in Inbox.
+
+### Patch Changes
+
+- 69189ff: Make every page easier to read and reach with a keyboard. A Skip to content link is the first stop on Tab, each page names itself in the browser tab and uses one main heading, and the Graph switches now show their labels. Escape clears a search before it leaves the list, the health line says "1 orphan" in words as well as colour, and an Inbox filter by agent survives Back. The editor's side sections sit under the page heading, its stack chips are no longer covered, and Save stays quiet while the note is clean.
+  
+  No text is smaller than 11px, Explore's headers use sentence case and the Updated column follows the same relative dates as Home, hiding when nothing has a date. Counts now use correct singular and plural forms in English and Spanish, the Projects empty state reads as one sentence, an empty search offers to create the note you typed, and agent chips use the neutral style instead of a colour that looked like a practice.
+- 5b48328: Hovering a graph node feels immediate. Moving between nodes now updates only the highlight that changed, the fade no longer animates hundreds of elements, and the tooltip stays sharp and light in the Graph page (free and grouped) and in the editor's local graph.
+- 05b8f50: Leaving a page no longer slows down or rewrites the next one. Leaving the graph while it is still drawing no longer freezes the next page for a moment, whether you leave with a click, the command palette, a `g` shortcut or Back. An Inbox you leave no longer adds its `?p=` selection to the next page's address. Back and Forward keep working when you click through pages quickly.
+- Updated dependencies [05b8f50]
+  - @marcozvd/basics-core@1.7.0
+
 ## 1.6.0
 
 ### Minor Changes
