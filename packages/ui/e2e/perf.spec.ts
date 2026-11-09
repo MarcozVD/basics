@@ -50,7 +50,7 @@ async function hoverPoints(page: Page): Promise<{ id: string; x: number; y: numb
     const rect = host.getBoundingClientRect();
     const nodes = cy
       .nodes()
-      .filter((node) => !node.isParent() && !node.data("bandLabel") && !node.data("spacer"))
+      .filter((node) => !node.isParent() && !node.data("bandLabel") && !node.data("spacer") && !node.data("ringGuide"))
       .map((node) => {
         const box = node.renderedBoundingBox({ includeLabels: false });
         return { id: node.id(), x: (box.x1 + box.x2) / 2, y: (box.y1 + box.y2) / 2 };

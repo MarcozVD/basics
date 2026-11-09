@@ -49,7 +49,7 @@ interface GraphCacheEntry {
   updated: number;
 }
 
-const STORAGE_KEY = "basics:graph-cache:v1";
+const STORAGE_KEY = "basics:graph-cache:v2";
 const MAX_ENTRIES = 6;
 /** Below this share of known nodes a partial entry is not worth seeding from. */
 const PARTIAL_MIN_RATIO = 0.5;
@@ -119,7 +119,7 @@ function hash(text: string): string {
 
 /** Stable key for one picture of the graph: vault + layout mode + nodes + edges. */
 export function graphCacheKey(vault: string, layout: GraphLayoutMode, data: GraphData): string {
-  const nodes = data.nodes.map((node) => node.id).sort();
+  const nodes = data.nodes.map((node) => (layout === "flat" ? `${node.id}:${node.type}:${node.degree}` : node.id)).sort();
   const edges = data.edges.map((edge) => `${edge.source}>${edge.target}`).sort();
   return hash(`${vault}\u0000${layout}\u0000${nodes.join("\u0001")}\u0000${edges.join("\u0001")}`);
 }

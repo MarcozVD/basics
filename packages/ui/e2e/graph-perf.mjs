@@ -129,7 +129,7 @@ function readPerf(page) {
 function readCache(page) {
   return page.evaluate(() => {
     try {
-      const raw = sessionStorage.getItem("basics:graph-cache:v1");
+      const raw = sessionStorage.getItem("basics:graph-cache:v2");
       if (!raw) return null;
       return JSON.parse(raw).map((entry) => ({
         key: entry.key,

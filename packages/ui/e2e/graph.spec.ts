@@ -18,6 +18,13 @@ interface CyNodeHandle {
   position: () => { x: number; y: number };
   boundingBox: (options: { includeLabels: boolean }) => CyBox;
   renderedBoundingBox: (options: { includeLabels: boolean }) => CyBox;
+  data: (key: string) => unknown;
+  style: (key: string) => string;
+  width: () => number;
+  renderedWidth: () => number;
+  locked: () => boolean;
+  selectable: () => boolean;
+  grabbable: () => boolean;
 }
 
 interface CyCollection {
@@ -268,7 +275,7 @@ test("clicking Graph while already on Graph never freezes the canvas", async ({ 
 test("reloading the graph restores the cached positions without running a layout", async ({ page }) => {
   await openGraph(page);
   const before = await readPositions(page);
-  await expect.poll(() => page.evaluate(() => sessionStorage.getItem("basics:graph-cache:v1") !== null)).toBe(true);
+  await expect.poll(() => page.evaluate(() => sessionStorage.getItem("basics:graph-cache:v2") !== null)).toBe(true);
 
   await page.reload();
   await expect(page.getByTestId("graph-canvas").locator("canvas").first()).toBeVisible();
@@ -301,6 +308,121 @@ test("graph renders, search + Enter selects a node and the drawer opens its note
   await page.getByTestId("graph-open-note").click();
   await expect(page).toHaveURL(/\/notes\/fastapi$/);
 });
+
+test("free graph puts profiles/projects inside tech, practices and checks in stable rings", async ({ page }) => {
+  const project = await page.request.post("/api/notes", {
+    data: {
+      id: "ring-project",
+      data: { type: "project", title: "Ring project", status: "active", stack: { backend: ["fastapi"] } },
+      body: "",
+    },
+  });
+  expect(project.ok()).toBe(true);
+  try {
+    await page.addInitScript(() => localStorage.setItem("basics:graph-group", "0"));
+    await page.goto("/graph");
+    await expect(page.getByTestId("graph-canvas").locator("canvas").first()).toBeVisible();
+    await expect.poll(async () => (await readPerf(page))?.last?.settledAt ?? null).not.toBeNull();
+    const radii = await page.evaluate(() => {
+      const cy = (window as unknown as { __basicsCy: CyHandle }).__basicsCy;
+      return Object.fromEntries(
+        ["profile", "project", "tech", "practice", "check", "layer"].map((type) => [
+          type,
+          cy.nodes(`[type = "${type}"]`).map((n) => Math.hypot(n.position().x, n.position().y)),
+        ]),
+      );
+    });
+    for (const type of ["profile", "project", "tech", "practice", "check"]) expect(radii[type].length).toBeGreaterThan(0);
+    expect(Math.max(...radii.profile, ...radii.project)).toBeLessThan(Math.min(...radii.tech));
+    expect(Math.max(...radii.tech)).toBeLessThan(Math.min(...radii.practice));
+    expect(Math.max(...radii.practice)).toBeLessThan(Math.min(...radii.check));
+    expect(Math.max(...radii.check)).toBeLessThan(Math.min(...radii.layer));
+    const before = await readPositions(page);
+    // A fresh load must reproduce the layout without relying on the position cache.
+    await page.evaluate(() => sessionStorage.clear());
+    await page.reload();
+    await expect.poll(async () => (await readPerf(page))?.last?.settledAt ?? null).not.toBeNull();
+    expect(moved(before!, (await readPositions(page))!)).toEqual([]);
+    expect((await readPerf(page))?.counters.fcose).toBe(0);
+  } finally {
+    await page.request.delete("/api/notes/ring-project");
+  }
+});
+
+for (const theme of ["light", "dark"]) {
+  test(`free graph has quiet, noninteractive ring guides in ${theme} theme`, async ({ page }) => {
+    await page.addInitScript((theme) => {
+      localStorage.setItem("basics:graph-group", "0");
+      localStorage.setItem("basics-theme", theme);
+    }, theme);
+    await page.goto("/graph");
+    await expect.poll(async () => (await readPerf(page))?.last?.settledAt ?? null).not.toBeNull();
+    const guides = await page.evaluate(() => {
+      const cy = (window as unknown as { __basicsCy: CyHandle }).__basicsCy;
+      const token = getComputedStyle(document.documentElement).getPropertyValue("--foreground").trim();
+      const sample = document.createElement("span");
+      sample.style.color = token;
+      document.body.append(sample);
+      const foreground = getComputedStyle(sample).color;
+      sample.remove();
+      return cy.nodes("[ringGuide]").map((guide) => ({
+        id: guide.id(),
+        position: guide.position(),
+        radius: guide.width() / 2,
+        memberRadii: (guide.data("members") as string[]).map((id) => {
+          const p = cy.getElementById(id).position();
+          return Math.hypot(p.x, p.y);
+        }),
+        events: guide.style("events"),
+        background: Number(guide.style("background-opacity")),
+        borderWidth: Number.parseFloat(guide.style("border-width")),
+        borderOpacity: Number(guide.style("border-opacity")),
+        color: guide.style("border-color"),
+        foreground,
+        depth: guide.style("z-compound-depth"),
+        zIndex: Number(guide.style("z-index")),
+        locked: guide.locked(),
+        selectable: guide.selectable(),
+        grabbable: guide.grabbable(),
+      }));
+    });
+    expect(guides).toHaveLength(5);
+    for (const guide of guides) {
+      expect(guide.position).toEqual({ x: 0, y: 0 });
+      expect(guide.memberRadii.length).toBeGreaterThan(0);
+      for (const radius of guide.memberRadii) expect(radius).toBeCloseTo(guide.radius, 1);
+      expect(guide.events).toBe("no");
+      expect(guide.background).toBe(0);
+      expect(guide.borderWidth).toBe(1.5);
+      expect(guide.borderOpacity).toBe(0.12);
+      expect(guide.color.replace(/\s/g, "")).toBe(guide.foreground.replace(/\s/g, ""));
+      expect(guide.depth).toBe("bottom");
+      expect(guide.zIndex).toBeLessThan(0);
+      expect(guide.locked).toBe(true);
+      expect(guide.selectable).toBe(false);
+      expect(guide.grabbable).toBe(false);
+    }
+    const scaling = await page.evaluate(() => {
+      const cy = (window as unknown as { __basicsCy: CyHandle }).__basicsCy;
+      const guide = cy.nodes("[ringGuide]").map((node) => node)[0];
+      const before = guide.renderedWidth();
+      const pan = cy.pan();
+      cy.viewport({ zoom: cy.zoom() * 1.25, pan: { x: pan.x + 20, y: pan.y + 15 } });
+      return { before, after: guide.renderedWidth(), position: guide.position() };
+    });
+    expect(scaling.after / scaling.before).toBeCloseTo(1.25);
+    expect(scaling.position).toEqual({ x: 0, y: 0 });
+    expect((await readPerf(page))?.counters.layouts).toBe(1);
+    await page.getByTestId("graph-group").getByRole("switch").click();
+    await expect
+      .poll(() => page.evaluate(() => (window as unknown as { __basicsCy: CyHandle }).__basicsCy.nodes("[ringGuide]").length))
+      .toBe(0);
+    await page.goto("/notes/fastapi");
+    await expect(page.getByTestId("local-graph-canvas").locator("canvas").first()).toBeVisible();
+    await expect.poll(async () => (await readPerf(page))?.last?.settledAt ?? null).not.toBeNull();
+    expect(await page.evaluate(() => (window as unknown as { __basicsCy: CyHandle }).__basicsCy.nodes("[ringGuide]").length)).toBe(0);
+  });
+}
 
 test("grouped graph boxes its layers on a grid and the switch flattens it", async ({ page }) => {
   await page.goto("/graph");
@@ -418,8 +540,8 @@ test("grouped mode hides edges to a node's own layer box", async ({ page }) => {
 });
 
 /**
- * The big-vault specs run against their own server: a generated vault where the flat
- * force layout takes seconds, so "while the layout runs" is a real window to test in.
+ * The big-vault specs use a generated vault to prove the first picture is already
+ * settled and interactive, including the reduced-motion path.
  */
 const LARGE_PORT = 4813;
 const LARGE_STATE = ".vault-path-large";
@@ -470,23 +592,23 @@ test.describe("large vault", () => {
   });
 
   test.beforeEach(async ({ page }) => {
-    // Flat: the force layout, the case the worker exists for.
+    // Free mode uses the full-vault rings.
     await page.addInitScript(() => localStorage.setItem("basics:graph-group", "0"));
   });
 
-  test("a node opens its panel while the cold layout is still running", async ({ page }) => {
+  test("a node opens its panel from the settled cold ring layout", async ({ page }) => {
     await page.goto("/graph");
     // A cold load of 860 nodes takes the app server-side work before the canvas exists.
     await expect(page.getByTestId("graph-canvas").locator("canvas").first()).toBeVisible({ timeout: 120_000 });
 
-    // The seeded picture is painted while the simulation is still in the worker.
+    // Rings are final by the time the first picture paints.
     await expect.poll(async () => (await readPerf(page))?.last?.firstFrameAt ?? null, { timeout: 120_000 }).not.toBeNull();
     const before = await readPerf(page);
     expect(before?.last?.nodes).toBeGreaterThan(500);
-    expect(before?.last?.settledAt).toBeNull();
+    expect(before?.last?.settledAt).not.toBeNull();
 
-    // tech-0 is the best connected node, so the spiral seeds put it in the middle.
-    const point = await page.evaluate(() => {
+    // The tech ring is fitted with the rest of the vault.
+    let point = await page.evaluate(() => {
       const cy = (window as unknown as { __basicsCy?: CyHandle }).__basicsCy;
       if (!cy) return null;
       const node = cy.getElementById("tech-0");
@@ -502,6 +624,28 @@ test.describe("large vault", () => {
     expect(point.y).toBeGreaterThan(0);
     expect(point.x).toBeLessThan(origin.width);
     expect(point.y).toBeLessThan(origin.height);
+    const outside = await page.evaluate(() => {
+      const cy = (window as unknown as { __basicsCy: CyHandle }).__basicsCy;
+      const host = document.querySelector('[data-testid="graph-canvas"]')!.getBoundingClientRect();
+      return cy.nodes().filter((node) => {
+        const box = node.renderedBoundingBox({ includeLabels: false });
+        return box.x1 < 0 || box.y1 < 0 || box.x2 > host.width || box.y2 > host.height;
+      }).length;
+    });
+    expect(outside).toBe(0);
+
+    // At Fit, 600 tech dots are only a few screen pixels apart. Zoom into the note
+    // before targeting it, as a reader does, so pointer rounding cannot hit a neighbor.
+    point = await page.evaluate(() => {
+      const cy = (window as unknown as { __basicsCy: CyHandle }).__basicsCy;
+      const host = document.querySelector('[data-testid="graph-canvas"]')!.getBoundingClientRect();
+      const node = cy.getElementById("tech-0");
+      const p = node.position();
+      const zoom = Math.max(cy.zoom(), 1);
+      cy.viewport({ zoom, pan: { x: host.width / 2 - p.x * zoom, y: host.height / 2 - p.y * zoom } });
+      const box = node.renderedBoundingBox({ includeLabels: false });
+      return { x: (box.x1 + box.x2) / 2, y: (box.y1 + box.y2) / 2 };
+    });
 
     // A real mouse click on the canvas: it only lands if the main thread is free.
     const clickedAt = Date.now();
@@ -511,18 +655,16 @@ test.describe("large vault", () => {
     await expect(drawer.getByRole("heading", { name: "Tech 0" })).toBeVisible();
     expect(Date.now() - clickedAt).toBeLessThan(10_000);
 
-    // The layout was still mid-flight when the drawer opened.
+    // No force simulation is needed before or after opening the drawer.
     const during = await readPerf(page);
-    expect(during?.counters.workers).toBe(0);
-    expect(during?.counters.fallbacks).toBe(0);
+    expect(during?.counters.fcose).toBe(0);
 
-    // And it does settle afterwards, in the worker, moving nodes into place.
+    // The picture remains settled with one deterministic placement.
     await expect.poll(async () => (await readPerf(page))?.last?.settledAt ?? null, { timeout: 180_000 }).not.toBeNull();
     const after = await readPerf(page);
-    expect(after?.counters.workers).toBe(1);
-    expect(after?.counters.fallbacks).toBe(0);
-    // Normal motion glides into the settled picture.
-    expect(after?.counters.glides).toBeGreaterThan(0);
+    expect(after?.counters.presets).toBe(1);
+    expect(after?.counters.fcose).toBe(0);
+    expect(after?.counters.glides).toBe(0);
   });
 
   test("reduced motion jumps to the settled positions instead of gliding", async ({ page }) => {
@@ -533,7 +675,8 @@ test.describe("large vault", () => {
 
     const perf = await readPerf(page);
     expect(perf?.last?.source).toBe("layout");
-    expect(perf?.counters.workers).toBe(1);
+    expect(perf?.counters.presets).toBe(1);
+    expect(perf?.counters.fcose).toBe(0);
     // No intermediate picture and no glide: the nodes were put where they belong.
     expect(perf?.counters.glides).toBe(0);
   });

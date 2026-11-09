@@ -8,7 +8,6 @@ import { EASE_OUT } from "@/lib/ease";
 import { currentNavigationEpoch, onNavigationIntent } from "@/lib/page-transition";
 import { cn } from "@/lib/utils";
 import { type GraphCacheScope, type GraphPosition, recallGraph, rememberCamera, rememberGraph } from "./graph-cache";
-import { type GraphLayoutPosition, type GraphLayoutRun, type GraphLayoutStageOptions, startGraphLayout } from "./graph-layout";
 import {
   computeGroupedLayout,
   GRAPH_TYPES,
@@ -20,6 +19,7 @@ import {
   nodeDiameter,
 } from "./graph-model";
 import { type GraphPerfMount, perfCount, perfFirstFrame, perfMount, perfPhase, perfSettled } from "./graph-perf";
+import { computeRingLayout, type RingLayout } from "./graph-rings";
 
 cytoscape.use(fcose);
 
@@ -110,24 +110,7 @@ const LARGE_GRAPH = 300;
 const CULL_ZOOM = 0.6;
 /** How many labels survive that culling. */
 const CULL_KEEP = 80;
-/** Labels wrap at this width in flat mode, so the layout sees no wider node than this. */
-const LABEL_MAX_WIDTH = 140;
 const NO_INSETS: Insets = { top: 16, right: 16, bottom: 16, left: 16 };
-
-/** Force settings the worker runs; the same numbers the synchronous fallback uses. */
-function stageOptions(stage: "coarse" | "final", nodes: number, randomize: boolean): GraphLayoutStageOptions {
-  return {
-    stage,
-    // "proof" is the nicer layout but costs ~2x; big vaults trade it for a faster settle.
-    // Incremental runs (randomize false) require "proof".
-    quality: stage === "coarse" ? "draft" : randomize && nodes > LARGE_GRAPH ? "default" : "proof",
-    numIter: stage === "coarse" ? 300 : 2500,
-    nodeRepulsion: 6500,
-    idealEdgeLength: 85,
-    nodeSeparation: 90,
-    gravity: 0.3,
-  };
-}
 
 const edgeId = (source: string, target: string) => `edge:${source}|${target}`;
 
@@ -357,6 +340,24 @@ function buildStyle(palette: Palette): StylesheetJson {
       },
     },
     { selector: ".gone", style: { display: "none" } },
+    {
+      // Ordinary Cytoscape geometry: the renderer handles zoom/pan with no overlay loop.
+      // Decorative circles must never cover edges or intercept the empty canvas.
+      selector: "node[ringGuide]",
+      style: {
+        shape: "ellipse",
+        "background-opacity": 0,
+        "border-width": 1.5,
+        "border-color": palette.foreground,
+        "border-opacity": 0.12,
+        label: "",
+        events: "no",
+        "text-events": "no",
+        "z-index": -1,
+        "z-index-compare": "manual",
+        "z-compound-depth": "bottom",
+      },
+    },
   ];
 }
 
@@ -364,7 +365,7 @@ function truncateLabel(title: string): string {
   return title.length > LABEL_TRUNCATE ? `${title.slice(0, LABEL_TRUNCATE - 1)}…` : title;
 }
 
-function toElements(data: GraphData, layout: GroupedLayout | null): ElementDefinition[] {
+function toElements(data: GraphData, layout: GroupedLayout | null, rings: RingLayout | null): ElementDefinition[] {
   const parents = layout?.parents ?? new Map<string, string>();
   const boxCounts = new Map<string, number>();
   for (const parent of parents.values()) boxCounts.set(parent, (boxCounts.get(parent) ?? 0) + 1);
@@ -399,6 +400,14 @@ function toElements(data: GraphData, layout: GroupedLayout | null): ElementDefin
     ...(layout?.labels ?? []).map((label) => ({
       group: "nodes" as const,
       data: { id: label.id, type: "band", title: label.title, label: label.title, bandLabel: 1, band: label.band, size: 1 },
+    })),
+    ...(rings?.rings ?? []).map((ring) => ({
+      group: "nodes" as const,
+      data: { id: `ring-guide:${ring.band}`, ringGuide: 1, members: ring.ids, size: ring.radius * 2, label: "", degree: 0 },
+      position: { x: 0, y: 0 },
+      locked: true,
+      selectable: false,
+      grabbable: false,
     })),
     ...data.edges.map((edge) => ({
       group: "edges" as const,
@@ -501,7 +510,7 @@ function snapshotPositions(cy: Core): Record<string, GraphPosition> {
   const targets = gliding.get(cy);
   const positions: Record<string, GraphPosition> = {};
   cy.nodes().forEach((node) => {
-    if (node.isParent()) return;
+    if (node.isParent() || node.data("ringGuide")) return;
     const position = targets?.get(node.id()) ?? node.position();
     positions[node.id()] = { x: Math.round(position.x * 100) / 100, y: Math.round(position.y * 100) / 100 };
   });
@@ -615,13 +624,15 @@ function toggleDetailLabels(cy: Core): void {
 const keptLabels = new WeakMap<Core, Set<string>>();
 /** Whether the instance is currently drawing only those labels. */
 const cullingLabels = new WeakMap<Core, boolean>();
+/** Decorative geometry must not change the culling threshold or add a viewport scan. */
+const ringGuideCounts = new WeakMap<Core, number>();
 
 function labelKeepSet(cy: Core): Set<string> {
   const cached = keptLabels.get(cy);
   if (cached) return cached;
   const ranked = cy
     .nodes()
-    .not(":parent, [bandLabel], [spacer]")
+    .not(":parent, [bandLabel], [spacer], [ringGuide]")
     .toArray()
     .sort((a, b) => (b.data("degree") as number) - (a.data("degree") as number) || a.id().localeCompare(b.id()));
   const keep = new Set(ranked.slice(0, CULL_KEEP).map((node) => node.id()));
@@ -635,13 +646,13 @@ function labelKeepSet(cy: Core): Set<string> {
  * The class is only rewritten when the threshold is crossed, so panning costs nothing.
  */
 function toggleLabelCulling(cy: Core): void {
-  const cull = cy.zoom() < CULL_ZOOM && cy.nodes().length > LARGE_GRAPH;
+  const cull = cy.zoom() < CULL_ZOOM && cy.nodes().length - (ringGuideCounts.get(cy) ?? 0) > LARGE_GRAPH;
   if (cullingLabels.get(cy) === cull) return;
   cullingLabels.set(cy, cull);
   const keep = cull ? labelKeepSet(cy) : null;
   cy.batch(() => {
     cy.nodes()
-      .not(":parent, [bandLabel], [spacer]")
+      .not(":parent, [bandLabel], [spacer], [ringGuide]")
       .forEach((node) => {
         node.toggleClass("cull", keep !== null && !keep.has(node.id()));
       });
@@ -734,56 +745,8 @@ function settleTo(cy: Core, targets: Map<string, Position>, opts: { animate: boo
   glide.run();
 }
 
-/** Where a node starts before the force simulation has run: a spiral, hubs in the middle. */
-function seedPositions(cy: Core): Map<string, Position> {
-  const nodes = cy
-    .nodes()
-    .not(":parent, [bandLabel], [spacer]")
-    .toArray()
-    .sort((a, b) => (b.data("degree") as number) - (a.data("degree") as number) || a.id().localeCompare(b.id()));
-  const golden = Math.PI * (3 - Math.sqrt(5));
-  const step = 34;
-  const seeds = new Map<string, Position>();
-  nodes.forEach((node, index) => {
-    const radius = step * Math.sqrt(index + 0.5);
-    const angle = index * golden;
-    seeds.set(node.id(), { x: Math.cos(angle) * radius, y: Math.sin(angle) * radius });
-  });
-  return seeds;
-}
-
-/** Where the nodes are now: an incremental run starts from the picture already on screen. */
-function currentPositions(cy: Core): Map<string, Position> {
-  const seeds = new Map<string, Position>();
-  cy.nodes()
-    .not(":parent, [bandLabel], [spacer]")
-    .forEach((node) => {
-      const position = node.position();
-      seeds.set(node.id(), { x: position.x, y: position.y });
-    });
-  return seeds;
-}
-
-let measureContext: CanvasRenderingContext2D | null = null;
-
-/** What the simulation sees of a node: the dot, or its label when that is wider. */
-function nodeBox(node: NodeSingular): { width: number; height: number } {
-  const size = node.data("size") as number;
-  const label = String(node.data("label") ?? "");
-  if (!measureContext) measureContext = document.createElement("canvas").getContext("2d");
-  if (measureContext) measureContext.font = `500 ${LABEL_SIZE}px ${FONT}`;
-  const text = measureContext ? measureContext.measureText(label).width : 0;
-  return {
-    width: Math.min(Math.max(size, text), LABEL_MAX_WIDTH),
-    // The label sits under the dot with a 4px gap.
-    height: size + 4 + LABEL_SIZE * 1.2,
-  };
-}
-
 /**
- * Runs fcose synchronously, optionally fits the camera to the final positions, then
- * settles. The main thread is blocked for the whole run, so this is the fallback path
- * (and the one local graphs use, where it costs a few milliseconds).
+ * Runs the editor's compact fcose layout synchronously, then fits the local graph.
  */
 function runLayout(cy: Core, opts: { randomize: boolean; animate: boolean; compact?: boolean; fit?: () => void; onSettled?: () => void }) {
   const nodes = cy.nodes();
@@ -827,7 +790,7 @@ const EMPTY_HIGHLIGHT: HighlightState = { lit: new Set(), fade: new Set(), veile
 const highlightStates = new WeakMap<Core, HighlightState>();
 
 function isStructureNode(node: NodeSingular): boolean {
-  return node.isParent() || Boolean(node.data("bandLabel")) || Boolean(node.data("spacer"));
+  return node.isParent() || Boolean(node.data("bandLabel")) || Boolean(node.data("spacer")) || Boolean(node.data("ringGuide"));
 }
 
 /**
@@ -850,6 +813,7 @@ function highlightTargets(cy: Core, activeId: string | null, boxed: boolean): Hi
       lit.add(element.id());
     });
     cy.elements().forEach((element) => {
+      if (element.isNode() && element.data("ringGuide")) return;
       if (!lit.has(element.id())) fade.add(element.id());
     });
     return { lit, fade, veiled };
@@ -908,8 +872,9 @@ function applyHighlight(cy: Core, activeId: string | null, boxed: boolean): void
 }
 
 /** Mirrors `data` into the graph in place; returns how many nodes were added, removed or re-parented. */
-function syncElements(cy: Core, data: GraphData, layout: GroupedLayout | null): number {
-  const wanted = toElements(data, layout);
+function syncElements(cy: Core, data: GraphData, layout: GroupedLayout | null, rings: RingLayout | null): number {
+  ringGuideCounts.set(cy, rings?.rings.length ?? 0);
+  const wanted = toElements(data, layout, rings);
   const ids = new Set(wanted.map((element) => element.data.id as string));
   let changed = 0;
   cy.batch(() => {
@@ -960,6 +925,7 @@ function syncElements(cy: Core, data: GraphData, layout: GroupedLayout | null): 
     });
     // New nodes start next to the neighbours they already have, so the refresh barely moves.
     for (const node of added) {
+      if (node.data("ringGuide")) continue;
       const placed = node.neighborhood("node").filter((other) => !added.includes(other as NodeSingular));
       const anchor = placed.nonempty() ? placed.boundingBox({}) : cy.extent();
       node.position({
@@ -1053,8 +1019,6 @@ export default function GraphCanvas({
   const bridgeRef = useRef<CanvasBridge | null>(null);
   /** Per-mount timing record; null outside dev and the Playwright probe. */
   const perfRecord = useRef<GraphPerfMount | null>(null);
-  /** The off-thread layout still in flight, if any. */
-  const layoutRun = useRef<GraphLayoutRun | null>(null);
   /** The frame scheduled between the element sync and the placement, if any. */
   const placeFrame = useRef<number | null>(null);
   /** A frame with this mount's picture has reached the screen. */
@@ -1067,7 +1031,7 @@ export default function GraphCanvas({
   const [elementsReady, setElementsReady] = useState(false);
 
   const elements = useMemo(() => (mode === "local" && centerId ? localGraph(data, centerId) : data), [data, mode, centerId]);
-  // The editor's local graph is a small strip and stays flat; so does focus mode.
+  // The editor's local graph keeps its compact force layout.
   const boxed = mode === "full" && grouped;
 
   // Callbacks and options change every render; handlers read the latest through the bridge.
@@ -1099,79 +1063,6 @@ export default function GraphCanvas({
   const markPainted = () => {
     painted.current = true;
     perfFirstFrame(perfRecord.current);
-  };
-
-  /**
-   * Flat graph: the seeds are already on screen, so fcose runs in a worker and settles in two
-   * steps (a quick coarse pass, then the full one) while clicks and hovers keep working.
-   * Without a worker the synchronous layout takes over, so the graph always settles.
-   */
-  const settleFlatGraph = (cy: Core, seeds: Map<string, Position>, randomize: boolean, refit: boolean) => {
-    const scope = bridge.cache;
-    const animate = !reduce;
-    const nodes = cy.nodes().not(":parent, [bandLabel], [spacer]").toArray() as NodeSingular[];
-    // Where the camera was left, so a fit on the final picture only happens while the reader
-    // has not moved it (a zoom during the simulation must not be thrown away).
-    const camera = { zoom: cy.zoom(), pan: { ...cy.pan() } };
-    const untouched = () =>
-      Math.abs(cy.zoom() - camera.zoom) < 0.001 && Math.abs(cy.pan().x - camera.pan.x) < 0.5 && Math.abs(cy.pan().y - camera.pan.y) < 0.5;
-    let counted = false;
-    const run = startGraphLayout(
-      {
-        nodes: nodes.map((node) => {
-          const box = nodeBox(node);
-          return { id: node.id(), width: box.width, height: box.height };
-        }),
-        edges: cy.edges().map((edge) => ({ source: edge.source().id(), target: edge.target().id() })),
-        positions: Object.fromEntries(seeds) as Record<string, GraphLayoutPosition>,
-        randomize,
-        // Only a cold run shows an intermediate picture: an incremental one starts from the
-        // picture on screen and must not jump to a draft on the way. Reduced motion keeps the
-        // single jump to the settled positions.
-        coarse: animate && randomize ? stageOptions("coarse", nodes.length, randomize) : null,
-        final: stageOptions("final", nodes.length, randomize),
-      },
-      (stage) => {
-        // The instance may outlive the mount (the full graph keeps it), so a detached but
-        // alive canvas still takes the positions: the next visit shows the settled picture.
-        if (cy.destroyed()) return;
-        if (!counted) {
-          counted = true;
-          perfCount("layouts");
-        }
-        if (stage.stage === "final") perfCount("fcose");
-        perfPhase(perfRecord.current, stage.stage, stage.ms);
-        const settled = stage.stage === "final";
-        settleTo(cy, new Map(Object.entries(stage.positions)), {
-          animate,
-          fit: settled && refit && untouched() ? () => fitVisible(true) : undefined,
-          onSettled: () => {
-            if (!settled) return;
-            if (scope) rememberGraphState(cy, scope);
-            perfSettled(perfRecord.current, "layout");
-          },
-        });
-      },
-    );
-    layoutRun.current = run;
-    void run.done.then((outcome) => {
-      if (layoutRun.current === run) layoutRun.current = null;
-      if (outcome === "worker") {
-        perfCount("workers");
-        return;
-      }
-      if (outcome !== "unavailable" || cy.destroyed()) return;
-      // Leaving the graph on its seeds is not an option: block the main thread and finish it.
-      perfCount("fallbacks");
-      runLayout(cy, {
-        randomize,
-        animate,
-        onSettled: () => {
-          if (scope) rememberGraphState(cy, scope);
-          perfSettled(perfRecord.current, "layout");
-        },
-      });
-    });
   };
 
   useImperativeHandle(ref, () => ({
@@ -1275,8 +1166,6 @@ export default function GraphCanvas({
       if (abandoned.current || painted.current || mode !== "full") return;
       if (currentNavigationEpoch() === mountEpoch.current) return;
       abandoned.current = true;
-      layoutRun.current?.cancel();
-      layoutRun.current = null;
       if (placeFrame.current !== null) {
         cancelAnimationFrame(placeFrame.current);
         placeFrame.current = null;
@@ -1331,7 +1220,7 @@ export default function GraphCanvas({
     if (!kept) {
       cy.on("mouseover", "node", (event) => {
         const node = event.target as NodeSingular;
-        if (node.data("bandLabel") || node.data("spacer")) return;
+        if (node.data("bandLabel") || node.data("spacer") || node.data("ringGuide")) return;
         if (bridge.container) bridge.container.style.cursor = "pointer";
         scheduleHover(node.id());
       });
@@ -1357,7 +1246,8 @@ export default function GraphCanvas({
           return;
         }
         const target = event.target as NodeSingular;
-        if (target.isNode?.() && !target.data("bandLabel") && !target.data("spacer")) bridge.onNodeClick?.(target.id());
+        if (target.isNode?.() && !target.data("bandLabel") && !target.data("spacer") && !target.data("ringGuide"))
+          bridge.onNodeClick?.(target.id());
       });
       // Geist may load after the first paint; redraw labels with the real font. A ready
       // promise that resolves after the page was left must not restyle a detached canvas:
@@ -1407,11 +1297,8 @@ export default function GraphCanvas({
       cyRef.current = null;
       // The leaving click already dropped this unpainted instance and its queued render.
       if (abandoned.current) return;
-      // Leaving the page must abandon the boot: a worker layout, a pending placement or a
+      // Leaving the page must abandon the boot: a pending placement or a
       // glide that outlives the mount would block the next page on the main thread.
-      const wasRunning = layoutRun.current !== null;
-      layoutRun.current?.cancel();
-      layoutRun.current = null;
       if (persistent?.cy === cy) {
         cy.stop();
         cy.elements().stop();
@@ -1426,13 +1313,7 @@ export default function GraphCanvas({
           persistent = null;
           return;
         }
-        // Only the camera is worth keeping from an unfinished picture; the next visit
-        // rebuilds it instead of continuing a half-applied layout.
-        if (wasRunning) {
-          if (bridge.cache) rememberCamera(bridge.cache, { zoom: cy.zoom(), pan: { ...cy.pan() } });
-        } else {
-          rememberGraphState(cy, bridge.cache);
-        }
+        rememberGraphState(cy, bridge.cache);
         persistent.shell.remove();
         return;
       }
@@ -1481,14 +1362,21 @@ export default function GraphCanvas({
     if (unchanged) {
       perfPhase(perfRecord.current, "reuse", performance.now() - effectStart);
       markPainted();
-      if (!layoutRun.current) perfSettled(perfRecord.current, "cache");
+      perfSettled(perfRecord.current, "cache");
       return;
     }
-    // Grouped mode gets a computed preset; flat and local graphs keep fcose.
+    // Grouped mode keeps its grid; only the full free graph uses rings.
     const layout = boxed ? computeGroupedLayout(elements, { aspect: cy.width() / Math.max(cy.height(), 1), titles }) : null;
+    const rings = mode === "full" && !boxed ? computeRingLayout(elements) : null;
+    if (mode === "full") {
+      // A crowded ring can be much wider than a force layout. Let Fit show all of it,
+      // including on phones, while retaining the grouped graph's zoom floor.
+      const outerRadius = rings?.rings.at(-1)?.radius ?? 0;
+      cy.minZoom(rings ? Math.min(0.1, Math.min(cy.width(), cy.height()) / Math.max(1, (outerRadius + 150) * 4)) : 0.1);
+    }
     const afterModel = performance.now();
     perfPhase(perfRecord.current, "layoutModel", afterModel - effectStart);
-    const changed = syncElements(cy, elements, layout);
+    const changed = syncElements(cy, elements, layout, rings);
     const afterSync = performance.now();
     perfPhase(perfRecord.current, "syncElements", afterSync - afterModel);
     if (persistent?.cy === cy) {
@@ -1503,10 +1391,9 @@ export default function GraphCanvas({
     if (cy.nodes().nonempty()) laidOut.add(cy);
     const boxedChanged = lastBoxed.current !== boxed;
     lastBoxed.current = boxed;
-    if (!first && changed === 0 && !boxedChanged && !freshInstance) {
+    if (!first && changed === 0 && !boxedChanged && !freshInstance && !rings) {
       markPainted();
-      // A layout still running for this very picture settles it, not this effect run.
-      if (!layoutRun.current) perfSettled(perfRecord.current, "cache");
+      perfSettled(perfRecord.current, "cache");
       return;
     }
     // The element sync and the placement are the two heavy steps of a cold graph. Yield
@@ -1521,12 +1408,15 @@ export default function GraphCanvas({
       const placeStart = performance.now();
       const scope = bridge.cache;
       // First look at this data: reuse the last visit's positions so a return is instant.
-      // Every node on screen counts, including the layer spacers and band headers.
+      // Keep positioned notes, spacers and band headers; guides stay anchored at the origin.
       const cached =
         first && scope
           ? recallGraph(
               scope,
-              cy.nodes().map((node) => node.id()),
+              cy
+                .nodes()
+                .not("[ringGuide]")
+                .map((node) => node.id()),
             )
           : null;
       if (cached) {
@@ -1555,8 +1445,7 @@ export default function GraphCanvas({
           perfSettled(perfRecord.current, "cache");
           return;
         }
-        // Structure changed: grouped re-grids exactly (cheap), flat settles from the known
-        // positions instead of starting from scratch.
+        // Structure changed: recompute the grid or rings for the current node set.
         perfCount("cachePartials");
         if (layout) {
           runPresetLayout(cy, layout);
@@ -1569,17 +1458,6 @@ export default function GraphCanvas({
           perfSettled(perfRecord.current, "layout");
           return;
         }
-        cy.nodes().removeStyle("font-size");
-        const seeds = new Map<string, Position>();
-        cy.nodes().forEach((node) => {
-          const position = cached.positions.get(node.id());
-          if (position) seeds.set(node.id(), position);
-        });
-        fitVisible(false);
-        perfPhase(perfRecord.current, "place", performance.now() - placeStart);
-        markPainted();
-        settleFlatGraph(cy, seeds, false, true);
-        return;
       }
       if (mode === "local") {
         cy.nodes().removeStyle("font-size");
@@ -1600,16 +1478,19 @@ export default function GraphCanvas({
         perfSettled(perfRecord.current, "layout");
         return;
       }
-      cy.nodes().removeStyle("font-size");
-      // A first look starts from a spiral (hubs in the middle); a refresh keeps the picture on
-      // screen and lets the incremental layout nudge it.
-      const seeds = freshInstance ? seedPositions(cy) : currentPositions(cy);
-      settleTo(cy, seeds, { animate: false });
-      const refit = first || boxedChanged || freshInstance;
-      if (refit) fitVisible(false);
-      perfPhase(perfRecord.current, "place", performance.now() - placeStart);
-      markPainted();
-      settleFlatGraph(cy, seeds, freshInstance, refit);
+      if (rings) {
+        cy.nodes().removeStyle("font-size");
+        perfCount("layouts");
+        perfCount("presets");
+        settleTo(cy, rings.positions, { animate: false });
+        if (first || boxedChanged || freshInstance) fitVisible(false);
+        toggleDetailLabels(cy);
+        toggleLabelCulling(cy);
+        rememberGraphState(cy, scope);
+        perfPhase(perfRecord.current, "place", performance.now() - placeStart);
+        markPainted();
+        perfSettled(perfRecord.current, "layout");
+      }
     });
     placeFrame.current = frame;
     return () => {
@@ -1634,7 +1515,7 @@ export default function GraphCanvas({
     cy.batch(() => {
       // Members first: a hidden layer box disappears together with its members.
       cy.nodes()
-        .not(":parent, [bandLabel], [spacer]")
+        .not(":parent, [bandLabel], [spacer], [ringGuide]")
         .forEach((node) => {
           const parent = node.parent() as NodeSingular;
           const parentHidden = parent.nonempty() && !inView(parent.id());
@@ -1661,6 +1542,10 @@ export default function GraphCanvas({
         const anyVisible = cy.nodes(`[band = "${band}"]`).not("[bandLabel]").not(".gone").not(":parent").nonempty();
         node.toggleClass("gone", !anyVisible);
       });
+      cy.nodes("[ringGuide]").forEach((guide) => {
+        const members = guide.data("members") as string[];
+        guide.toggleClass("gone", !members.some((id) => !cy.getElementById(id).hasClass("gone")));
+      });
     });
     perfPhase(perfRecord.current, "visibility", performance.now() - started);
     if (applied) applied.appliedVisibility = { ids: visibleIds, boxed };
@@ -1682,8 +1567,8 @@ export default function GraphCanvas({
       cy.nodes().forEach((node) => {
         node.addClass(hits.has(node.id()) ? "hit" : "dim");
       });
-      // Boxes and band headers are structure, not search results.
-      cy.nodes(":parent, [bandLabel], [spacer]").removeClass("dim hit");
+      // Boxes, band headers and guides are structure, not search results.
+      cy.nodes(":parent, [bandLabel], [spacer], [ringGuide]").removeClass("dim hit");
       cy.edges().addClass("dim");
     });
     perfPhase(perfRecord.current, "search", performance.now() - started);

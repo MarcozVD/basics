@@ -30,9 +30,9 @@ export interface GraphPerfCounters {
   mounts: number;
   /** Mounts that re-attached the kept instance instead of creating a canvas. */
   reuses: number;
-  /** Layouts of any kind (preset grouped or force-directed). */
+  /** Layouts of any kind (preset rings/grid or the editor's force layout). */
   layouts: number;
-  /** Deterministic grouped placements. */
+  /** Deterministic ring or grouped placements. */
   presets: number;
   /** fcose runs, the expensive ones. */
   fcose: number;
@@ -44,10 +44,6 @@ export interface GraphPerfCounters {
   cameraRestores: number;
   /** Animated moves into settled positions (none with reduced motion). */
   glides: number;
-  /** Layouts settled by the worker instead of the main thread. */
-  workers: number;
-  /** Worker runs that failed and fell back to a synchronous layout. */
-  fallbacks: number;
 }
 
 interface GraphPerfState {
@@ -69,8 +65,6 @@ const state: GraphPerfState = {
     cachePartials: 0,
     cameraRestores: 0,
     glides: 0,
-    workers: 0,
-    fallbacks: 0,
   },
 };
 
