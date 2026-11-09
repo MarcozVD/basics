@@ -374,7 +374,7 @@ export function GraphPage() {
                     <span className={cn(!shown && "line-through decoration-muted-foreground/50")}>
                       {t(`type.${type}` as TranslationKey)}
                     </span>
-                    <span className={cn("font-mono text-[10.5px]", compact && "sr-only")}>{counts.get(type) ?? 0}</span>
+                    <span className={cn("font-mono text-[11px]", compact && "sr-only")}>{counts.get(type) ?? 0}</span>
                   </motion.button>
                 </Tooltip>
               );
@@ -418,14 +418,14 @@ export function GraphPage() {
               search ? (
                 <span
                   title={t("graph.matches", { count: matches.length })}
-                  className={cn("mr-2.5 font-mono text-[10.5px]", matches.length ? "text-muted-foreground" : "text-destructive-text")}
+                  className={cn("mr-2.5 font-mono text-[11px]", matches.length ? "text-muted-foreground" : "text-destructive-text")}
                 >
                   {matches.length}
                 </span>
               ) : compact ? null : (
                 // At the compact width the field is too narrow for both the placeholder and the
                 // chord; the shortcut stays on the input's title and aria-keyshortcuts.
-                <kbd className="mr-2.5 rounded-full border border-border px-1.5 font-mono text-[10px] leading-4 text-muted-foreground">
+                <kbd className="mr-2.5 rounded-full border border-border px-1.5 font-mono text-[11px] leading-4 text-muted-foreground">
                   {modChord("F")}
                 </kbd>
               )
@@ -600,7 +600,7 @@ function NodeDetails({ node, data, onClose, onOpen, onFocus }: NodeDetailsProps)
             {node.layers.map((id) => (
               <span
                 key={id}
-                className="inline-flex h-5 items-center rounded-full border border-border px-2 font-mono text-[10.5px] text-muted-foreground"
+                className="inline-flex h-5 items-center rounded-full border border-border px-2 font-mono text-[11px] text-muted-foreground"
               >
                 {id}
               </span>

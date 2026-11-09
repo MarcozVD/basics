@@ -220,14 +220,14 @@ function StarterPacks({
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                     <span className="text-sm font-medium">{id}</span>
-                    <span className="font-mono text-[10.5px] text-muted-foreground">{t("home.packs.notes", { count: pack.notes })}</span>
+                    <span className="font-mono text-[11px] text-muted-foreground">{t("home.packs.notes", { count: pack.notes })}</span>
                     {community ? (
-                      <span className="rounded-full border border-border/70 bg-muted/60 px-1.5 py-px font-mono text-[9.5px] uppercase text-muted-foreground">
+                      <span className="rounded-full border border-border/70 bg-muted/60 px-1.5 py-px font-mono text-[11px] uppercase text-muted-foreground">
                         {t("home.packs.github")}
                       </span>
                     ) : null}
                     {pack.installed ? (
-                      <span className="basis-full font-mono text-[10.5px] text-muted-foreground sm:basis-auto">
+                      <span className="basis-full font-mono text-[11px] text-muted-foreground sm:basis-auto">
                         {t("home.packs.installed", { version: pack.installed })}
                       </span>
                     ) : null}
@@ -243,7 +243,7 @@ function StarterPacks({
                     </Link>
                   ) : null}
                   {pack.requires.length > 0 ? (
-                    <p className="mt-1 font-mono text-[10px] text-muted-foreground">
+                    <p className="mt-1 font-mono text-[11px] text-muted-foreground">
                       {t("home.packs.requires", { packs: pack.requires.join(", ") })}
                     </p>
                   ) : null}
@@ -299,7 +299,7 @@ function StarterPacks({
         {added ? (
           <div data-testid="pack-add-result" className="mt-2 rounded-lg border border-border/60 bg-muted/50 p-3">
             <p className="text-xs font-medium">{t("home.packs.added", { name: added.name, version: added.version })}</p>
-            <p className="mt-0.5 font-mono text-[10.5px] text-muted-foreground">
+            <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">
               {t("home.packs.summary", {
                 new: added.proposed_new.length,
                 changed: added.proposed_changed.length,
@@ -310,7 +310,7 @@ function StarterPacks({
             {added.invalid.length > 0 ? (
               <ul className="mt-1 flex flex-col gap-0.5">
                 {added.invalid.map((item) => (
-                  <li key={item.file} className="truncate font-mono text-[10px] text-muted-foreground">
+                  <li key={item.file} className="truncate font-mono text-[11px] text-muted-foreground">
                     {t("home.packs.invalidNote", { file: item.file, reason: item.reason })}
                   </li>
                 ))}
@@ -831,7 +831,7 @@ function ContinueSection({
                     <time
                       dateTime={item.time}
                       title={formatFullDateTime(item.time, language)}
-                      className="shrink-0 whitespace-nowrap font-mono text-[10px] text-muted-foreground"
+                      className="shrink-0 whitespace-nowrap font-mono text-[11px] text-muted-foreground"
                     >
                       {formatRelativeTime(item.time, language)}
                     </time>
@@ -1102,7 +1102,7 @@ export function HomePage() {
                         {t((dayActivity.data ?? []).length === 0 ? "home.noAgents" : "home.activity.quiet")}
                       </p>
                       <div className="mt-2 flex items-start gap-1.5">
-                        <code className="min-w-0 rounded-md bg-muted/70 px-2 py-1 font-mono text-[10.5px] leading-4 break-all text-muted-foreground">
+                        <code className="min-w-0 rounded-md bg-muted/70 px-2 py-1 font-mono text-[11px] leading-4 break-all text-muted-foreground">
                           claude mcp add --transport http basics {window.location.origin}/mcp
                         </code>
                         <button
@@ -1149,7 +1149,7 @@ export function HomePage() {
                               ) : null}
                             </span>
                             <time
-                              className="shrink-0 font-mono text-[10px] whitespace-nowrap text-muted-foreground"
+                              className="shrink-0 font-mono text-[11px] whitespace-nowrap text-muted-foreground"
                               dateTime={group.event.ts}
                               title={formatFullDateTime(group.event.ts, language)}
                             >

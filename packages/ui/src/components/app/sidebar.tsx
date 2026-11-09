@@ -148,12 +148,12 @@ function NavItem({ item, active, collapsed, pending, agentRunning, layoutId, onN
       <Icon className="size-[18px] shrink-0" aria-hidden="true" />
       {collapsed ? null : <span className="min-w-0 flex-1 truncate whitespace-nowrap">{t(item.labelKey)}</span>}
       {showCount && collapsed ? (
-        <span className="absolute top-0.5 right-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground">
+        <span className="absolute top-0.5 right-0.5 grid h-[18px] min-w-[18px] place-items-center rounded-full bg-primary px-1 text-[11px] leading-none font-semibold text-primary-foreground">
           <AnimatedNumber value={pending} startOnView={false} duration={0.5} />
         </span>
       ) : null}
       {showCount && !collapsed ? (
-        <span className="grid h-5 min-w-5 shrink-0 place-items-center rounded-full bg-primary px-1.5 font-mono text-[10px] font-semibold text-primary-foreground">
+        <span className="grid h-5 min-w-5 shrink-0 place-items-center rounded-full bg-primary px-1.5 font-mono text-[11px] font-semibold text-primary-foreground">
           <AnimatedNumber value={pending} startOnView={false} duration={0.5} />
         </span>
       ) : null}
@@ -181,7 +181,7 @@ function NavItem({ item, active, collapsed, pending, agentRunning, layoutId, onN
           <span className="flex items-center gap-2">
             <span>{t(item.labelKey)}</span>
             {shortcut ? (
-              <kbd className="rounded-full border border-border px-1.5 font-mono text-[10px] text-muted-foreground">
+              <kbd className="rounded-full border border-border px-1.5 font-mono text-[11px] text-muted-foreground">
                 {item.chord ? shortcut : t("shortcuts.sequence", { key: shortcut })}
               </kbd>
             ) : null}
@@ -266,7 +266,7 @@ export function SidebarNav({ collapsed, onNavigate, onToggle, draggable, mac }: 
             <span className="flex flex-col gap-1">
               <span className="flex items-center gap-2">
                 <span>{t("nav.search")}</span>
-                <kbd className="rounded-full border border-border px-1.5 font-mono text-[10px] text-muted-foreground">{modChord("K")}</kbd>
+                <kbd className="rounded-full border border-border px-1.5 font-mono text-[11px] text-muted-foreground">{modChord("K")}</kbd>
               </span>
               <span className="max-w-56 text-[11px] leading-4 font-normal text-muted-foreground">{t("nav.palette.purpose")}</span>
             </span>
@@ -287,7 +287,7 @@ export function SidebarNav({ collapsed, onNavigate, onToggle, draggable, mac }: 
             {collapsed ? null : (
               <>
                 <span className="min-w-0 flex-1 truncate text-left text-xs whitespace-nowrap">{t("nav.search")}</span>
-                <kbd className="shrink-0 rounded-full border border-border px-1.5 font-mono text-[10px] leading-4 text-muted-foreground">
+                <kbd className="shrink-0 rounded-full border border-border px-1.5 font-mono text-[11px] leading-4 text-muted-foreground">
                   {modChord("K")}
                 </kbd>
               </>

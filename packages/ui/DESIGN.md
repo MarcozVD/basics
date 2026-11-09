@@ -68,10 +68,10 @@ typography:
     fontSize: "11px"
   mono-chip:
     fontFamily: "Geist Mono Variable, ui-monospace, monospace"
-    fontSize: "10.5px"
+    fontSize: "11px"
   mono-caption:
     fontFamily: "Geist Mono Variable, ui-monospace, monospace"
-    fontSize: "10px"
+    fontSize: "11px"
 rounded:
   sm: "6px"
   md: "8px"
@@ -136,7 +136,7 @@ Source of truth for the web UI in `packages/ui`. Product context lives in [PRODU
 - **Proposal** (`/inbox/:id`): full width, with the reason block, a one-line change summary from the parsed note data (`lib/proposal-summary.ts`) and the diff filling the height down to the action bar; only the action bar floats, centered and raised off the floating bar's edge.
 - **Explore, Graph and the editor**: Explore fills the width (dense table or card grid); Graph is a full-bleed canvas; the editor is full width with the note body and a 380px properties/connections column from 1280px. Empty states center their message but never constrain the page.
 - **Readable measure.** Long running prose — note body preview, proposal reasons, Recommend's explanatory sentence — stays left-aligned with the content and caps at roughly 72ch. Cards, tables, diffs and controls are not measure-limited.
-- **Empty states**: each one says why the screen is empty, what fills it, and offers one action. Explore splits an empty vault ("Your vault is empty" → install starter notes or new note) from a search with no matches ("No notes found" → clear filters). Projects puts the New project action in its empty state, not the page header. Recommend on an empty vault asks for the starter packs first. Graph hides its toolbar at 0 nodes and shows a vault-empty variant with an action.
+- **Empty states**: each one says why the screen is empty, what fills it, and offers one primary action. Explore splits an empty vault ("Your vault is empty" → install starter notes or new note) from a search with no matches ("No notes found" → Create note with the query as its title, and clear filters when any are set). Projects puts the New project action in its empty state, not the page header. Recommend on an empty vault asks for the starter packs first. Graph hides its toolbar at 0 nodes and shows a vault-empty variant with an action.
 - **Explore layer chips** keep their natural width (`max-w-40` with a truncating name). A column too narrow for two chips shows one chip plus `+n`, whose tooltip lists the hidden layers; it expands back when the column grows.
 - **Projects**: a row is name, status, updated time, and one muted line only when there is something to act on (`N checks failing`, `N missing technologies`). Search and sort are hidden below 8 projects (`CHROME_MIN_PROJECTS`); the `/` shortcut follows the same rule. Status filters with no matches are hidden except All. Detail empty states say who fills each field (a coding agent for reason and lessons), and the check hint says a coding agent records the results. The detail title is `text-lg` (18px).
 - **Filters**: one horizontal row of pills, chips and selects under the page title (Explore, Inbox, Skills, Recommend). Explore's toolbar is one row at 1280px: its type filter is a select, and the New note action never wraps. The graph uses a floating glass toolbar at the top instead. On phones the row wraps and selects stretch to share the width. The Inbox row holds its All / Create / Update tabs and, when more than one agent has pending proposals, an agent select.
@@ -165,13 +165,15 @@ Dark is the default when the system is dark; light is fully supported. Tokens ar
 
 **Note-type colors** (chips, graph nodes, type dots, the 3px type marker in Explore rows), same hue in both themes with adjusted lightness: tech `#0a84ff`/`#007aff` · practice `#30d158`/`#248a3d` · check `#ff9f0a`/`#c76a00` · profile `#bf5af2`/`#a13bd6` · project `#ff375f`/`#e11d48` · layer `#8e8e93`/`#6b6b72`.
 
+**Agent colour.** `lib/agent-color.ts` gives each agent a hue for its avatar. Agent chips stay neutral (bordered, muted), so an agent never reads as a note type or a practice.
+
 **The tint rule.** A chip is a 12% tint of its color with text in `color-mix(color var(--tint-text-mix), foreground)` (68% light, 85% dark). Use `tintStyle()` / `tintText()` from `src/lib/type-color.ts`; never put raw type color text on its own tint, it fails AA.
 
 **The one-accent rule.** Blue means "primary action, active, focused". Everything else is neutral except note types and destructive states. No gradients, glows or colored blurs.
 
 ## Typography
 
-**Geist Variable** for UI, **Geist Mono Variable** for ids, paths, counts, code and key hints (`@fontsource-variable/geist`, `@fontsource-variable/geist-mono`). Base 14px / 1.5; headings tracked -0.02em.
+**Geist Variable** for UI, **Geist Mono Variable** for ids, paths, counts, code and key hints (`@fontsource-variable/geist`, `@fontsource-variable/geist-mono`). Base 14px / 1.5; headings tracked -0.02em. Nothing renders below 11px, mono included: every arbitrary `text-[Npx]` class in `packages/ui/src` (vendored `components/motion` excluded) is 11px or larger, and `test/text-floor.test.ts` fails on any smaller size.
 
 | Role | Spec | Where |
 | --- | --- | --- |
@@ -182,7 +184,7 @@ Dark is the default when the system is dark; light is fully supported. Tokens ar
 | Prose | 15px / 1.65 | Markdown preview |
 | Secondary | 12–13px | Excerpts, descriptions, control labels |
 | Section label | 11px semibold uppercase, wide tracking | Home sections, editor collapsibles, Explore groups |
-| Mono meta | 10–11px Geist Mono | Ids, counts, timestamps, `kbd` hints, layer chips |
+| Mono meta | 11px Geist Mono | Ids, counts, timestamps, `kbd` hints, layer chips |
 
 ## Shapes and elevation
 
@@ -224,8 +226,8 @@ Springs and easings live in `src/lib/ease.ts`.
 
 **Built for Basics** following the same concept (`motion/react`, `@/lib/ease` springs, reduced-motion fallbacks, pill shapes, `cn()`):
 
-- `components/app/command-palette.tsx` — ⌘K palette: with pending proposals, a Review group leads with Review next proposal (n), which opens the Inbox; then recent notes, notes, proposals, navigation, actions.
-- `components/app/new-note-dialog.tsx` — new note morph modal (opens on `basics:new-note`).
+- `components/app/command-palette.tsx` — ⌘K palette: with pending proposals, a Review group leads with Review next proposal (n), which opens the Inbox; then recent notes, notes, proposals, navigation, actions. A query with no match offers Create note, which opens the new-note dialog with the query as its title.
+- `components/app/new-note-dialog.tsx` — new note morph modal (opens on `basics:new-note`). `detail.title` sets the title; the id is slugged from it and follows the title until it is edited. `detail.id` sets the id as typed. Explore and the palette send `detail.title`.
 - `components/layout.tsx` — app shell (sidebar or floating bar, content panel, desktop title strip), navigation style, route transition, toasts, update banner.
 - `components/app/sidebar.tsx` — navigation sidebar: expanded, icon rail and drawer; `SidebarNav` is shared with the drawer; hidden in Floating style.
 - `components/app/floating-nav.tsx` — floating navigation bar: drag to any edge, keyboard parity, same items and shortcuts as the sidebar.
@@ -243,14 +245,14 @@ Springs and easings live in `src/lib/ease.ts`.
 | Route | Screen | Notes |
 | --- | --- | --- |
 | `/` | Home | One vault-health line (broken links and orphans with detail popovers above zero), inbox strip (up to three proposals; Review opens one, Reject inline), Continue where you left off, agent activity (three rows, Show all), a Get set up line while steps are open. Main chunk. |
-| `/explore` | Explore | One toolbar row: search (⌘F), type select (counts in options), layer and sort selects, list or grid, New note. Default columns title, layers, tags, updated; ID on row hover or focus; Source only when the vault mixes provenance. Arrow keys + Enter. Esc clears the search, and a second Esc moves focus to the list. |
+| `/explore` | Explore | One toolbar row: search (⌘F), type select (counts in options), layer and sort selects, list or grid, New note. Default columns title, layers, tags, updated; ID on row hover or focus; Source only when the vault mixes provenance; Updated only when some note has a date. Column headers are sentence case. A search with no matches offers Create note, which opens the new-note dialog with the query as its title. Arrow keys + Enter. Esc clears the search, and a second Esc moves focus to the list. |
 | `/notes/:id` | Editor | Breadcrumb bar (Save, more menu), title, type chip and provenance, properties form, edit/preview/split body, connections, local graph. ⌘S saves; conflicts show a banner. The note title is the page's only `h1`: body headings render one level lower (`demoteHeadings` on `MarkdownPreview`) and the side sections (links, backlinks, unresolved) are `h2`. Save is `secondary` while the note is clean and `primary` once it has unsaved changes. |
 | `/graph` | Graph | Full-bleed canvas with a floating glass toolbar that carries the title and intro tooltip (types with hover and focus hints, layer, search, broken links, fit), node drawer. Its layer and broken-link switches show visible labels at every width. Esc clears the search, and a second Esc focuses the canvas, which is one Tab stop labelled with its node and link counts. The toolbar is hidden at 0 nodes; the empty canvas says why and offers one action. The canvas instance is kept across route changes, so returning shows the same picture and camera with no layout run (`components/graph/graph-cache.ts` for positions, `components/graph/graph-canvas.tsx`). Graphs over 300 nodes seed positions at once, settle off-thread, and cull labels below zoom 0.6 except the 80 best-connected nodes. |
 | `/inbox` | Inbox | Proposal rows (detail panel from 1280px, detail page below), All / Create / Update tabs and an agent select when several agents are pending (the agent is in `?agent=`, so Back keeps it); the selected row takes focus on load; ↑/↓ move selection and focus, Enter, A, R. |
 | `/inbox/:id` | Proposal | Reason, change summary, diff, floating action bar (R / E / A), edit-and-approve modal. |
 | `/settings` | Settings | Six sections in a section list (General, Startup, Agents, Search, Updates, About), `?section=` deep links. Opened from the navigation's Settings entry or `Ctrl`/`⌘+,`. General holds the theme, the navigation style (Sidebar or Floating) and, in Floating, the bar position. Changes apply on pick; no Save button. |
 | `/recommend` | Recommend | Prompt (⌘Enter), collapsed layer summary that opens layer chips and per-layer stepper, profiles and per-layer candidates with reasons, selection bar → STACK.md modal. |
-| `/skills` | Skills | Installed agent skills grouped by area. One filter row: search and an agent select, with area chips (`?area=`) beside it. Instant search, five rows per area with `Show all N`. A row's collapsed line is name, source chips and description; the area control and `Changed by you` sit in its Details, with reset. Sidebar item (`G then K`); the All view previews five rows per area. Expanded rows read "Details" / "Hide details"; the Shared filter has a hint. |
+| `/skills` | Skills | Installed agent skills grouped by area. One filter row: search and an agent select, with area chips (`?area=`) beside it. Instant search, five rows per area with `Show all N`. A row's collapsed line is name, source chips and description; the area control and `Changed by you` sit in its Details, with reset. Sidebar item (`G then K`); the All view previews five rows per area. Agent chips are neutral (bordered, muted, no agent hue). Expanded rows read "Details" / "Hide details"; the Shared filter has a hint. |
 | overlays | ⌘K palette, New note dialog | Available on every route. |
 
 Every route except Home is lazy-loaded (`App.tsx`, `React.lazy` + a quiet skeleton, shown only after 150ms) and prefetched on sidebar hover or focus and when the browser is idle; CodeMirror, Cytoscape, Shiki and the markdown stack only load with the routes that use them.
@@ -263,3 +265,4 @@ Every route except Home is lazy-loaded (`App.tsx`, `React.lazy` + a quiet skelet
 - Do keep the left type marker for note types only. Don't add colored side borders to cards, alerts or callouts.
 - Do keep motion under 400ms with a reduced-motion path. Don't block input with transitions.
 - Don't let it drift toward a generic shadcn admin panel, neon or glowing "AI" styling, or low density.
+- Do give a count string a `<key>One` entry in `en.ts` and `es.ts` when one reads differently. `t()` uses it when `count` is 1, so Spanish gets "1 pendiente" and "3 pendientes" without a branch in the component.

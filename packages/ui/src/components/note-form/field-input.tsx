@@ -224,7 +224,7 @@ export function LinkField({
               <span className="flex min-w-0 items-center gap-1.5">
                 <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full" style={{ backgroundColor: typeColor(note.type) }} />
                 <span className="truncate">{note.title || note.id}</span>
-                <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{note.id}</span>
+                <span className="shrink-0 font-mono text-[11px] text-muted-foreground">{note.id}</span>
               </span>
             </MultiSelectItem>
           ))}
@@ -537,7 +537,7 @@ function StackLayerRow({
                   <span className="flex min-w-0 items-center gap-1.5">
                     <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full" style={{ backgroundColor: "var(--type-tech)" }} />
                     <span className="truncate">{tech.title || tech.id}</span>
-                    <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{tech.id}</span>
+                    <span className="shrink-0 font-mono text-[11px] text-muted-foreground">{tech.id}</span>
                   </span>
                 </MultiSelectItem>
               ))}

@@ -162,7 +162,7 @@ function InboxRow({
             <span
               aria-hidden="true"
               className={cn(
-                "grid size-4 shrink-0 place-items-center rounded-md font-mono text-[9px] font-semibold",
+                "grid size-[18px] shrink-0 place-items-center rounded-md font-mono text-[11px] leading-none font-semibold",
                 pack && "bg-muted text-muted-foreground ring-1 ring-border",
               )}
               style={pack ? undefined : { backgroundColor: agentColor(name), color: "#111113" }}

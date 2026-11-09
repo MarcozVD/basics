@@ -35,6 +35,8 @@ const PROFILE_FIELD: Field = { key: "profile", kind: "link", linkType: "profile"
 
 interface NewNoteDetail {
   id?: string;
+  /** Free-text title; the dialog derives a valid id from it. */
+  title?: string;
   type?: NoteType;
   /** Caller that opened the dialog, so creation can return to that screen. */
   from?: "projects";
@@ -251,11 +253,19 @@ export function NewNoteDialog() {
     const onOpen = (event: Event) => {
       const detail = (event as CustomEvent<NewNoteDetail | undefined>).detail;
       const requestedId = detail?.id?.trim() ?? "";
+      const requestedTitle = detail?.title?.trim() ?? "";
       const requestedType = detail?.type && TYPE_ORDER.includes(detail.type) ? detail.type : "tech";
       setType(requestedType);
-      setTitle(requestedId);
-      setId(requestedId);
-      setIdEdited(Boolean(requestedId));
+      if (requestedTitle) {
+        // A search query is a title, not an id: slug it exactly as typing would.
+        setTitle(requestedTitle);
+        setId(slugify(requestedTitle));
+        setIdEdited(false);
+      } else {
+        setTitle(requestedId);
+        setId(requestedId);
+        setIdEdited(Boolean(requestedId));
+      }
       setTechKind("framework");
       setCheckKind("test");
       const defaultLayer = layers.data?.[0]?.id;
@@ -458,7 +468,7 @@ export function NewNoteDialog() {
                     <span id={layersLabelId} className="text-xs text-muted-foreground">
                       {t("new.layers")}
                     </span>
-                    <span className="text-[10.5px] text-muted-foreground">{t("new.layersHint")}</span>
+                    <span className="text-[11px] text-muted-foreground">{t("new.layersHint")}</span>
                   </div>
                   <fieldset aria-labelledby={layersLabelId} className="m-0 flex min-w-0 flex-wrap gap-1 border-0 p-0">
                     {(layers.data ?? []).map((item) => {

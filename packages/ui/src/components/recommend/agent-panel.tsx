@@ -280,7 +280,7 @@ export function AgentPanel({ description, layers, onSelectTechs, onClose }: Agen
           {proposed.length > 0 ? (
             <Link
               to="/inbox"
-              className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-2.5 py-1 font-mono text-[10.5px] text-primary-text hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-2.5 py-1 font-mono text-[11px] text-primary-text hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
             >
               <Inbox className="size-3" aria-hidden="true" />
               {t("recommend.agent.proposals", { ids: proposed.join(", ") })}

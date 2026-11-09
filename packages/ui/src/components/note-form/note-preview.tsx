@@ -49,7 +49,7 @@ function PreviewCard({ id, open }: { id: string; open: boolean }) {
       <span className="truncate text-sm font-semibold tracking-tight">{title}</span>
       <div className="flex items-center gap-2">
         <TypeChip type={type} />
-        <span className="truncate font-mono text-[10px] text-muted-foreground">{id}</span>
+        <span className="truncate font-mono text-[11px] text-muted-foreground">{id}</span>
       </div>
       <p className="line-clamp-3 text-xs leading-relaxed text-muted-foreground">{text || (note.isPending ? t("state.loading") : "")}</p>
     </div>

@@ -1616,7 +1616,7 @@ export default function GraphCanvas({
                 {t("graph.connections", { count: hover.degree })}
               </div>
               <div className="max-w-56 truncate text-[13px] font-semibold tracking-tight text-popover-foreground">{hover.title}</div>
-              <div className="max-w-56 truncate font-mono text-[10.5px] text-muted-foreground">{hover.id}</div>
+              <div className="max-w-56 truncate font-mono text-[11px] text-muted-foreground">{hover.id}</div>
             </div>
           </motion.div>
         )}

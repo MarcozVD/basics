@@ -179,7 +179,7 @@ export function ApprovalCard({
           <span
             aria-hidden="true"
             className={cn(
-              "grid size-[18px] shrink-0 place-items-center rounded-md font-mono text-[10px] font-semibold",
+              "grid size-[18px] shrink-0 place-items-center rounded-md font-mono text-[11px] font-semibold",
               agentKind === "pack" && "bg-muted text-muted-foreground ring-1 ring-border",
             )}
             style={agentKind === "pack" ? undefined : { backgroundColor: agentColor, color: agentForeground }}

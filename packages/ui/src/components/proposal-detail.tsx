@@ -50,7 +50,7 @@ function AgentAvatar({ name, className }: { name: string; className?: string }) 
   return (
     <span
       aria-hidden="true"
-      className={cn("grid size-5 shrink-0 place-items-center rounded-md font-mono text-[10px] font-semibold text-[#111113]", className)}
+      className={cn("grid size-5 shrink-0 place-items-center rounded-md font-mono text-[11px] font-semibold text-[#111113]", className)}
       style={{ backgroundColor: agentColor(name) }}
     >
       {agentInitial(name)}
@@ -60,7 +60,7 @@ function AgentAvatar({ name, className }: { name: string; className?: string }) 
 
 function Kbd({ children }: { children: string }) {
   return (
-    <kbd className="hidden rounded-full border border-current/30 px-1.5 font-mono text-[10px] leading-4 text-current sm:inline-block">
+    <kbd className="hidden rounded-full border border-current/30 px-1.5 font-mono text-[11px] leading-4 text-current sm:inline-block">
       {children}
     </kbd>
   );

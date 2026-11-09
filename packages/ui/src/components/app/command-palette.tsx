@@ -22,6 +22,7 @@ import {
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { type KeyboardEvent as ReactKeyboardEvent, type ReactNode, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { Button } from "@/components/ui/button";
 import { type TranslationKey, useI18n } from "@/i18n";
 import { searchCommands } from "@/lib/command-search";
 import { PALETTE_SEARCH_EVENT } from "@/lib/desktop-shell";
@@ -161,7 +162,7 @@ export function AppCommandPalette() {
           keywords: [note.id],
           badge: (
             <span
-              className="inline-flex h-5 items-center gap-1 rounded-full px-2 text-[10px] font-medium"
+              className="inline-flex h-5 items-center gap-1 rounded-full px-2 text-[11px] font-medium"
               style={tintStyle(typeColor(note.type))}
             >
               {t(`type.${note.type}` as TranslationKey)}
@@ -179,7 +180,7 @@ export function AppCommandPalette() {
           keywords: [proposal.id, t("palette.pending")],
           badge: (
             <span
-              className="inline-flex h-5 items-center rounded-full px-2 text-[10px] font-medium"
+              className="inline-flex h-5 items-center rounded-full px-2 text-[11px] font-medium"
               style={tintStyle(typeColor(proposal.type))}
             >
               {t(`type.${proposal.type}` as TranslationKey)}
@@ -199,7 +200,7 @@ export function AppCommandPalette() {
           keywords: [note.id],
           badge: (
             <span
-              className="inline-flex h-5 items-center gap-1 rounded-full px-2 text-[10px] font-medium"
+              className="inline-flex h-5 items-center gap-1 rounded-full px-2 text-[11px] font-medium"
               style={tintStyle(typeColor(note.type))}
             >
               {t(`type.${note.type}` as TranslationKey)}
@@ -399,7 +400,7 @@ export function AppCommandPalette() {
                     aria-autocomplete="list"
                     className="h-12 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
                   />
-                  <kbd className="hidden rounded border border-border px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground sm:inline-block">
+                  <kbd className="hidden rounded border border-border px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground sm:inline-block">
                     ESC
                   </kbd>
                 </div>
@@ -412,13 +413,29 @@ export function AppCommandPalette() {
                   className="max-h-[60vh] overflow-y-auto overscroll-contain p-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
                 >
                   {rows.length === 0 ? (
-                    <div className="p-8 text-center text-sm text-muted-foreground">{t("palette.empty")}</div>
+                    <div className="flex flex-col items-center gap-3 p-6 text-center text-sm text-muted-foreground">
+                      <span>{t("palette.empty")}</span>
+                      {query.trim() ? (
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => {
+                            const title = query.trim();
+                            close();
+                            window.dispatchEvent(new CustomEvent("basics:new-note", { detail: { title } }));
+                          }}
+                        >
+                          {t("palette.create", { title: query.trim() })}
+                        </Button>
+                      ) : null}
+                    </div>
                   ) : (
                     grouped.map(([group, list]) => (
                       <div key={group} className="mb-1 last:mb-0">
                         <div
                           aria-hidden="true"
-                          className="px-2 py-1.5 text-[10px] font-semibold tracking-wider text-muted-foreground uppercase"
+                          className="px-2 py-1.5 text-[11px] font-semibold tracking-wider text-muted-foreground uppercase"
                         >
                           {group}
                         </div>
@@ -459,7 +476,7 @@ export function AppCommandPalette() {
                               <span className="relative z-10 flex-1 truncate">{item.label}</span>
                               {item.badge ? <span className="relative z-10 shrink-0">{item.badge}</span> : null}
                               {item.hint ? (
-                                <kbd className="relative z-10 rounded border border-border px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                                <kbd className="relative z-10 rounded border border-border px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">
                                   {item.hint}
                                 </kbd>
                               ) : null}

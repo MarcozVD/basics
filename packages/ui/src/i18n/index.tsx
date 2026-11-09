@@ -53,7 +53,10 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
   const t = useCallback(
     (key: TranslationKey, vars?: Record<string, string | number>) => {
       const dictionary = language === "es" ? es : en;
-      let text = dictionary[key] ?? en[key];
+      // Count strings carry a `...One` variant so "1 pendiente" never becomes "1 pendientes".
+      const oneKey = `${key}One` as TranslationKey;
+      const resolved = vars?.count === 1 && oneKey in en ? oneKey : key;
+      let text = dictionary[resolved] ?? en[resolved];
       if (vars) {
         for (const [name, value] of Object.entries(vars)) text = text.split(`{${name}}`).join(String(value));
       }

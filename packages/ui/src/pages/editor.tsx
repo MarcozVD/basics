@@ -118,7 +118,7 @@ function ConnectionRow({ id, broken }: { id: string; broken: boolean }) {
     >
       <TypeDot type={summary?.type} />
       <span className="min-w-0 flex-1 truncate text-xs">{title}</span>
-      <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{id}</span>
+      <span className="shrink-0 font-mono text-[11px] text-muted-foreground">{id}</span>
     </button>
   );
 
@@ -167,7 +167,7 @@ function LastChecks({ checks }: { checks: Record<string, LastCheck> }) {
                 <div className="flex flex-col gap-1 font-mono text-[11px]">
                   {check.duration_ms !== undefined ? <span>{t("editor.checkDuration", { ms: check.duration_ms })}</span> : null}
                   {output.length ? (
-                    <pre className="max-w-80 overflow-auto whitespace-pre-wrap text-[10.5px] leading-relaxed">{output.join("\n")}</pre>
+                    <pre className="max-w-80 overflow-auto whitespace-pre-wrap text-[11px] leading-relaxed">{output.join("\n")}</pre>
                   ) : null}
                 </div>
               }
@@ -176,12 +176,12 @@ function LastChecks({ checks }: { checks: Record<string, LastCheck> }) {
                 type="button"
                 aria-label={`${id}, ${status}, ${at}`}
                 className={cn(
-                  "inline-flex min-h-6 min-w-0 max-w-full items-center gap-1.5 rounded-full border px-2 py-0.5 font-mono text-[10.5px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+                  "inline-flex min-h-6 min-w-0 max-w-full items-center gap-1.5 rounded-full border px-2 py-0.5 font-mono text-[11px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
                   CHECK_TONE[tone],
                 )}
               >
                 <span className="truncate">{id}</span>
-                <span className="shrink-0 text-[10px] tracking-wide uppercase">{status}</span>
+                <span className="shrink-0 text-[11px] tracking-wide uppercase">{status}</span>
                 <span className="shrink-0 text-muted-foreground">{at}</span>
               </button>
             </Tooltip>
@@ -709,7 +709,7 @@ export function EditorPage() {
             <ChevronDown className={cn("size-3.5 transition-transform duration-200", !connectionsOpen && "-rotate-90")} />
           </span>
           {t("editor.connections")}
-          <span className="ml-2 font-mono text-[10px] font-normal tracking-normal normal-case">
+          <span className="ml-2 font-mono text-[11px] font-normal tracking-normal normal-case">
             {t("editor.connectionsSummary", {
               links: note.links.length,
               backlinks: note.backlinks.length,

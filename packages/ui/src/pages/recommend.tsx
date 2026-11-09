@@ -83,7 +83,7 @@ const enter = (index: number, reduce: boolean) => ({
 function TechChip({ id }: { id: string }) {
   return (
     <span
-      className="inline-flex h-5 items-center rounded-full px-2 font-mono text-[10.5px] font-medium"
+      className="inline-flex h-5 items-center rounded-full px-2 font-mono text-[11px] font-medium"
       style={tintStyle("var(--type-tech)")}
     >
       {id}
@@ -131,7 +131,7 @@ function ModeIndicator({ mode }: { mode: Recommendation["mode"] }) {
   const t = useT();
   const hybrid = mode === "hybrid";
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/60 px-2 py-0.5 font-mono text-[10.5px] text-muted-foreground">
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/60 px-2 py-0.5 font-mono text-[11px] text-muted-foreground">
       <span aria-hidden="true" className={cn("size-1.5 rounded-full", hybrid ? "bg-primary" : "bg-muted-foreground/60")} />
       {t(hybrid ? "recommend.mode.hybrid" : "recommend.mode.keywords")}
     </span>
@@ -572,7 +572,7 @@ export function RecommendPage() {
                   aria-label={`${t("recommend.copyCli")}: ${EMBEDDINGS_CLI}`}
                   title={t("recommend.copyCli")}
                   onClick={() => void copyText(EMBEDDINGS_CLI)}
-                  className="mt-0.5 inline-flex h-6 max-w-full items-center gap-1.5 self-start rounded-md border border-border bg-muted/60 px-2 font-mono text-[10.5px] text-foreground transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                  className="mt-0.5 inline-flex h-6 max-w-full items-center gap-1.5 self-start rounded-md border border-border bg-muted/60 px-2 font-mono text-[11px] text-foreground transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                 >
                   <span className="truncate">{EMBEDDINGS_CLI}</span>
                   <Copy className="size-3 shrink-0 text-muted-foreground" aria-hidden="true" />
@@ -614,7 +614,7 @@ export function RecommendPage() {
               </Button>
             }
             leadingAction={
-              <kbd className="ml-2 rounded-full border border-border px-1.5 font-mono text-[10px] leading-4 text-muted-foreground">
+              <kbd className="ml-2 rounded-full border border-border px-1.5 font-mono text-[11px] leading-4 text-muted-foreground">
                 {t("recommend.shortcut", { combo: modChord("↵") })}
               </kbd>
             }
