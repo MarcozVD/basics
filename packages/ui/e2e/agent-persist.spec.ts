@@ -55,7 +55,7 @@ test("an agent answer survives leaving Recommend, a reload, and Clear removes it
   await expect(panel).toBeVisible();
   await expect(panel).toContainText(ANSWER);
   await panel.getByRole("button", { name: "Select these (1)", exact: true }).click();
-  await expect(page.getByRole("checkbox", { name: "Select fastapi", exact: true })).toBeChecked();
+  await expect(page.getByRole("checkbox", { name: "Select FastAPI", exact: true })).toBeChecked();
 
   // Clear drops the whole session, the agent answer included.
   await page.getByRole("button", { name: "Clear", exact: true }).click();

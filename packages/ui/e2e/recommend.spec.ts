@@ -11,9 +11,9 @@ test("recommends fastapi and exports the project files", async ({ page }) => {
 
   const backend = page.getByRole("heading", { name: "Backend", exact: true });
   await expect(backend).toBeVisible();
-  await expect(backend.locator("..").getByRole("link").first()).toHaveText("fastapi");
+  await expect(backend.locator("..").getByRole("link").first()).toHaveText("FastAPI");
 
-  await page.getByRole("checkbox", { name: "Select fastapi", exact: true }).check();
+  await page.getByRole("checkbox", { name: "Select FastAPI", exact: true }).check();
   await page.getByRole("button", { name: "Export stack", exact: true }).click();
 
   const dialog = page.getByRole("dialog");
@@ -128,7 +128,7 @@ test("creates a project from the recommendation and merges its stack on repeat",
     }
   };
 
-  await recommendAndPick(["fastapi"]);
+  await recommendAndPick(["FastAPI"]);
   await page.getByRole("button", { name: "Create project", exact: true }).click();
 
   const dialog = page.getByRole("dialog");
@@ -150,7 +150,7 @@ test("creates a project from the recommendation and merges its stack on repeat",
   expect(projectData.data.stack).toEqual({ backend: ["fastapi"] });
 
   // Same title again, now with an extra tech selected → the dialog offers "Update its stack".
-  await recommendAndPick(["fastapi", "pytest"]);
+  await recommendAndPick(["FastAPI", "pytest"]);
   await page.getByRole("button", { name: "Create project", exact: true }).click();
 
   const dialog2 = page.getByRole("dialog");

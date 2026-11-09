@@ -22,7 +22,7 @@ A breaking change to any of these ships in a major release:
 
 - **UI layout and routes** — screens, components, shortcuts, colors and copy can change in any release.
 - **Exact scores and ordering** — score values and therefore the order of recommendations can change when the scoring
-  improves. Treat `recommend` as a shortlist, not a fixed ranking.
+  improves. Treat `recommend` as a shortlist, not a fixed ranking. The **Recommend** screen shows the order without numbers; the values sit behind each card's **Why**.
 - **Internal APIs of `@marcozvd/basics-core`** — only what is documented here is public. Undocumented exports and file
   formats can change without notice.
 - **Generated reference formatting** — the content of `site/reference/*.md` is generated from the code; its Markdown

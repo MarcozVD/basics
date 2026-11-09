@@ -1,20 +1,6 @@
-import type { Candidate, ExportFile, Recommendation } from "@marcozvd/basics-core";
+import type { ExportFile, Recommendation } from "@marcozvd/basics-core";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import {
-  AlertTriangle,
-  Ban,
-  Check,
-  ChevronDown,
-  Copy,
-  FileDown,
-  Info,
-  type LucideIcon,
-  MessageSquareText,
-  Plus,
-  Sparkles,
-  Star,
-  X,
-} from "lucide-react";
+import { AlertTriangle, Check, ChevronDown, Copy, FileDown, Info, MessageSquareText, Plus, Sparkles, X } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -47,7 +33,8 @@ import { useEmbeddingsProgress } from "@/lib/events";
 import { useIntro } from "@/lib/intro";
 import { DOCK_SPACE, useResolvedDockEdge } from "@/lib/navigation";
 import { useDocumentTitle } from "@/lib/page-title";
-import { queryKeys, useEmbeddings, useLayers, useStats } from "@/lib/queries";
+import { queryKeys, useEmbeddings, useLayers, useNotes, useStats } from "@/lib/queries";
+import { buildShortlist, type ShortlistCard } from "@/lib/recommend-shortlist";
 import { clearRecommend, updateAgent, updateRecommend, useRecommendStore } from "@/lib/recommend-store";
 import { useReturnFocus } from "@/lib/return-focus";
 import { toast } from "@/lib/toast";
@@ -65,14 +52,17 @@ function formatBytes(bytes: number): string {
   return `${bytes} B`;
 }
 
-const COLUMNS = "grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(280px,1fr))]";
+/** Cards keep their own width and wrap into rows, so a short layer leaves no dead column. */
+const CARD_GRID = "grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(280px,1fr))]";
 /** Profiles keep their column width even when only one matches. */
 const PROFILE_COLUMNS = "grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(300px,1fr))]";
-/** Only the first cards of a column stagger in; the rest appear with them. */
+/** Only the first cards of a layer stagger in; the rest appear with them. */
 const STAGGER_LIMIT = 10;
 const STAGGER_STEP = 0.02;
 /** The selection pill floats 20px off the window's bottom edge, inside the content panel. */
 const BAR_BOTTOM = 20;
+/** How many phrases a reason line shows before it says how many more there are. */
+const REASON_LIMIT = 2;
 
 const enter = (index: number, reduce: boolean) => ({
   initial: index < STAGGER_LIMIT ? { opacity: 0, y: reduce ? 0 : 6 } : false,
@@ -80,50 +70,56 @@ const enter = (index: number, reduce: boolean) => ({
   transition: { duration: 0.18, ease: EASE_OUT, delay: Math.min(index, STAGGER_LIMIT) * STAGGER_STEP },
 });
 
-function TechChip({ id }: { id: string }) {
+function TechChip({ id, title }: { id: string; title?: string }) {
   return (
     <span
+      title={id}
       className="inline-flex h-5 items-center rounded-full px-2 font-mono text-[11px] font-medium"
       style={tintStyle("var(--type-tech)")}
     >
-      {id}
+      {title || id}
     </span>
   );
 }
 
-function PhraseList({ icon: Icon, label, className, phrases }: { icon: LucideIcon; label: string; className: string; phrases: string[] }) {
+/** Words first, a quiet sentence. Numbers live only in the per-card "Why" disclosure. */
+function ReasonLine({ label, phrases }: { label: string; phrases: string[] }) {
   if (phrases.length === 0) return null;
+  const shown = phrases.slice(0, REASON_LIMIT).join(" · ");
+  const rest = phrases.length - REASON_LIMIT;
   return (
-    <ul aria-label={label} className="flex flex-col gap-1">
-      {phrases.map((phrase) => (
-        <li key={phrase} className="flex items-start gap-1.5 text-[12px] leading-4 text-muted-foreground">
-          <Icon className={cn("mt-px size-3 shrink-0", className)} aria-hidden="true" />
-          <span>{phrase}</span>
-        </li>
-      ))}
-    </ul>
+    <p className="text-[12px] leading-4 text-muted-foreground">
+      <span className="font-medium text-foreground">{label}:</span> {shown}
+      {rest > 0 ? ` +${rest}` : null}
+    </p>
   );
 }
 
-function ScoreBar({ value, max, reduce }: { value: number; max: number; reduce: boolean }) {
-  const ratio = max > 0 ? Math.max(0, value) / max : 0;
+/**
+ * The note's own avoid_when matched. Amber icon, muted text and no red card
+ * border: it is a reason to look closer, not a verdict against the tech.
+ */
+function WatchOutLine({ label, phrases }: { label: string; phrases: string[] }) {
+  if (phrases.length === 0) return null;
+  const shown = phrases.slice(0, REASON_LIMIT).join(" · ");
+  const rest = phrases.length - REASON_LIMIT;
   return (
-    <div aria-hidden="true" className="h-1 w-full overflow-hidden rounded-full bg-muted">
-      <motion.div
-        className="h-full origin-left rounded-full bg-primary"
-        initial={{ scaleX: reduce ? ratio : 0 }}
-        animate={{ scaleX: ratio }}
-        transition={reduce ? { duration: 0 } : { duration: 0.4, ease: EASE_OUT }}
-      />
-    </div>
+    <p className="flex items-start gap-1.5 text-[12px] leading-4 text-muted-foreground">
+      <AlertTriangle className="mt-px size-3 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden="true" />
+      <span>
+        <span className="font-medium text-foreground">{label}:</span> {shown}
+        {rest > 0 ? ` +${rest}` : null}
+      </span>
+    </p>
   );
 }
 
 interface CandidateCardProps {
-  candidate: Candidate;
-  maxScore: number;
+  card: ShortlistCard;
+  title: string;
+  layerTitleOf: (id: string) => string;
+  profileFits: string[];
   selected: boolean;
-  reduce: boolean;
   onToggle: () => void;
 }
 
@@ -138,101 +134,89 @@ function ModeIndicator({ mode }: { mode: Recommendation["mode"] }) {
   );
 }
 
-function ScoreValue({ value, detail, className }: { value: number | string; detail?: string; className?: string }) {
+function CandidateCard({ card, title, layerTitleOf, profileFits, selected, onToggle }: CandidateCardProps) {
   const t = useT();
-  return (
-    <Tooltip
-      side="top"
-      align="center"
-      arrow
-      sideOffset={6}
-      content={<span className="block max-w-72 whitespace-normal font-mono text-[11px] leading-4">{detail ?? t("recommend.score")}</span>}
-    >
-      <button
-        type="button"
-        aria-label={`${t("recommend.score")}: ${value}`}
-        className={cn(
-          "relative z-10 -mx-2 -my-1 inline-flex min-h-6 min-w-6 cursor-help items-center justify-center rounded-sm px-2 py-1 font-mono text-[11px] text-muted-foreground tabular-nums transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
-          className,
-        )}
-      >
-        {value}
-      </button>
-    </Tooltip>
-  );
-}
-
-function CandidateCard({ candidate, maxScore, selected, reduce, onToggle }: CandidateCardProps) {
-  const t = useT();
-  const avoid = candidate.matched_avoid_when.length > 0;
-  const hybrid = candidate.hybrid;
+  const { candidate, alsoLayers } = card;
   const breakdown = candidate.score_breakdown;
-  const negated = [...new Set([...candidate.negated_use_when, ...candidate.negated_avoid_when])];
-  const detail = [
-    `${t("recommend.breakdown.keywords")} ${breakdown.keywords}`,
-    `${t("recommend.breakdown.text")} ${breakdown.text}`,
-    `${t("recommend.breakdown.synonyms")} ${breakdown.synonyms}`,
-    breakdown.semantic === undefined ? "" : `${t("recommend.breakdown.semantic")} ${breakdown.semantic.toFixed(3)}`,
-    `${t("recommend.breakdown.negation")} ${breakdown.negation}`,
-    `${t("recommend.breakdown.language")} ${breakdown.language}`,
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  const matches = [...candidate.matched_use_when, ...candidate.matched_performs_best];
+  const watchOut = [...new Set([...candidate.matched_avoid_when, ...candidate.negated_use_when, ...candidate.negated_avoid_when])];
+  const parts: { label: string; value: string }[] = [
+    { label: t("recommend.breakdown.keywords"), value: String(breakdown.keywords) },
+    { label: t("recommend.breakdown.text"), value: String(breakdown.text) },
+    { label: t("recommend.breakdown.synonyms"), value: String(breakdown.synonyms) },
+    ...(breakdown.semantic === undefined ? [] : [{ label: t("recommend.breakdown.semantic"), value: breakdown.semantic.toFixed(3) }]),
+    { label: t("recommend.breakdown.negation"), value: String(breakdown.negation) },
+    { label: t("recommend.breakdown.language"), value: String(breakdown.language) },
+  ];
   return (
-    <Card
-      interactive
-      selected={selected}
-      size="compact"
-      className={cn(
-        "gap-2.5 bg-muted/40 py-3 hover:border-foreground/20",
-        avoid && "border-destructive/35 hover:border-destructive/50",
-        (hybrid === undefined ? candidate.score <= 0 : hybrid <= 0) && "border-dashed bg-transparent",
-      )}
-    >
+    <Card interactive selected={selected} size="compact" className="h-full gap-2.5 bg-muted/40 py-3 hover:border-foreground/20">
       <CardHeader className="gap-2">
-        <div className="flex min-w-0 items-center gap-2.5">
-          <span className="relative z-10 flex">
-            <Checkbox checked={selected} onCheckedChange={onToggle} aria-label={t("recommend.select", { id: candidate.id })} />
+        <div className="flex min-w-0 items-start gap-2.5">
+          <span className="relative z-10 flex pt-0.5">
+            <Checkbox checked={selected} onCheckedChange={onToggle} aria-label={t("recommend.select", { title })} />
           </span>
-          <Link
-            to={`/notes/${encodeURIComponent(candidate.id)}`}
-            aria-label={t("recommend.open", { id: candidate.id })}
-            className={cn("min-w-0 truncate text-sm font-semibold tracking-tight outline-none", CARD_TARGET_CLASS)}
-          >
-            {candidate.id}
-          </Link>
-          <span className="truncate text-[11px] text-muted-foreground">{t(`option.${candidate.kind}` as TranslationKey)}</span>
-          <ScoreValue
-            value={hybrid === undefined ? candidate.score : hybrid.toFixed(3)}
-            detail={hybrid === undefined ? undefined : detail}
-            className="ml-auto"
-          />
+          <div className="min-w-0 flex-1">
+            <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+              <Link
+                to={`/notes/${encodeURIComponent(candidate.id)}`}
+                aria-label={t("recommend.open", { title })}
+                className={cn("min-w-0 truncate text-sm font-semibold tracking-tight outline-none", CARD_TARGET_CLASS)}
+              >
+                {title}
+              </Link>
+              <span className="truncate font-mono text-[11px] text-muted-foreground">{candidate.id}</span>
+            </div>
+            <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
+              <span>{layerTitleOf(card.layer)}</span>
+              <span aria-hidden="true">·</span>
+              <span>{t(`option.${candidate.kind}` as TranslationKey)}</span>
+              {alsoLayers.length > 0 ? (
+                <>
+                  <span aria-hidden="true">·</span>
+                  <span>{t("recommend.alsoFits", { layers: alsoLayers.map((layer) => layerTitleOf(layer)).join(", ") })}</span>
+                </>
+              ) : null}
+            </p>
+          </div>
         </div>
-        <ScoreBar value={hybrid ?? candidate.score} max={hybrid === undefined ? maxScore : 1} reduce={reduce} />
       </CardHeader>
-      {candidate.matched_use_when.length + candidate.matched_performs_best.length + candidate.matched_avoid_when.length > 0 && (
-        <CardContent className="flex flex-col gap-1.5">
-          <PhraseList icon={Check} label={t("recommend.useWhen")} className="text-type-practice" phrases={candidate.matched_use_when} />
-          <PhraseList icon={Star} label={t("recommend.performsBest")} className="text-primary" phrases={candidate.matched_performs_best} />
-          <PhraseList
-            icon={AlertTriangle}
-            label={t("recommend.avoidWhen")}
-            className="text-destructive"
-            phrases={candidate.matched_avoid_when}
-          />
-        </CardContent>
-      )}
-      {negated.length > 0 && (
-        <CardContent className="border-t border-border/60 pt-2">
-          <PhraseList icon={Ban} label={t("recommend.negated")} className="text-destructive/70" phrases={negated} />
-        </CardContent>
-      )}
+      <CardContent className="flex flex-col gap-1">
+        <ReasonLine label={t("recommend.matches")} phrases={matches} />
+        {profileFits.length > 0 ? (
+          <p className="text-[12px] leading-4 text-muted-foreground">
+            <span className="font-medium text-foreground">{t("recommend.fitsProfile")}:</span> {profileFits.join(" · ")}
+          </p>
+        ) : null}
+        <WatchOutLine label={t("recommend.watchOut")} phrases={watchOut} />
+      </CardContent>
+      <CardContent className="border-t border-border/60 pt-2">
+        <details className="group">
+          <summary className="relative z-10 inline-flex cursor-pointer list-none items-center gap-1 text-[11px] font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+            <ChevronDown
+              aria-hidden="true"
+              className={cn("size-3 shrink-0 -rotate-90 transition-transform motion-reduce:transition-none", "group-open:rotate-0")}
+            />
+            {t("recommend.why")}
+          </summary>
+          <p className="relative z-10 mt-1.5 max-w-[60ch] text-[11px] leading-4 text-muted-foreground">{t("recommend.why.lead")}</p>
+          <dl className="relative z-10 mt-1.5 grid w-fit grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-[11px] leading-4">
+            {parts.map((part) => (
+              <div key={part.label} className="contents">
+                <dt className="text-muted-foreground">{part.label}</dt>
+                <dd className="text-right font-mono tabular-nums text-foreground">{part.value}</dd>
+              </div>
+            ))}
+          </dl>
+        </details>
+      </CardContent>
     </Card>
   );
 }
 
 interface ResultsProps {
   recommendation: Recommendation;
+  titleOf: (id: string) => string;
+  primaryLayerOf: (id: string) => string | undefined;
   layerTitle: (id: string) => string;
   selected: Set<string>;
   reduce: boolean;
@@ -240,12 +224,33 @@ interface ResultsProps {
   onUseProfile: (profileId: string, stack: Record<string, string[]>) => void;
 }
 
-function RecommendationResults({ recommendation, layerTitle, selected, reduce, onToggle, onUseProfile }: ResultsProps) {
+function RecommendationResults({
+  recommendation,
+  titleOf,
+  primaryLayerOf,
+  layerTitle,
+  selected,
+  reduce,
+  onToggle,
+  onUseProfile,
+}: ResultsProps) {
   const t = useT();
-  // A layer with no matching candidate is not shown; only when every layer is empty
-  // does the whole result fall back to one quiet message.
-  const layers = Object.entries(recommendation.layers).filter(([, candidates]) => candidates.length > 0);
-  const maxScore = Math.max(1, ...layers.flatMap(([, candidates]) => candidates.map((candidate) => candidate.score)));
+  // A tech that matches two layers shows once, under its primary layer, and says
+  // where else it fits. A layer whose cards all moved away renders nothing.
+  const sections = buildShortlist(recommendation.layers, primaryLayerOf);
+  const profileFits = new Map<string, string[]>();
+  for (const profile of recommendation.profiles) {
+    const title = titleOf(profile.id);
+    for (const tech of new Set(Object.values(profile.stack).flat())) {
+      profileFits.set(tech, [...(profileFits.get(tech) ?? []), title]);
+    }
+  }
+  const hasWatchOut = sections.some((section) =>
+    section.cards.some(
+      (card) =>
+        card.candidate.matched_avoid_when.length + card.candidate.negated_use_when.length + card.candidate.negated_avoid_when.length > 0,
+    ),
+  );
 
   return (
     <div className="flex flex-col gap-6">
@@ -257,14 +262,14 @@ function RecommendationResults({ recommendation, layerTitle, selected, reduce, o
               <motion.div key={profile.id} {...enter(index, reduce)} className="min-w-0">
                 <Card size="compact" className="h-full gap-3 bg-muted/40 py-3.5">
                   <CardHeader>
-                    <div className="flex min-w-0 items-center gap-2">
+                    <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
                       <Link
                         to={`/notes/${encodeURIComponent(profile.id)}`}
                         className="min-w-0 truncate text-[15px] font-semibold tracking-tight hover:underline"
                       >
-                        {profile.id}
+                        {titleOf(profile.id)}
                       </Link>
-                      <ScoreValue value={profile.hybrid === undefined ? profile.score : profile.hybrid.toFixed(3)} />
+                      <span className="truncate font-mono text-[11px] text-muted-foreground">{profile.id}</span>
                       <Button
                         variant="secondary"
                         size="sm"
@@ -282,7 +287,7 @@ function RecommendationResults({ recommendation, layerTitle, selected, reduce, o
                         <span className="w-20 shrink-0 truncate text-[11px] text-muted-foreground">{layerTitle(layer)}</span>
                         <span className="flex min-w-0 flex-wrap gap-1">
                           {techs.map((tech) => (
-                            <TechChip key={tech} id={tech} />
+                            <TechChip key={tech} id={tech} title={titleOf(tech)} />
                           ))}
                         </span>
                       </div>
@@ -295,27 +300,41 @@ function RecommendationResults({ recommendation, layerTitle, selected, reduce, o
         </section>
       )}
 
-      <section className="flex flex-col gap-2.5">
-        <h2 className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">{t("recommend.perLayer")}</h2>
-        {layers.length > 0 ? (
-          <div className={cn(COLUMNS, "items-start gap-4")}>
-            {layers.map(([layer, candidates]) => (
-              <div key={layer} className="flex min-w-0 flex-col gap-2">
-                <h3 className="px-1 text-sm font-semibold tracking-tight">{layerTitle(layer)}</h3>
-                {candidates.map((candidate, index) => (
-                  <motion.div key={candidate.id} {...enter(index, reduce)}>
-                    <CandidateCard
-                      candidate={candidate}
-                      maxScore={maxScore}
-                      selected={selected.has(candidate.id)}
-                      reduce={reduce}
-                      onToggle={() => onToggle(candidate.id)}
-                    />
-                  </motion.div>
-                ))}
-              </div>
-            ))}
-          </div>
+      <section className="flex flex-col gap-5">
+        <div className="flex flex-col gap-2">
+          <h2 className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">{t("recommend.perLayer")}</h2>
+          {hasWatchOut ? (
+            <p className="flex items-start gap-1.5 text-[11px] leading-4 text-muted-foreground">
+              <AlertTriangle className="mt-px size-3 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden="true" />
+              {t("recommend.legend.watchOut")}
+            </p>
+          ) : null}
+        </div>
+        {sections.length > 0 ? (
+          sections.map((section) => {
+            const headingId = `recommend-layer-${section.layer}`;
+            return (
+              <section key={section.layer} aria-labelledby={headingId} className="flex min-w-0 flex-col gap-2.5">
+                <h3 id={headingId} className="px-1 text-sm font-semibold tracking-tight">
+                  {layerTitle(section.layer)}
+                </h3>
+                <div className={CARD_GRID}>
+                  {section.cards.map((card, index) => (
+                    <motion.div key={card.candidate.id} {...enter(index, reduce)} className="min-w-0">
+                      <CandidateCard
+                        card={card}
+                        title={titleOf(card.candidate.id)}
+                        layerTitleOf={layerTitle}
+                        profileFits={profileFits.get(card.candidate.id) ?? []}
+                        selected={selected.has(card.candidate.id)}
+                        onToggle={() => onToggle(card.candidate.id)}
+                      />
+                    </motion.div>
+                  ))}
+                </div>
+              </section>
+            );
+          })
         ) : (
           <p className="text-sm text-muted-foreground">{t("recommend.noResults")}</p>
         )}
@@ -339,19 +358,19 @@ function ResultsSkeleton({ layers, perLayer, label }: { layers: string[]; perLay
           <div className={cn(block, "h-[122px]")} />
         </div>
       </div>
-      <div className="flex flex-col gap-2.5">
+      <div className="flex flex-col gap-5">
         <div className="h-3 w-16 rounded-full bg-muted" />
-        <div className={cn(COLUMNS, "items-start gap-4")}>
-          {layers.map((layer) => (
-            <div key={layer} className="flex flex-col gap-2">
-              <div className="mx-1 h-4 w-24 rounded-full bg-muted" />
+        {layers.map((layer) => (
+          <div key={layer} className="flex flex-col gap-2.5">
+            <div className="mx-1 h-4 w-24 rounded-full bg-muted" />
+            <div className={CARD_GRID}>
               {Array.from({ length: perLayer }, (_, index) => (
                 // biome-ignore lint/suspicious/noArrayIndexKey: placeholders have no identity.
                 <div key={index} className={cn(block, "h-[92px]")} />
               ))}
             </div>
-          ))}
-        </div>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -365,6 +384,8 @@ export function RecommendPage() {
   // The selection pill sits above the floating bar when it rests on the bottom edge.
   const barBottom = BAR_BOTTOM + (dockEdge === "bottom" ? DOCK_SPACE : 0);
   const layersQuery = useLayers();
+  // Titles and the note's own first layer come from the summaries Explore already loads.
+  const notes = useNotes();
   const stats = useStats();
   const vaultEmpty = stats.data?.total === 0;
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -394,6 +415,8 @@ export function RecommendPage() {
     () => new Map((layersQuery.data ?? []).map((layer) => [layer.id, layer.title || layer.id])),
     [layersQuery.data],
   );
+  const noteTitles = useMemo(() => new Map((notes.data ?? []).map((note) => [note.id, note.title || note.id])), [notes.data]);
+  const noteLayers = useMemo(() => new Map((notes.data ?? []).map((note) => [note.id, note.layers])), [notes.data]);
   const activeLayers = selectedLayers ?? layerIds;
   const allLayers = layerIds.length > 0 && activeLayers.length === layerIds.length;
   const layersSummary = t(allLayers ? "recommend.layersSummary.all" : "recommend.layersSummary.some", {
@@ -488,6 +511,8 @@ export function RecommendPage() {
   };
 
   const layerTitle = (id: string) => layerTitles.get(id) ?? id;
+  const titleOf = (id: string) => noteTitles.get(id) ?? id;
+  const primaryLayerOf = (id: string) => noteLayers.get(id)?.[0];
 
   /** Turn the currently selected techs into a per-layer stack for the project prefill. */
   const stackFromSelected = (): Record<string, string[]> => {
@@ -727,13 +752,35 @@ export function RecommendPage() {
         </AnimatePresence>
 
         <div className="mt-2">
-          {run.isPending ? (
+          {run.isPending && recommendation ? (
+            <div className="flex flex-col gap-2">
+              <p aria-hidden="true" className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Loader variant="spinner" size={12} label="" />
+                {t("recommend.loading")}
+              </p>
+              {/* Keep the previous shortlist visible and dimmed instead of blanking the page. */}
+              <div aria-busy="true" inert className="pointer-events-none opacity-50 transition-opacity">
+                <RecommendationResults
+                  recommendation={recommendation}
+                  titleOf={titleOf}
+                  primaryLayerOf={primaryLayerOf}
+                  layerTitle={layerTitle}
+                  selected={selected}
+                  reduce={reduce}
+                  onToggle={toggleTech}
+                  onUseProfile={useProfile}
+                />
+              </div>
+            </div>
+          ) : run.isPending ? (
             <ResultsSkeleton layers={activeLayers} perLayer={Math.min(perLayer, 4)} label={t("recommend.loading")} />
           ) : run.error ? (
             <ErrorState error={run.error} />
           ) : recommendation ? (
             <RecommendationResults
               recommendation={recommendation}
+              titleOf={titleOf}
+              primaryLayerOf={primaryLayerOf}
               layerTitle={layerTitle}
               selected={selected}
               reduce={reduce}

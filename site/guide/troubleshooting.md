@@ -39,9 +39,9 @@ exists in two type folders; ids are global.
 `basics pack update` only proposes notes whose installed `source` is `pack:<name>@<version>` and that changed in the
 shipped pack. Confirm the pack is installed with `basics pack list`, then `basics inbox list`.
 
-**Recommendations are all zeros**
+**Recommendations are all zeros, or the screen finds no candidates**
 The vault has no matching `use_when`, `performs_best` or tags for that description. Add reasons to the tech notes, or
-install a starter pack. Negative scores usually mean an `avoid_when` matched.
+install a starter pack. The CLI prints negative scores, usually because an `avoid_when` matched. On the Recommend screen that shows as a **Watch out** line on the card, and candidates that are not above zero are left out; when none is left the screen says **No candidates matched. Try a longer description.**
 
 **`basics embeddings enable` aborts**
 Without an interactive terminal it requires `--yes`. The download is about 500 MB; check free space and the cache path
