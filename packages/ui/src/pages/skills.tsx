@@ -10,13 +10,14 @@ import { PAGE_SECTIONS, Page, Reveal } from "@/components/page";
 import { PageHeader } from "@/components/page-header";
 import { ErrorState, Loading } from "@/components/state";
 import { type TranslationKey, useT } from "@/i18n";
-import { agentColor } from "@/lib/agent-color";
+
 import { deleteSkillArea, putSkillArea, SKILL_AGENTS, SKILL_AREAS, type SkillAgentId, type SkillArea, type SkillEntry } from "@/lib/api";
 import { useIntro } from "@/lib/intro";
+import { useDocumentTitle } from "@/lib/page-title";
 import { queryKeys, useConnectStatus, useSkills } from "@/lib/queries";
 import { useRouteSearchParams } from "@/lib/route-query";
 import { toast } from "@/lib/toast";
-import { tintStyle } from "@/lib/type-color";
+
 import { cn } from "@/lib/utils";
 
 /**
@@ -128,8 +129,7 @@ function AgentChip({ agent }: { agent: SkillAgentId }) {
   return (
     <span
       title={t(AGENT_FULL[agent])}
-      className="inline-flex h-5 shrink-0 items-center rounded-full px-2 text-[10px] font-medium"
-      style={tintStyle(agentColor(name))}
+      className="inline-flex h-5 shrink-0 items-center rounded-full border border-border bg-muted/60 px-2 text-[11px] font-medium text-muted-foreground"
     >
       {name}
     </span>
@@ -203,7 +203,7 @@ function FilterChip({
       )}
     >
       {children}
-      <span className="font-mono text-[10px] tabular-nums">{count}</span>
+      <span className="font-mono text-[11px] tabular-nums">{count}</span>
     </motion.button>
   );
 }
@@ -394,6 +394,7 @@ function BasicsSkillNotice() {
 
 export function SkillsPage() {
   const t = useT();
+  useDocumentTitle(t("page.skills.title"));
   const queryClient = useQueryClient();
   const skillsQuery = useSkills();
   const [searchParams, setSearchParams] = useRouteSearchParams();

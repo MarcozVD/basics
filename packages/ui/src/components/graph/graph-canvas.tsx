@@ -35,6 +35,8 @@ export interface GraphCanvasHandle {
   fit: () => void;
   /** Pan (and zoom in if needed) so the node sits in the middle of the free area. */
   centerOn: (id: string, opts?: { avoidRight?: number }) => void;
+  /** Move keyboard focus onto the canvas, as the search field's second Escape does. */
+  focus: () => void;
 }
 
 export interface GraphCanvasProps {
@@ -1068,6 +1070,7 @@ export default function GraphCanvas({
 
   useImperativeHandle(ref, () => ({
     fit: () => fitVisible(true),
+    focus: () => containerRef.current?.focus(),
     centerOn: (id, opts) => {
       const cy = cyRef.current;
       const node = cy?.getElementById(id);
@@ -1585,8 +1588,10 @@ export default function GraphCanvas({
         ref={containerRef}
         data-testid={mode === "full" ? "graph-canvas" : "local-graph-canvas"}
         role="img"
+        // biome-ignore lint/a11y/noNoninteractiveTabindex: the canvas is one keyboard tab stop, focused by the search field's second Escape, and labelled with its node/link counts.
+        tabIndex={0}
         aria-label={t("graph.canvas", { nodes: elements.nodes.length, edges: elements.edges.length })}
-        className="h-full w-full"
+        className="h-full w-full outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
       />
       <AnimatePresence>
         {hover && (
@@ -1611,7 +1616,7 @@ export default function GraphCanvas({
                 {t("graph.connections", { count: hover.degree })}
               </div>
               <div className="max-w-56 truncate text-[13px] font-semibold tracking-tight text-popover-foreground">{hover.title}</div>
-              <div className="max-w-56 truncate font-mono text-[10.5px] text-muted-foreground">{hover.id}</div>
+              <div className="max-w-56 truncate font-mono text-[11px] text-muted-foreground">{hover.id}</div>
             </div>
           </motion.div>
         )}

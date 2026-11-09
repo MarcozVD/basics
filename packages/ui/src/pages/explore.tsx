@@ -14,14 +14,15 @@ import { Page, Reveal } from "@/components/page";
 import { PageHeader } from "@/components/page-header";
 import { ErrorState, Loading } from "@/components/state";
 import { Button as LinkButton } from "@/components/ui/button";
-import { type TranslationKey, useT } from "@/i18n";
+import { type TranslationKey, useI18n, useT } from "@/i18n";
 import { modChord } from "@/lib/desktop";
 import { EASE_OUT, SPRING_LAYOUT, SPRING_PRESS } from "@/lib/ease";
 import { useIntentNavigate } from "@/lib/intent-navigate";
 import { useIntro } from "@/lib/intro";
+import { useDocumentTitle } from "@/lib/page-title";
 import { useFirstPaint, useProgressiveCount } from "@/lib/progressive";
 import { useLayers, useNotes, useSearch, useStats } from "@/lib/queries";
-import { formatCompactRelativeTime } from "@/lib/relative-time";
+import { formatFullDateTime, formatRelativeTime } from "@/lib/relative-time";
 import { useRouteSearchParams } from "@/lib/route-query";
 import { cn } from "@/lib/utils";
 
@@ -44,12 +45,20 @@ const MAX_LAYERS = 2;
  * column only joins them when the vault actually holds more than one provenance.
  */
 const LIST_GRID = "grid items-center gap-2 min-[1280px]:gap-3 grid-cols-[16px_minmax(0,1fr)_auto]";
+const LIST_GRID_NO_UPDATED = "grid items-center gap-2 min-[1280px]:gap-3 grid-cols-[16px_minmax(0,1fr)]";
 const LIST_GRID_COLUMNS =
   "min-[1280px]:grid-cols-[16px_minmax(240px,1fr)_minmax(0,110px)_minmax(130px,1fr)_88px] min-[1440px]:grid-cols-[16px_minmax(240px,1.4fr)_minmax(0,120px)_minmax(150px,1fr)_90px]";
 const LIST_GRID_COLUMNS_SOURCE =
   "min-[1280px]:grid-cols-[16px_minmax(240px,1fr)_minmax(0,110px)_minmax(130px,1fr)_78px_88px] min-[1440px]:grid-cols-[16px_minmax(240px,1.4fr)_minmax(0,120px)_minmax(150px,1fr)_86px_90px]";
+const LIST_GRID_COLUMNS_NO_UPDATED =
+  "min-[1280px]:grid-cols-[16px_minmax(240px,1fr)_minmax(0,110px)_minmax(130px,1fr)] min-[1440px]:grid-cols-[16px_minmax(240px,1.4fr)_minmax(0,120px)_minmax(150px,1fr)]";
+const LIST_GRID_COLUMNS_SOURCE_NO_UPDATED =
+  "min-[1280px]:grid-cols-[16px_minmax(240px,1fr)_minmax(0,110px)_minmax(130px,1fr)_78px] min-[1440px]:grid-cols-[16px_minmax(240px,1.4fr)_minmax(0,120px)_minmax(150px,1fr)_86px]";
 
-const listGrid = (showSource: boolean) => cn(LIST_GRID, showSource ? LIST_GRID_COLUMNS_SOURCE : LIST_GRID_COLUMNS);
+const listGrid = (showSource: boolean, showUpdated: boolean) => {
+  if (!showUpdated) return cn(LIST_GRID_NO_UPDATED, showSource ? LIST_GRID_COLUMNS_SOURCE_NO_UPDATED : LIST_GRID_COLUMNS_NO_UPDATED);
+  return cn(LIST_GRID, showSource ? LIST_GRID_COLUMNS_SOURCE : LIST_GRID_COLUMNS);
+};
 
 interface Row {
   id: string;
@@ -140,6 +149,7 @@ export function ExplorePage() {
   const { pathname } = useLocation();
   const reduce = useReducedMotion() ?? false;
   const searchRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
 
   const [searchParams, setSearchParams] = useRouteSearchParams();
   const typeParam = searchParams.get("type");
@@ -189,6 +199,7 @@ export function ExplorePage() {
   // The vault, not the filtered rows: a filter that matches nothing still sits on a page
   // with data, so the intro belongs behind the `?` there.
   const intro = useIntro("explore", stats.isSuccess ? (stats.data?.total ?? 0) > 0 : true);
+  useDocumentTitle(t("page.explore.title"));
   const listQuery = query ? hits : notes;
 
   const counts = useMemo(() => {
@@ -231,6 +242,9 @@ export function ExplorePage() {
     );
     return kinds.size > 1;
   }, [allNotes.data]);
+
+  // A vault with no timestamps should not spend a column on em dashes.
+  const showUpdated = useMemo(() => (allNotes.data ?? []).some((note) => Boolean(note.updated)), [allNotes.data]);
 
   const grouped = !query && !type && sort === "type";
   const groups: Group[] = useMemo(() => {
@@ -321,9 +335,16 @@ export function ExplorePage() {
   };
 
   const handleKeyDown = (event: ReactKeyboardEvent) => {
-    if (event.key === "Escape" && event.target === searchRef.current && searchText) {
+    // Esc clears the query first; a second Esc leaves the field for the list, so a keyboard
+    // user can walk the rows without tabbing through the toolbar. The list is one tab stop
+    // with `aria-activedescendant`, so focusing it is all it takes.
+    if (event.key === "Escape" && event.target === searchRef.current) {
       event.preventDefault();
-      setSearchText("");
+      if (searchText) {
+        setSearchText("");
+        return;
+      }
+      listRef.current?.focus();
       return;
     }
     if (!rows.length) return;
@@ -373,6 +394,7 @@ export function ExplorePage() {
       reduce,
       layerTitles,
       showSource,
+      showUpdated,
       onHover: () => setHovered(index),
       onOpen: () => openNote(row.id),
     };
@@ -415,7 +437,7 @@ export function ExplorePage() {
               rightIcon={
                 <kbd
                   title={t("explore.searchShortcut", { key: modChord("F") })}
-                  className="mr-2.5 hidden rounded-full border border-border px-1.5 font-mono text-[10px] leading-4 text-muted-foreground @min-[13rem]:inline"
+                  className="mr-2.5 hidden rounded-full border border-border px-1.5 font-mono text-[11px] leading-4 text-muted-foreground @min-[13rem]:inline"
                 >
                   {modChord("F")}
                 </kbd>
@@ -529,7 +551,9 @@ export function ExplorePage() {
             </Button>
           </fieldset>
 
-          {view === "list" && rows.length > 0 ? <ListHeader sort={sort} onSort={setSort} showSource={showSource} /> : null}
+          {view === "list" && rows.length > 0 ? (
+            <ListHeader sort={sort} onSort={setSort} showSource={showSource} showUpdated={showUpdated} />
+          ) : null}
         </PageHeader>
       </Reveal>
 
@@ -574,6 +598,17 @@ export function ExplorePage() {
               <SearchX className="mb-1 size-5 text-muted-foreground" aria-hidden="true" />
               <p className="text-sm font-medium">{t("explore.empty.title")}</p>
               <p className="text-sm text-muted-foreground">{t("explore.empty.description")}</p>
+              {query.trim() ? (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="mt-3"
+                  pressScale={0.97}
+                  onClick={() => window.dispatchEvent(new CustomEvent("basics:new-note", { detail: { title: query.trim() } }))}
+                >
+                  {t("explore.empty.create", { title: query.trim() })}
+                </Button>
+              ) : null}
               {hasFilters && (
                 <Button variant="secondary" size="sm" className="mt-3" pressScale={0.97} onClick={clearFilters}>
                   {t("explore.clearFilters")}
@@ -584,6 +619,7 @@ export function ExplorePage() {
         ) : (
           <div
             key={view}
+            ref={listRef}
             role="listbox"
             tabIndex={0}
             aria-label={t("explore.notes")}
@@ -633,6 +669,7 @@ interface ItemProps {
   reduce: boolean;
   layerTitles: Map<string, string>;
   showSource: boolean;
+  showUpdated: boolean;
   onHover: () => void;
   onOpen: () => void;
 }
@@ -643,7 +680,7 @@ function LayerChip({ id, title, flexible = false }: { id: string; title?: string
     <span
       title={label}
       className={cn(
-        "inline-flex h-5 max-w-40 items-center rounded-full border border-border px-2 font-mono text-[10.5px] text-muted-foreground",
+        "inline-flex h-5 max-w-40 items-center rounded-full border border-border px-2 font-mono text-[11px] text-muted-foreground",
         flexible ? "min-w-0" : "shrink-0",
       )}
     >
@@ -711,7 +748,7 @@ function LayerChips({
         <LayerChip key={id} id={id} title={layerTitles.get(id)} flexible={count === 1} />
       ))}
       {extra > 0 && (
-        <span title={hidden.join(", ")} className="shrink-0 font-mono text-[10px] text-muted-foreground">
+        <span title={hidden.join(", ")} className="shrink-0 font-mono text-[11px] text-muted-foreground">
           {t("explore.moreLayers", { count: extra })}
         </span>
       )}
@@ -763,7 +800,7 @@ function TagChips({ tags, className }: { tags: string[]; className: string }) {
       {tags.slice(0, count).map((tag) => (
         <span
           key={tag}
-          className="inline-flex h-5 shrink-0 items-center whitespace-nowrap rounded-full bg-muted px-2 font-mono text-[10px] text-muted-foreground"
+          className="inline-flex h-5 shrink-0 items-center whitespace-nowrap rounded-full bg-muted px-2 font-mono text-[11px] text-muted-foreground"
         >
           #{tag}
         </span>
@@ -774,7 +811,7 @@ function TagChips({ tags, className }: { tags: string[]; className: string }) {
             .slice(count)
             .map((tag) => `#${tag}`)
             .join(", ")}
-          className="shrink-0 font-mono text-[10px] text-muted-foreground"
+          className="shrink-0 font-mono text-[11px] text-muted-foreground"
         >
           {t("explore.moreTags", { count: extra })}
         </span>
@@ -786,7 +823,7 @@ function TagChips({ tags, className }: { tags: string[]; className: string }) {
 function AgentBadge() {
   const t = useT();
   return (
-    <span className="inline-flex h-5 items-center rounded-full bg-primary/12 px-2 font-mono text-[10.5px] font-medium text-primary-text">
+    <span className="inline-flex h-5 items-center rounded-full bg-primary/12 px-2 font-mono text-[11px] font-medium text-primary-text">
       {t("explore.agentBadge")}
     </span>
   );
@@ -799,7 +836,7 @@ function SourceBadge({ source }: { source: string }) {
     return (
       <span
         title={source}
-        className="inline-flex h-5 max-w-full items-center truncate rounded-full bg-primary/12 px-2 font-mono text-[10px] font-medium text-primary-text"
+        className="inline-flex h-5 max-w-full items-center truncate rounded-full bg-primary/12 px-2 font-mono text-[11px] font-medium text-primary-text"
       >
         {t("explore.agentBadge")}
       </span>
@@ -809,20 +846,30 @@ function SourceBadge({ source }: { source: string }) {
     return (
       <span
         title={source}
-        className="inline-flex h-5 max-w-full items-center truncate rounded-full bg-emerald-500/10 px-2 font-mono text-[10px] font-medium text-emerald-700 dark:text-emerald-300"
+        className="inline-flex h-5 max-w-full items-center truncate rounded-full bg-emerald-500/10 px-2 font-mono text-[11px] font-medium text-emerald-700 dark:text-emerald-300"
       >
         {t("explore.packBadge")}
       </span>
     );
   }
   return (
-    <span className="inline-flex h-5 max-w-full items-center truncate rounded-full bg-muted/60 px-2 font-mono text-[10px] text-muted-foreground">
+    <span className="inline-flex h-5 max-w-full items-center truncate rounded-full bg-muted/60 px-2 font-mono text-[11px] text-muted-foreground">
       {t("explore.manualBadge")}
     </span>
   );
 }
 
-function ListHeader({ sort, onSort, showSource }: { sort: Sort; onSort: (sort: Sort) => void; showSource: boolean }) {
+function ListHeader({
+  sort,
+  onSort,
+  showSource,
+  showUpdated,
+}: {
+  sort: Sort;
+  onSort: (sort: Sort) => void;
+  showSource: boolean;
+  showUpdated: boolean;
+}) {
   const t = useT();
   const sortButton = (value: Sort, label: string, className?: string) => (
     <button
@@ -843,25 +890,11 @@ function ListHeader({ sort, onSort, showSource }: { sort: Sort; onSort: (sort: S
     <div
       data-list-header
       className={cn(
-        listGrid(showSource),
-        "mt-3 h-8 border-b border-border px-3 text-[10.5px] font-medium tracking-wide text-muted-foreground uppercase",
+        listGrid(showSource, showUpdated),
+        "mt-3 h-8 border-b border-border px-3 text-[11px] font-medium text-muted-foreground",
       )}
     >
-      <button
-        type="button"
-        aria-label={t("explore.sort.type")}
-        title={t("explore.sort.type")}
-        onClick={() => onSort("type")}
-        className={cn(
-          "grid size-4 place-items-center rounded-sm transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
-          sort === "type" && "bg-muted",
-        )}
-      >
-        <span
-          aria-hidden="true"
-          className="h-4 w-[3px] rounded-full bg-[linear-gradient(to_bottom,var(--type-tech),var(--type-practice),var(--type-layer))]"
-        />
-      </button>
+      <span aria-hidden="true" />
       {sortButton("title", t("explore.sort.title"))}
       <span className="hidden min-[1280px]:block truncate">{t("explore.column.layers")}</span>
       <span className="hidden min-[1280px]:block truncate">{t("explore.column.tags")}</span>
@@ -870,12 +903,13 @@ function ListHeader({ sort, onSort, showSource }: { sort: Sort; onSort: (sort: S
           {t("explore.column.source")}
         </span>
       ) : null}
-      {sortButton("updated", t("explore.column.updated"), "justify-end")}
+      {showUpdated ? sortButton("updated", t("explore.column.updated"), "justify-end") : null}
     </div>
   );
 }
 
-function ListRow({ row, index, selected, reduce, layerTitles, showSource, onHover, onOpen }: ItemProps) {
+function ListRow({ row, index, selected, reduce, layerTitles, showSource, showUpdated, onHover, onOpen }: ItemProps) {
+  const { language } = useI18n();
   return (
     <button
       id={`note-row-${index}`}
@@ -889,7 +923,7 @@ function ListRow({ row, index, selected, reduce, layerTitles, showSource, onHove
       onClick={onOpen}
       title={row.id}
       className={cn(
-        listGrid(showSource),
+        listGrid(showSource, showUpdated),
         "group/row relative h-10 w-full scroll-mt-32 scroll-mb-24 rounded-lg border-b border-border/40 px-3 text-left outline-none last:border-b-0",
       )}
     >
@@ -905,7 +939,7 @@ function ListRow({ row, index, selected, reduce, layerTitles, showSource, onHove
       {/* The ID is not a column any more, but it stays one hover or focus away. */}
       <span className="relative flex min-w-0 items-baseline gap-2">
         <span className="min-w-0 truncate text-[13px] font-medium">{row.title}</span>
-        <span className="hidden min-w-0 shrink-0 truncate font-mono text-[10px] text-muted-foreground group-hover/row:inline group-focus-visible/row:inline">
+        <span className="hidden min-w-0 shrink-0 truncate font-mono text-[11px] text-muted-foreground group-hover/row:inline group-focus-visible/row:inline">
           {row.id}
         </span>
       </span>
@@ -920,13 +954,15 @@ function ListRow({ row, index, selected, reduce, layerTitles, showSource, onHove
           <SourceBadge source={row.source} />
         </span>
       ) : null}
-      <time
-        dateTime={row.updated}
-        title={row.updated}
-        className="relative min-w-0 truncate text-right font-mono text-[11px] text-muted-foreground"
-      >
-        {row.updated ? formatCompactRelativeTime(row.updated) : "—"}
-      </time>
+      {showUpdated ? (
+        <time
+          dateTime={row.updated}
+          title={row.updated ? formatFullDateTime(row.updated, language) : undefined}
+          className="relative min-w-0 truncate text-right font-mono text-[11px] text-muted-foreground"
+        >
+          {row.updated ? formatRelativeTime(row.updated, language) : "—"}
+        </time>
+      ) : null}
     </button>
   );
 }
@@ -982,20 +1018,20 @@ function GridCard({ row, index, selected, reduce, layerTitles, onHover, onOpen }
               <LayerChip key={id} id={id} title={layerTitles.get(id)} />
             ))}
             {extraLayers > 0 && (
-              <span title={hiddenLayers.join(", ")} className="font-mono text-[10.5px] text-muted-foreground">
+              <span title={hiddenLayers.join(", ")} className="font-mono text-[11px] text-muted-foreground">
                 {t("explore.moreLayers", { count: extraLayers })}
               </span>
             )}
             {row.tags.slice(0, MAX_TAGS).map((tag) => (
               <span
                 key={tag}
-                className="inline-flex h-5 items-center rounded-full bg-muted px-2 font-mono text-[10.5px] text-muted-foreground"
+                className="inline-flex h-5 items-center rounded-full bg-muted px-2 font-mono text-[11px] text-muted-foreground"
               >
                 #{tag}
               </span>
             ))}
             {extraTags > 0 && (
-              <span className="font-mono text-[10.5px] text-muted-foreground">{t("explore.moreTags", { count: extraTags })}</span>
+              <span className="font-mono text-[11px] text-muted-foreground">{t("explore.moreTags", { count: extraTags })}</span>
             )}
           </CardFooter>
         )}

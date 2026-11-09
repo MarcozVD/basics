@@ -27,6 +27,19 @@ test("explore keeps filters, sort and view in the URL and clears them from the e
   await expect(page.getByRole("option").first()).toBeVisible();
 });
 
+test("an empty search offers to create the typed note with a valid id", async ({ page }) => {
+  await page.goto("/explore");
+  const search = page.locator('[data-page-header] input[type="search"]');
+  await search.fill("Docker Compose");
+
+  await expect(page.getByText("No notes found", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Create note 'Docker Compose'", exact: true }).click();
+
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByLabel("Title", { exact: true })).toHaveValue("Docker Compose");
+  await expect(dialog.getByLabel("ID", { exact: true })).toHaveValue("docker-compose");
+});
+
 test("the default list columns are title, layers, tags and updated", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 820 });
   await page.goto("/explore");

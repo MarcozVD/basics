@@ -116,7 +116,7 @@ export function ExportModal({ open, onOpenChange, files, stackIds, tab, onTabCha
         {blockOnly ? <p className="mt-2 text-[11px] text-muted-foreground">{t("recommend.mergeHint")}</p> : null}
 
         <div className="mt-3 flex min-w-0 items-center gap-2">
-          <code className="min-w-0 flex-1 truncate rounded-md bg-muted/70 px-2 py-1 font-mono text-[10.5px] text-muted-foreground">
+          <code className="min-w-0 flex-1 truncate rounded-md bg-muted/70 px-2 py-1 font-mono text-[11px] text-muted-foreground">
             {cli}
           </code>
           <button

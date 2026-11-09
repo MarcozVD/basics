@@ -573,6 +573,40 @@ test("filters pending proposals by agent and scopes approve all to that agent", 
   }
 });
 
+test("the agent filter survives Back from a proposal", async ({ page }) => {
+  const ids = ["back-one", "back-two", "back-other"];
+  writeProposal(ids[0], "Back one", "First agent A proposal.", new Date().toISOString(), "agent-a");
+  writeProposal(ids[1], "Back two", "Second agent A proposal.", new Date().toISOString(), "agent-a");
+  writeProposal(ids[2], "Back other", "Agent B proposal.", new Date().toISOString(), "agent-b");
+
+  try {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/inbox");
+
+    await page.getByRole("button", { name: "Filter by agent", exact: true }).click();
+    await page.getByRole("option", { name: "agent-a", exact: true }).click();
+    await expect(page).toHaveURL(/[?&]agent=agent-a/);
+    await expect(page.locator("[data-proposal-id]")).toHaveCount(2);
+
+    // Open one proposal, then use the in-app Back the detail view offers.
+    await page.getByRole("button", { name: /Back one/i }).click();
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(/\/inbox\/back-one$/);
+    await page.getByRole("button", { name: "Back to Inbox" }).click();
+
+    // The filter is part of the restored history entry, so the same two rows come back.
+    await expect(page).toHaveURL(/[?&]agent=agent-a/);
+    await expect(page.getByRole("button", { name: "Filter by agent", exact: true })).toContainText("agent-a");
+    await expect(page.locator("[data-proposal-id]")).toHaveCount(2);
+    await expect(page.locator(`[data-proposal-id="${ids[2]}"]`)).toHaveCount(0);
+  } finally {
+    for (const id of ids) {
+      fs.rmSync(path.join(vaultPath(), "inbox", `${id}.md`), { force: true });
+      fs.rmSync(path.join(vaultPath(), "tech", `${id}.md`), { force: true });
+    }
+  }
+});
+
 test("bulk actions keep their place and disable at one pending", async ({ page }) => {
   writeProposal("bulk-one", "Bulk one", "One pending proposal.", new Date().toISOString(), "agent-a");
 

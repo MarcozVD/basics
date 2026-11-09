@@ -26,6 +26,7 @@ import {
 import { useEmbeddingsProgress } from "@/lib/events";
 import { useIntro } from "@/lib/intro";
 import { type DockEdge, type NavigationStyle, setDockEdge, setNavigationStyle, useNavigation } from "@/lib/navigation";
+import { useDocumentTitle } from "@/lib/page-title";
 import { queryKeys, useConnectStatus, useEmbeddings, useHealth } from "@/lib/queries";
 import { useRouteSearchParams } from "@/lib/route-query";
 import { type Theme, useTheme } from "@/lib/theme";
@@ -871,7 +872,7 @@ function AgentsSection() {
                     </span>
                     <div className="min-w-0">
                       <p className="text-sm font-medium">{name}</p>
-                      <p className="mt-0.5 truncate font-mono text-[10.5px] text-muted-foreground">{entry?.configPath ?? "—"}</p>
+                      <p className="mt-0.5 truncate font-mono text-[11px] text-muted-foreground">{entry?.configPath ?? "—"}</p>
                     </div>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
@@ -1086,6 +1087,7 @@ function AboutSection() {
 
 export function SettingsPage() {
   const t = useT();
+  useDocumentTitle(t("settings.title"));
   const [params, setParams] = useRouteSearchParams();
   const requested = params.get("section");
   const active: SectionId = isSection(requested) ? requested : "general";

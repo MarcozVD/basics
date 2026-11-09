@@ -22,6 +22,7 @@ import { modChord } from "@/lib/desktop";
 import { EASE_OUT, SPRING_PRESS } from "@/lib/ease";
 import { useIntentNavigate } from "@/lib/intent-navigate";
 import { DOCK_SPACE, DOCK_SPACE_VERTICAL, useResolvedDockEdge } from "@/lib/navigation";
+import { useDocumentTitle } from "@/lib/page-title";
 import { currentNavigationEpoch, PAGE_ENTER_MS, PAGE_REDUCED_MS } from "@/lib/page-transition";
 import { useGraph, useHealth, useLayers, useNote, useNotes, useStats } from "@/lib/queries";
 import { cn } from "@/lib/utils";
@@ -83,6 +84,7 @@ export function GraphPage() {
   const stats = useStats();
   const vaultEmpty = stats.data?.total === 0;
   const data = graph.data;
+  useDocumentTitle(t("page.graph.title"));
 
   useEffect(() => {
     const toolbar = toolbarRef.current;
@@ -249,9 +251,15 @@ export function GraphPage() {
   const openNote = (id: string) => navigate(`/notes/${encodeURIComponent(id)}`);
 
   const onSearchKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
-    if (event.key === "Escape" && search) {
+    // Esc clears the query first; a second Esc drops focus into the canvas, which is one tab
+    // stop with its own role and label, so the toolbar is not the only way back to the graph.
+    if (event.key === "Escape") {
       event.preventDefault();
-      setSearch("");
+      if (search) {
+        setSearch("");
+        return;
+      }
+      canvasRef.current?.focus();
       return;
     }
     if (event.key !== "Enter") return;
@@ -366,7 +374,7 @@ export function GraphPage() {
                     <span className={cn(!shown && "line-through decoration-muted-foreground/50")}>
                       {t(`type.${type}` as TranslationKey)}
                     </span>
-                    <span className={cn("font-mono text-[10.5px]", compact && "sr-only")}>{counts.get(type) ?? 0}</span>
+                    <span className={cn("font-mono text-[11px]", compact && "sr-only")}>{counts.get(type) ?? 0}</span>
                   </motion.button>
                 </Tooltip>
               );
@@ -410,14 +418,14 @@ export function GraphPage() {
               search ? (
                 <span
                   title={t("graph.matches", { count: matches.length })}
-                  className={cn("mr-2.5 font-mono text-[10.5px]", matches.length ? "text-muted-foreground" : "text-destructive-text")}
+                  className={cn("mr-2.5 font-mono text-[11px]", matches.length ? "text-muted-foreground" : "text-destructive-text")}
                 >
                   {matches.length}
                 </span>
               ) : compact ? null : (
                 // At the compact width the field is too narrow for both the placeholder and the
                 // chord; the shortcut stays on the input's title and aria-keyshortcuts.
-                <kbd className="mr-2.5 rounded-full border border-border px-1.5 font-mono text-[10px] leading-4 text-muted-foreground">
+                <kbd className="mr-2.5 rounded-full border border-border px-1.5 font-mono text-[11px] leading-4 text-muted-foreground">
                   {modChord("F")}
                 </kbd>
               )
@@ -432,39 +440,30 @@ export function GraphPage() {
 
           <ToolbarDivider />
 
+          {/* The switch wears its label in the toolbar itself, not only in `aria-label`:
+              the visible name is the control's text, so pointer and sighted keyboard users
+              read what it does without hovering for a tooltip at compact widths. */}
           <Tooltip content={t("graph.groupByLayer")} side="bottom" disabled={!compact}>
-            <span data-testid="graph-group" className="inline-flex h-8 items-center gap-2 pr-1 pl-1.5">
-              <Switch checked={grouped} onCheckedChange={toggleGrouped} ariaLabel={t("graph.groupByLayer")} />
-              <button
-                type="button"
-                tabIndex={-1}
-                aria-hidden="true"
-                onClick={() => toggleGrouped(!grouped)}
-                className={cn(
-                  "text-[12px] font-medium whitespace-nowrap text-muted-foreground hover:text-foreground",
-                  compact && "sr-only",
-                )}
-              >
-                {t("graph.groupByLayer")}
-              </button>
+            <span data-testid="graph-group" className="inline-flex h-8 items-center pr-1 pl-1.5">
+              <Switch
+                checked={grouped}
+                onCheckedChange={toggleGrouped}
+                ariaLabel={t("graph.groupByLayer")}
+                label={t("graph.groupByLayer")}
+                className="gap-1.5 [&>label]:text-[12px] [&>label]:font-medium [&>label]:whitespace-nowrap"
+              />
             </span>
           </Tooltip>
 
           <Tooltip content={t("graph.showBroken")} side="bottom" disabled={!compact}>
-            <span data-testid="graph-broken" className="inline-flex h-8 items-center gap-2 pr-1 pl-1.5">
-              <Switch checked={broken} onCheckedChange={toggleBroken} ariaLabel={t("graph.showBroken")} />
-              <button
-                type="button"
-                tabIndex={-1}
-                aria-hidden="true"
-                onClick={() => toggleBroken(!broken)}
-                className={cn(
-                  "text-[12px] font-medium whitespace-nowrap text-muted-foreground hover:text-foreground",
-                  compact && "sr-only",
-                )}
-              >
-                {t("graph.showBroken")}
-              </button>
+            <span data-testid="graph-broken" className="inline-flex h-8 items-center pr-1 pl-1.5">
+              <Switch
+                checked={broken}
+                onCheckedChange={toggleBroken}
+                ariaLabel={t("graph.showBroken")}
+                label={t("graph.showBroken")}
+                className="gap-1.5 [&>label]:text-[12px] [&>label]:font-medium [&>label]:whitespace-nowrap"
+              />
             </span>
           </Tooltip>
 
@@ -601,7 +600,7 @@ function NodeDetails({ node, data, onClose, onOpen, onFocus }: NodeDetailsProps)
             {node.layers.map((id) => (
               <span
                 key={id}
-                className="inline-flex h-5 items-center rounded-full border border-border px-2 font-mono text-[10.5px] text-muted-foreground"
+                className="inline-flex h-5 items-center rounded-full border border-border px-2 font-mono text-[11px] text-muted-foreground"
               >
                 {id}
               </span>

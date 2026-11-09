@@ -26,6 +26,7 @@ import { exportStack, getNote, saveNote } from "@/lib/api";
 import { EASE_OUT, SPRING_LAYOUT } from "@/lib/ease";
 import { useIntentNavigate } from "@/lib/intent-navigate";
 import { useIntro } from "@/lib/intro";
+import { useDocumentTitle } from "@/lib/page-title";
 import { useFirstPaint, useProgressiveCount } from "@/lib/progressive";
 import { queryKeys, useNotes } from "@/lib/queries";
 import { rememberRecentItem } from "@/lib/recent-notes";
@@ -160,7 +161,7 @@ function StatusChip({ status, className }: { status: ProjectStatus; className?: 
   return (
     <span
       className={cn(
-        "inline-flex h-5 shrink-0 items-center gap-1.5 rounded-full border px-2 text-[10px] font-medium",
+        "inline-flex h-5 shrink-0 items-center gap-1.5 rounded-full border px-2 text-[11px] font-medium",
         status === "done" ? DONE_TONE : "border-border bg-muted/60 text-muted-foreground",
         className,
       )}
@@ -182,7 +183,7 @@ function StatusMenu({ status, title, onChange }: { status: ProjectStatus; title:
     <Select className="shrink-0" value={status} onValueChange={(value) => onChange(value as ProjectStatus)}>
       <SelectTrigger
         aria-label={t("projects.changeStatus", { title })}
-        className="h-5 w-auto gap-1 rounded-full border-0 bg-transparent px-0 py-0 text-[10px] shadow-none hover:bg-transparent"
+        className="h-5 w-auto gap-1 rounded-full border-0 bg-transparent px-0 py-0 text-[11px] shadow-none hover:bg-transparent"
       >
         <StatusChip status={status} />
       </SelectTrigger>
@@ -213,7 +214,7 @@ function ProfileChip({ id, link, className }: { id: string; link?: boolean; clas
         to={`/notes/${encodeURIComponent(id)}`}
         title={id}
         className={cn(
-          "inline-flex h-5 max-w-40 items-center gap-1 rounded-full px-2 text-[10px] transition-opacity hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+          "inline-flex h-5 max-w-40 items-center gap-1 rounded-full px-2 text-[11px] transition-opacity hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
           className,
         )}
         style={style}
@@ -226,7 +227,7 @@ function ProfileChip({ id, link, className }: { id: string; link?: boolean; clas
   return (
     <span
       title={`${t("projects.profile")} ${id}`}
-      className={cn("inline-flex h-5 max-w-36 items-center gap-1 rounded-full px-2 text-[10px]", className)}
+      className={cn("inline-flex h-5 max-w-36 items-center gap-1 rounded-full px-2 text-[11px]", className)}
       style={style}
     >
       {content}
@@ -331,14 +332,14 @@ function ProjectListRow({
         <time
           dateTime={row.updated}
           title={row.updated ? formatFullDateTime(row.updated, language) : undefined}
-          className="shrink-0 font-mono text-[10px] text-muted-foreground"
+          className="shrink-0 font-mono text-[11px] text-muted-foreground"
         >
           {row.updated ? formatCompactRelativeTime(row.updated) : "-"}
         </time>
         <StatusMenu status={row.project.status} title={row.title} onChange={onChangeStatus} />
       </span>
 
-      {report.length > 0 ? <p className="relative z-10 truncate text-[10.5px] text-muted-foreground">{report.join(" · ")}</p> : null}
+      {report.length > 0 ? <p className="relative z-10 truncate text-[11px] text-muted-foreground">{report.join(" · ")}</p> : null}
     </div>
   );
 }
@@ -349,7 +350,7 @@ function TechChip({ id, exists }: { id: string; exists: boolean }) {
     return (
       <span
         title={t("projects.missingTech", { id })}
-        className="inline-flex h-6 max-w-full items-center rounded-full border border-dashed border-destructive/45 bg-destructive/10 px-2 font-mono text-[10.5px] text-destructive-text"
+        className="inline-flex h-6 max-w-full items-center rounded-full border border-dashed border-destructive/45 bg-destructive/10 px-2 font-mono text-[11px] text-destructive-text"
       >
         <span className="truncate">{id}</span>
       </span>
@@ -360,7 +361,7 @@ function TechChip({ id, exists }: { id: string; exists: boolean }) {
     <Link
       to={`/notes/${encodeURIComponent(id)}`}
       title={t("projects.open", { id })}
-      className="inline-flex h-6 max-w-full items-center rounded-full px-2 font-mono text-[10.5px] transition-opacity hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+      className="inline-flex h-6 max-w-full items-center rounded-full px-2 font-mono text-[11px] transition-opacity hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
       style={tintStyle(typeColor("tech"))}
     >
       <span className="truncate">{id}</span>
@@ -380,7 +381,7 @@ function LinkList({ ids, noteById, empty }: { ids: string[]; noteById: Map<strin
             <span
               key={id}
               title={id}
-              className="inline-flex h-6 items-center rounded-full border border-dashed border-destructive/45 bg-destructive/10 px-2 font-mono text-[10.5px] text-destructive-text"
+              className="inline-flex h-6 items-center rounded-full border border-dashed border-destructive/45 bg-destructive/10 px-2 font-mono text-[11px] text-destructive-text"
             >
               {label}
             </span>
@@ -391,7 +392,7 @@ function LinkList({ ids, noteById, empty }: { ids: string[]; noteById: Map<strin
             key={id}
             to={`/notes/${encodeURIComponent(id)}`}
             title={id}
-            className="inline-flex h-6 max-w-full items-center rounded-full border border-border bg-muted/50 px-2 text-[10.5px] text-foreground transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            className="inline-flex h-6 max-w-full items-center rounded-full border border-border bg-muted/50 px-2 text-[11px] text-foreground transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
           >
             <span className="truncate">{label}</span>
           </Link>
@@ -454,7 +455,7 @@ function ProjectDetail({
               <div className="mt-2 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5">
                 {data.path ? (
                   <span className="flex min-w-0 max-w-full items-center gap-1 rounded-md bg-muted/55 py-0.5 pr-0.5 pl-2">
-                    <code className="min-w-0 truncate font-mono text-[10.5px] text-muted-foreground" title={data.path}>
+                    <code className="min-w-0 truncate font-mono text-[11px] text-muted-foreground" title={data.path}>
                       {data.path}
                     </code>
                     <CopyIconButton value={data.path} label={t("projects.copyPath")} />
@@ -522,14 +523,14 @@ function ProjectDetail({
             <section className="min-w-0">
               <div className="flex items-baseline justify-between gap-3">
                 <SectionLabel>{t("projects.lastChecks")}</SectionLabel>
-                <span className="font-mono text-[10px] text-muted-foreground">{checks.length}</span>
+                <span className="font-mono text-[11px] text-muted-foreground">{checks.length}</span>
               </div>
 
               {checks.length > 0 ? (
                 <div className="mt-2 overflow-x-auto rounded-xl border border-border/70">
                   <table className="w-full min-w-[560px] border-collapse text-left">
                     <thead>
-                      <tr className="border-b border-border/70 bg-muted/35 text-[10px] tracking-wide text-muted-foreground uppercase">
+                      <tr className="border-b border-border/70 bg-muted/35 text-[11px] tracking-wide text-muted-foreground uppercase">
                         <th scope="col" className="px-3 py-2 font-semibold">
                           {t("projects.check")}
                         </th>
@@ -556,21 +557,19 @@ function ProjectDetail({
                           <tr key={id} className="border-b border-border/50 align-top last:border-0">
                             <td className="px-3 py-2.5">
                               <span className="block text-[12.5px] font-medium">{title}</span>
-                              {title !== id ? (
-                                <span className="mt-0.5 block font-mono text-[9.5px] text-muted-foreground">{id}</span>
-                              ) : null}
+                              {title !== id ? <span className="mt-0.5 block font-mono text-[11px] text-muted-foreground">{id}</span> : null}
                             </td>
                             <td className="px-3 py-2.5">
                               <span
                                 className={cn(
-                                  "inline-flex h-5 items-center rounded-full border px-2 text-[10px] font-medium",
+                                  "inline-flex h-5 items-center rounded-full border px-2 text-[11px] font-medium",
                                   CHECK_TONE[check.status],
                                 )}
                               >
                                 {t(`editor.checkStatus.${check.status}` as TranslationKey)}
                               </span>
                             </td>
-                            <td className="px-3 py-2.5 font-mono text-[10.5px] text-muted-foreground">
+                            <td className="px-3 py-2.5 font-mono text-[11px] text-muted-foreground">
                               {check.duration_ms === undefined ? "—" : `${check.duration_ms} ms`}
                             </td>
                             <td className="px-3 py-2.5 text-[11px] text-muted-foreground">
@@ -581,16 +580,16 @@ function ProjectDetail({
                             <td className="px-3 py-2.5">
                               {output ? (
                                 <details className="group min-w-40">
-                                  <summary className="cursor-pointer list-none text-[10.5px] text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+                                  <summary className="cursor-pointer list-none text-[11px] text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
                                     <span className="group-open:hidden">{t("projects.showOutput")}</span>
                                     <span className="hidden group-open:inline">{t("projects.hideOutput")}</span>
                                   </summary>
-                                  <pre className="mt-1.5 max-h-40 max-w-[42rem] overflow-auto rounded-md bg-muted/55 p-2 font-mono text-[10px] leading-4 text-muted-foreground">
+                                  <pre className="mt-1.5 max-h-40 max-w-[42rem] overflow-auto rounded-md bg-muted/55 p-2 font-mono text-[11px] leading-4 text-muted-foreground">
                                     {output}
                                   </pre>
                                 </details>
                               ) : (
-                                <span className="text-[10.5px] text-muted-foreground">—</span>
+                                <span className="text-[11px] text-muted-foreground">—</span>
                               )}
                             </td>
                           </tr>
@@ -610,7 +609,7 @@ function ProjectDetail({
                 <div className="mt-3 min-w-0">
                   <p className="text-[11px] text-muted-foreground">{t("projects.runChecks")}</p>
                   <div className="mt-1 flex min-w-0 items-center gap-1 rounded-md bg-muted/55 py-0.5 pr-0.5 pl-2">
-                    <code className="min-w-0 flex-1 truncate font-mono text-[10.5px] text-muted-foreground">{command}</code>
+                    <code className="min-w-0 flex-1 truncate font-mono text-[11px] text-muted-foreground">{command}</code>
                     <CopyIconButton value={command} label={t("projects.copyCommand")} />
                   </div>
                 </div>
@@ -681,6 +680,7 @@ function ProjectDetail({
 
 export function ProjectsPage() {
   const { t } = useI18n();
+  useDocumentTitle(t("page.projects.title"));
   const navigate = useIntentNavigate();
   const queryClient = useQueryClient();
   const wide = useWide();
@@ -1022,9 +1022,7 @@ export function ProjectsPage() {
               </span>
               <h2 className="mt-4 text-2xl font-semibold tracking-tight">{t("projects.empty.title")}</h2>
               <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                {t("projects.empty.agentBefore")} <code className="font-mono text-[12px] text-foreground">record_project_outcome</code>.
-              </p>
-              <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                {t("projects.empty.agentBefore")} <code className="font-mono text-[12px] text-foreground">record_project_outcome</code>,{" "}
                 {t("projects.empty.exportBefore")} <code className="font-mono text-[12px] text-foreground">basics export</code>{" "}
                 {t("projects.empty.exportAfter")}
               </p>

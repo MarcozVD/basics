@@ -1,6 +1,6 @@
 import type { ActivityEvent, PackInfo, ProposalSummary } from "@marcozvd/basics-core";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, Check, Copy, GitFork, Inbox, Package, X } from "lucide-react";
+import { ArrowRight, Check, CircleDashed, Copy, GitFork, Inbox, Link2Off, Package, X } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
@@ -20,6 +20,7 @@ import { SPRING_LAYOUT } from "@/lib/ease";
 import { useIntentNavigate } from "@/lib/intent-navigate";
 import { useIntro } from "@/lib/intro";
 import { packProposer } from "@/lib/packs";
+import { useDocumentTitle } from "@/lib/page-title";
 import { useActivity, useConnectStatus, useInbox, useNotes, usePacks, useStats } from "@/lib/queries";
 import { type RecentItem, readRecentItems } from "@/lib/recent-notes";
 import { formatCompactRelativeTime, formatFullDateTime, formatRelativeTime } from "@/lib/relative-time";
@@ -219,14 +220,14 @@ function StarterPacks({
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                     <span className="text-sm font-medium">{id}</span>
-                    <span className="font-mono text-[10.5px] text-muted-foreground">{t("home.packs.notes", { count: pack.notes })}</span>
+                    <span className="font-mono text-[11px] text-muted-foreground">{t("home.packs.notes", { count: pack.notes })}</span>
                     {community ? (
-                      <span className="rounded-full border border-border/70 bg-muted/60 px-1.5 py-px font-mono text-[9.5px] uppercase text-muted-foreground">
+                      <span className="rounded-full border border-border/70 bg-muted/60 px-1.5 py-px font-mono text-[11px] uppercase text-muted-foreground">
                         {t("home.packs.github")}
                       </span>
                     ) : null}
                     {pack.installed ? (
-                      <span className="basis-full font-mono text-[10.5px] text-muted-foreground sm:basis-auto">
+                      <span className="basis-full font-mono text-[11px] text-muted-foreground sm:basis-auto">
                         {t("home.packs.installed", { version: pack.installed })}
                       </span>
                     ) : null}
@@ -242,7 +243,7 @@ function StarterPacks({
                     </Link>
                   ) : null}
                   {pack.requires.length > 0 ? (
-                    <p className="mt-1 font-mono text-[10px] text-muted-foreground">
+                    <p className="mt-1 font-mono text-[11px] text-muted-foreground">
                       {t("home.packs.requires", { packs: pack.requires.join(", ") })}
                     </p>
                   ) : null}
@@ -298,7 +299,7 @@ function StarterPacks({
         {added ? (
           <div data-testid="pack-add-result" className="mt-2 rounded-lg border border-border/60 bg-muted/50 p-3">
             <p className="text-xs font-medium">{t("home.packs.added", { name: added.name, version: added.version })}</p>
-            <p className="mt-0.5 font-mono text-[10.5px] text-muted-foreground">
+            <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">
               {t("home.packs.summary", {
                 new: added.proposed_new.length,
                 changed: added.proposed_changed.length,
@@ -309,7 +310,7 @@ function StarterPacks({
             {added.invalid.length > 0 ? (
               <ul className="mt-1 flex flex-col gap-0.5">
                 {added.invalid.map((item) => (
-                  <li key={item.file} className="truncate font-mono text-[10px] text-muted-foreground">
+                  <li key={item.file} className="truncate font-mono text-[11px] text-muted-foreground">
                     {t("home.packs.invalidNote", { file: item.file, reason: item.reason })}
                   </li>
                 ))}
@@ -615,6 +616,8 @@ interface HealthDetailProps {
   value: number;
   /** The already pluralized line the user reads. */
   text: string;
+  /** A severity mark, so the warning does not rest on the colour alone. */
+  icon: ReactNode;
   children: (close: () => void) => ReactNode;
 }
 
@@ -622,7 +625,7 @@ interface HealthDetailProps {
  * A health metric with details: above zero it opens the same list (and the same
  * Open/Create actions) the old Home tile did; at zero it stays plain text.
  */
-function HealthDetail({ stat, label, value, text, children }: HealthDetailProps) {
+function HealthDetail({ stat, label, value, text, icon, children }: HealthDetailProps) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
 
@@ -634,8 +637,9 @@ function HealthDetail({ stat, label, value, text, children }: HealthDetailProps)
           data-stat={stat}
           data-alert="true"
           aria-label={`${label}: ${value} — ${t("home.showDetails")}`}
-          className={cn(HEALTH_LINK, "text-destructive-text")}
+          className={cn(HEALTH_LINK, "inline-flex items-center gap-1 text-destructive-text")}
         >
+          {icon}
           {text}
         </button>
       </MorphPopoverTrigger>
@@ -697,6 +701,7 @@ function HealthLine({ stats }: { stats: ReturnType<typeof useStats> }) {
           label={t("home.brokenLinks")}
           value={broken}
           text={t(broken === 1 ? "home.health.brokenOne" : "home.health.broken", { count: broken })}
+          icon={<Link2Off className="size-3.5 shrink-0" aria-hidden="true" />}
         >
           {(close) => (
             <ul className="flex flex-col gap-0.5 p-1">
@@ -744,6 +749,7 @@ function HealthLine({ stats }: { stats: ReturnType<typeof useStats> }) {
           label={t("home.orphans")}
           value={orphanCount}
           text={t(orphanCount === 1 ? "home.health.orphanOne" : "home.health.orphans", { count: orphanCount })}
+          icon={<CircleDashed className="size-3.5 shrink-0" aria-hidden="true" />}
         >
           {(close) => (
             <ul className="flex flex-col gap-0.5 p-1">
@@ -825,7 +831,7 @@ function ContinueSection({
                     <time
                       dateTime={item.time}
                       title={formatFullDateTime(item.time, language)}
-                      className="shrink-0 whitespace-nowrap font-mono text-[10px] text-muted-foreground"
+                      className="shrink-0 whitespace-nowrap font-mono text-[11px] text-muted-foreground"
                     >
                       {formatRelativeTime(item.time, language)}
                     </time>
@@ -863,6 +869,7 @@ export function HomePage() {
   // Questions about a normal vault are still loading when Home first paints, so treat the
   // description as settled rather than showing it and pulling it away a frame later.
   const intro = useIntro("home", stats.isSuccess ? notesTotal > 0 : true);
+  useDocumentTitle(t("home.title"));
 
   const [selectedPacks, setSelectedPacks] = useState<Set<string>>(new Set());
   const [packLanguage, setPackLanguage] = useState<Language>(language);
@@ -1095,7 +1102,7 @@ export function HomePage() {
                         {t((dayActivity.data ?? []).length === 0 ? "home.noAgents" : "home.activity.quiet")}
                       </p>
                       <div className="mt-2 flex items-start gap-1.5">
-                        <code className="min-w-0 rounded-md bg-muted/70 px-2 py-1 font-mono text-[10.5px] leading-4 break-all text-muted-foreground">
+                        <code className="min-w-0 rounded-md bg-muted/70 px-2 py-1 font-mono text-[11px] leading-4 break-all text-muted-foreground">
                           claude mcp add --transport http basics {window.location.origin}/mcp
                         </code>
                         <button
@@ -1142,7 +1149,7 @@ export function HomePage() {
                               ) : null}
                             </span>
                             <time
-                              className="shrink-0 font-mono text-[10px] whitespace-nowrap text-muted-foreground"
+                              className="shrink-0 font-mono text-[11px] whitespace-nowrap text-muted-foreground"
                               dateTime={group.event.ts}
                               title={formatFullDateTime(group.event.ts, language)}
                             >

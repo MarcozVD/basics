@@ -30,7 +30,7 @@ import { cn } from "@/lib/utils";
  * Labels stay whole because an ellipsis on the only word that names the page reads worse.
  */
 const labelClass =
-  "hidden shrink-0 text-center whitespace-nowrap text-[9px] leading-none font-medium tracking-tight min-[480px]:inline sm:text-[10px]";
+  "hidden shrink-0 text-center whitespace-nowrap text-[11px] leading-none font-medium tracking-tight min-[480px]:inline sm:text-[11px]";
 
 function shortcutLabel(item: (typeof NAV_LINKS)[number]): string | undefined {
   if (!item.shortcut) return undefined;
@@ -74,7 +74,7 @@ function FloatingItem({
             <span className="flex items-center gap-2">
               <span>{t(item.labelKey)}</span>
               {shortcut ? (
-                <kbd className="rounded-full border border-border px-1.5 font-mono text-[10px] text-muted-foreground">
+                <kbd className="rounded-full border border-border px-1.5 font-mono text-[11px] text-muted-foreground">
                   {item.chord ? shortcut : t("shortcuts.sequence", { key: shortcut })}
                 </kbd>
               ) : null}
@@ -103,7 +103,7 @@ function FloatingItem({
             {t(item.labelKey)}
           </span>
           {showCount ? (
-            <span className="absolute top-0 right-1 grid h-4 min-w-4 place-items-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground">
+            <span className="absolute top-0 right-1 grid h-[18px] min-w-[18px] place-items-center rounded-full bg-primary px-1 text-[11px] leading-none font-semibold text-primary-foreground">
               <AnimatedNumber value={pending} startOnView={false} duration={0.5} />
             </span>
           ) : null}
@@ -295,7 +295,7 @@ export function FloatingNav({ edge, onEdgeChange }: FloatingNavProps) {
                 <span className="flex flex-col gap-1">
                   <span className="flex items-center gap-2">
                     <span>{t("nav.palette")}</span>
-                    <kbd className="rounded-full border border-border px-1.5 font-mono text-[10px] text-muted-foreground">
+                    <kbd className="rounded-full border border-border px-1.5 font-mono text-[11px] text-muted-foreground">
                       {t("shortcuts.palette", { combo: modChord("K") })}
                     </kbd>
                   </span>
@@ -326,7 +326,7 @@ export function FloatingNav({ edge, onEdgeChange }: FloatingNavProps) {
               content={
                 <span className="flex items-center gap-2">
                   <span>{t("nav.settings")}</span>
-                  <kbd className="rounded-full border border-border px-1.5 font-mono text-[10px] text-muted-foreground">
+                  <kbd className="rounded-full border border-border px-1.5 font-mono text-[11px] text-muted-foreground">
                     {modChord(SETTINGS_LINK.shortcut ?? ",")}
                   </kbd>
                 </span>

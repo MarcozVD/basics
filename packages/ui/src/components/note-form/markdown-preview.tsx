@@ -38,6 +38,9 @@ const PROSE = [
   "[&_h1]:mt-6 [&_h1]:mb-3 [&_h1]:text-2xl [&_h1]:font-semibold [&_h1]:tracking-tight",
   "[&_h2]:mt-5 [&_h2]:mb-2 [&_h2]:text-lg [&_h2]:font-semibold [&_h2]:tracking-tight",
   "[&_h3]:mt-4 [&_h3]:mb-2 [&_h3]:text-base [&_h3]:font-semibold",
+  "[&_h4]:mt-4 [&_h4]:mb-2 [&_h4]:text-sm [&_h4]:font-semibold",
+  "[&_h5]:mt-3 [&_h5]:mb-1 [&_h5]:text-sm [&_h5]:font-semibold",
+  "[&_h6]:mt-3 [&_h6]:mb-1 [&_h6]:text-xs [&_h6]:font-semibold [&_h6]:uppercase [&_h6]:tracking-wide",
   // Prose
   "[&_p]:my-3",
   "[&_ul]:my-3 [&_ul]:list-disc [&_ul]:pl-5",
@@ -93,7 +96,16 @@ function WikiLink({ id, children }: { id: string; children: ReactNode }) {
   );
 }
 
-export function MarkdownPreview({ body, className }: { body: string; className?: string }) {
+export function MarkdownPreview({
+  body,
+  className,
+  demoteHeadings = false,
+}: {
+  body: string;
+  className?: string;
+  /** Render headings one level lower, so a note's own `#` does not duplicate the page `<h1>`. */
+  demoteHeadings?: boolean;
+}) {
   const t = useT();
   const source = useMemo(() => replaceWikilinks(body), [body]);
 
@@ -104,6 +116,15 @@ export function MarkdownPreview({ body, className }: { body: string; className?:
           remarkPlugins={[remarkGfm]}
           urlTransform={(url) => (url.startsWith(SCHEME) ? url : defaultUrlTransform(url))}
           components={{
+            ...(demoteHeadings
+              ? {
+                  h1: ({ children }: { children?: ReactNode }) => <h2>{children}</h2>,
+                  h2: ({ children }: { children?: ReactNode }) => <h3>{children}</h3>,
+                  h3: ({ children }: { children?: ReactNode }) => <h4>{children}</h4>,
+                  h4: ({ children }: { children?: ReactNode }) => <h5>{children}</h5>,
+                  h5: ({ children }: { children?: ReactNode }) => <h6>{children}</h6>,
+                }
+              : {}),
             a({ href, children }) {
               if (href?.startsWith(SCHEME)) {
                 return <WikiLink id={decodeURIComponent(href.slice(SCHEME.length))}>{children}</WikiLink>;
