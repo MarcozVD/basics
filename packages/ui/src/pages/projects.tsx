@@ -26,6 +26,7 @@ import { exportStack, getNote, saveNote } from "@/lib/api";
 import { EASE_OUT, SPRING_LAYOUT } from "@/lib/ease";
 import { useIntentNavigate } from "@/lib/intent-navigate";
 import { useIntro } from "@/lib/intro";
+import { useDocumentTitle } from "@/lib/page-title";
 import { useFirstPaint, useProgressiveCount } from "@/lib/progressive";
 import { queryKeys, useNotes } from "@/lib/queries";
 import { rememberRecentItem } from "@/lib/recent-notes";
@@ -681,6 +682,7 @@ function ProjectDetail({
 
 export function ProjectsPage() {
   const { t } = useI18n();
+  useDocumentTitle(t("page.projects.title"));
   const navigate = useIntentNavigate();
   const queryClient = useQueryClient();
   const wide = useWide();

@@ -13,6 +13,7 @@ import { type TranslationKey, useT } from "@/i18n";
 import { agentColor } from "@/lib/agent-color";
 import { deleteSkillArea, putSkillArea, SKILL_AGENTS, SKILL_AREAS, type SkillAgentId, type SkillArea, type SkillEntry } from "@/lib/api";
 import { useIntro } from "@/lib/intro";
+import { useDocumentTitle } from "@/lib/page-title";
 import { queryKeys, useConnectStatus, useSkills } from "@/lib/queries";
 import { useRouteSearchParams } from "@/lib/route-query";
 import { toast } from "@/lib/toast";
@@ -394,6 +395,7 @@ function BasicsSkillNotice() {
 
 export function SkillsPage() {
   const t = useT();
+  useDocumentTitle(t("page.skills.title"));
   const queryClient = useQueryClient();
   const skillsQuery = useSkills();
   const [searchParams, setSearchParams] = useRouteSearchParams();

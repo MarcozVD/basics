@@ -46,6 +46,7 @@ import { EASE_OUT, SPRING_PANEL } from "@/lib/ease";
 import { useEmbeddingsProgress } from "@/lib/events";
 import { useIntro } from "@/lib/intro";
 import { DOCK_SPACE, useResolvedDockEdge } from "@/lib/navigation";
+import { useDocumentTitle } from "@/lib/page-title";
 import { queryKeys, useEmbeddings, useLayers, useStats } from "@/lib/queries";
 import { clearRecommend, updateAgent, updateRecommend, useRecommendStore } from "@/lib/recommend-store";
 import { useReturnFocus } from "@/lib/return-focus";
@@ -358,6 +359,7 @@ function ResultsSkeleton({ layers, perLayer, label }: { layers: string[]; perLay
 
 export function RecommendPage() {
   const t = useT();
+  useDocumentTitle(t("page.recommend.title"));
   const reduce = useReducedMotion() ?? false;
   const dockEdge = useResolvedDockEdge();
   // The selection pill sits above the floating bar when it rests on the bottom edge.

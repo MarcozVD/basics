@@ -19,6 +19,7 @@ import { modChord } from "@/lib/desktop";
 import { EASE_OUT, SPRING_LAYOUT, SPRING_PRESS } from "@/lib/ease";
 import { useIntentNavigate } from "@/lib/intent-navigate";
 import { useIntro } from "@/lib/intro";
+import { useDocumentTitle } from "@/lib/page-title";
 import { useFirstPaint, useProgressiveCount } from "@/lib/progressive";
 import { useLayers, useNotes, useSearch, useStats } from "@/lib/queries";
 import { formatCompactRelativeTime } from "@/lib/relative-time";
@@ -140,6 +141,7 @@ export function ExplorePage() {
   const { pathname } = useLocation();
   const reduce = useReducedMotion() ?? false;
   const searchRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
 
   const [searchParams, setSearchParams] = useRouteSearchParams();
   const typeParam = searchParams.get("type");
@@ -189,6 +191,7 @@ export function ExplorePage() {
   // The vault, not the filtered rows: a filter that matches nothing still sits on a page
   // with data, so the intro belongs behind the `?` there.
   const intro = useIntro("explore", stats.isSuccess ? (stats.data?.total ?? 0) > 0 : true);
+  useDocumentTitle(t("page.explore.title"));
   const listQuery = query ? hits : notes;
 
   const counts = useMemo(() => {
@@ -321,9 +324,16 @@ export function ExplorePage() {
   };
 
   const handleKeyDown = (event: ReactKeyboardEvent) => {
-    if (event.key === "Escape" && event.target === searchRef.current && searchText) {
+    // Esc clears the query first; a second Esc leaves the field for the list, so a keyboard
+    // user can walk the rows without tabbing through the toolbar. The list is one tab stop
+    // with `aria-activedescendant`, so focusing it is all it takes.
+    if (event.key === "Escape" && event.target === searchRef.current) {
       event.preventDefault();
-      setSearchText("");
+      if (searchText) {
+        setSearchText("");
+        return;
+      }
+      listRef.current?.focus();
       return;
     }
     if (!rows.length) return;
@@ -584,6 +594,7 @@ export function ExplorePage() {
         ) : (
           <div
             key={view}
+            ref={listRef}
             role="listbox"
             tabIndex={0}
             aria-label={t("explore.notes")}

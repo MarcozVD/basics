@@ -308,6 +308,23 @@ export function Layout() {
   return (
     <ReviewQueueProvider>
       <div className="flex h-dvh overflow-hidden bg-shell text-foreground">
+        {/* First Tab stop on every route: jumps the keyboard past the navigation into the
+            panel's scroll container, which is focusable for exactly this purpose. It waits
+            above the window until it takes focus, so it never covers the title strip. */}
+        {/* biome-ignore lint/a11y/useValidAnchor: it is a real skip link to `#main-content`; the handler moves focus to the scroll container that owns the id. */}
+        <a
+          href="#main-content"
+          onClick={(event) => {
+            event.preventDefault();
+            const main = scrollRef.current;
+            if (!main) return;
+            main.focus();
+            main.scrollTop = 0;
+          }}
+          className="absolute -top-24 left-3 z-[10001] inline-flex h-9 items-center rounded-full bg-primary px-4 text-sm font-medium text-primary-foreground shadow-[0_8px_30px_rgba(0,0,0,0.25)] focus:top-3 focus:outline-2 focus:outline-offset-2 focus:outline-ring"
+        >
+          {t("nav.skipToContent")}
+        </a>
         {!mobile ? <Sidebar hidden={floating} /> : null}
 
         <div className="relative flex min-w-0 flex-1 flex-col">
@@ -329,7 +346,13 @@ export function Layout() {
             data-testid="content-panel"
             className="relative m-2 flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-card"
           >
-            <main ref={scrollRef} style={mainStyle} className="min-h-0 flex-1 overflow-x-clip overflow-y-auto max-md:pt-12">
+            <main
+              ref={scrollRef}
+              id="main-content"
+              tabIndex={-1}
+              style={mainStyle}
+              className="min-h-0 flex-1 overflow-x-clip overflow-y-auto outline-none max-md:pt-12"
+            >
               <AnimatePresence mode="popLayout" initial={false} custom={transitionCustom}>
                 <motion.div
                   key={pageKey}

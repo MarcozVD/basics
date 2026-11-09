@@ -20,6 +20,7 @@ import { EASE_OUT, SPRING_LAYOUT } from "@/lib/ease";
 import { useIntentNavigate } from "@/lib/intent-navigate";
 import { useIntro } from "@/lib/intro";
 import { groupPackProposals, packProposer } from "@/lib/packs";
+import { useDocumentTitle } from "@/lib/page-title";
 import { useFirstPaint, useProgressiveCount } from "@/lib/progressive";
 import { useInbox, useProposal, useStats } from "@/lib/queries";
 import { formatRelativeTime } from "@/lib/relative-time";
@@ -192,7 +193,6 @@ export function InboxPage() {
   const stats = useStats();
   const vaultEmpty = stats.data?.total === 0;
   const [filter, setFilter] = useState<Filter>("all");
-  const [agent, setAgent] = useState(ALL_AGENTS);
   const [selected, setSelected] = useState(0);
   const [armed, setArmed] = useState<string | null>(null);
   const armTimer = useRef<number | undefined>(undefined);
@@ -213,6 +213,7 @@ export function InboxPage() {
   const pendingParam = useRef<string | null>(null);
   const pParam = searchParams.get("p");
   const packFilter = searchParams.get("pack");
+  const agentParam = searchParams.get("agent");
 
   useReturnFocus(editOpen, editButtonRef);
   useReturnFocus(approveAllOpen, approveAllButtonRef);
@@ -222,6 +223,7 @@ export function InboxPage() {
     () => [...(inbox.data ?? [])].sort((a, b) => createdTime(b.meta.created) - createdTime(a.meta.created)),
     [inbox.data],
   );
+  useDocumentTitle(proposals.length > 0 ? t("page.inbox.titleCount", { count: proposals.length }) : t("page.inbox.title"));
 
   // An inbox with nothing to review has no data yet: its intro stays under the title (with
   // the empty state below it) until the user dismisses it or a proposal arrives.
@@ -240,15 +242,21 @@ export function InboxPage() {
     () => [...new Set(packFiltered.map((proposal) => proposal.meta.proposed_by))].sort((a, b) => a.localeCompare(b)),
     [packFiltered],
   );
+  // A stale bookmark may name an agent this pack scope no longer has: fall back to all.
+  const agent = agentParam !== null && agents.includes(agentParam) ? agentParam : ALL_AGENTS;
   const agentFiltered = useMemo(
     () => (agent === ALL_AGENTS ? packFiltered : packFiltered.filter((proposal) => proposal.meta.proposed_by === agent)),
     [agent, packFiltered],
   );
 
-  useEffect(() => {
-    if (agent === ALL_AGENTS) return;
-    if (agents.length <= 1 || !agents.includes(agent)) setAgent(ALL_AGENTS);
-  }, [agent, agents]);
+  /** The agent filter lives in the URL so Back restores the same list the user left. */
+  const selectAgent = (value: string) => {
+    const params = new URLSearchParams(searchParams);
+    if (value === ALL_AGENTS) params.delete("agent");
+    else params.set("agent", value);
+    setSearchParams(params, { replace: true });
+    setSelected(0);
+  };
 
   const counts = useMemo(() => {
     const create = agentFiltered.filter((proposal) => proposal.meta.action === "create").length;
@@ -828,8 +836,7 @@ export function InboxPage() {
                     <Select
                       value={agent}
                       onValueChange={(value) => {
-                        setAgent(value);
-                        setSelected(0);
+                        selectAgent(value);
                       }}
                     >
                       <SelectTrigger

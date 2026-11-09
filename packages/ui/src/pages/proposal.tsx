@@ -9,6 +9,7 @@ import { useI18n } from "@/i18n";
 import { ApiRequestError } from "@/lib/api";
 import { useBackTarget } from "@/lib/app-history";
 import { useIntentNavigate } from "@/lib/intent-navigate";
+import { useDocumentTitle } from "@/lib/page-title";
 import { useInbox, useProposal } from "@/lib/queries";
 import { useReturnFocus } from "@/lib/return-focus";
 import { useReviewQueue } from "@/lib/review-queue";
@@ -44,6 +45,7 @@ export function ProposalPage() {
   const navigate = useIntentNavigate();
   const proposalQuery = useProposal(id);
   const proposal = proposalQuery.data;
+  useDocumentTitle(proposal?.data.title || proposal?.id || t("page.proposal.title"));
   const inbox = useInbox();
   const back = useBackTarget();
   const { pendingIds, queueApprove, queueReject, editRecovery, consumeEditRecovery } = useReviewQueue();

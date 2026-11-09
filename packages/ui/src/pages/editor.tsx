@@ -27,6 +27,7 @@ import { useBackTarget } from "@/lib/app-history";
 import { SPRING_SWAP } from "@/lib/ease";
 import { useIntentNavigate } from "@/lib/intent-navigate";
 import { type CheckTone, lastCheckChips, tailLines } from "@/lib/last-checks";
+import { useDocumentTitle } from "@/lib/page-title";
 import { queryKeys, useActivity, useNote, useNotes } from "@/lib/queries";
 import { rememberRecentItem } from "@/lib/recent-notes";
 import { formatRelativeTime } from "@/lib/relative-time";
@@ -217,6 +218,8 @@ export function EditorPage() {
   const [localGraphOpen, setLocalGraphOpen] = useState(readLocalGraph);
   const allowLeave = useRef(false);
   const savedTimer = useRef<number | undefined>(undefined);
+
+  useDocumentTitle(data?.title || noteQuery.data?.data.title || noteQuery.data?.id || null);
 
   useEffect(() => () => window.clearTimeout(savedTimer.current), []);
 
@@ -461,7 +464,7 @@ export function EditorPage() {
   );
   const previewPane = (
     <div className={cn("rounded-2xl border border-border bg-muted/25 px-5 py-4", view === "split" && "min-h-[45vh]")}>
-      <MarkdownPreview body={body} className="max-w-[72ch]" />
+      <MarkdownPreview body={body} className="max-w-[72ch]" demoteHeadings />
     </div>
   );
 
@@ -505,7 +508,7 @@ export function EditorPage() {
             ]}
             value={saved ? "saved" : "save"}
             cycle={false}
-            variant="primary"
+            variant={dirty ? "primary" : "secondary"}
             size="sm"
             animation="blur"
             onClick={() => void save()}
@@ -717,21 +720,21 @@ export function EditorPage() {
         <CollapsibleContent>
           <div className="mt-2 grid gap-4 pb-2">
             <div className="min-w-0">
-              <h3 className="mb-1 px-1.5 text-[11px] font-medium text-muted-foreground">
+              <h2 className="mb-1 px-1.5 text-[11px] font-medium text-muted-foreground">
                 {t("editor.links")} <span className="font-mono">{note.links.length}</span>
-              </h3>
+              </h2>
               <ConnectionList ids={note.links} empty={t("editor.noLinks")} broken={false} />
             </div>
             <div className="min-w-0">
-              <h3 className="mb-1 px-1.5 text-[11px] font-medium text-muted-foreground">
+              <h2 className="mb-1 px-1.5 text-[11px] font-medium text-muted-foreground">
                 {t("editor.backlinks")} <span className="font-mono">{note.backlinks.length}</span>
-              </h3>
+              </h2>
               <ConnectionList ids={note.backlinks} empty={t("editor.noBacklinks")} broken={false} />
             </div>
             <div className="min-w-0">
-              <h3 className="mb-1 px-1.5 text-[11px] font-medium text-muted-foreground">
+              <h2 className="mb-1 px-1.5 text-[11px] font-medium text-muted-foreground">
                 {t("editor.unresolved")} <span className="font-mono">{unresolved.length}</span>
-              </h3>
+              </h2>
               <ConnectionList ids={unresolved} empty={t("editor.noneUnresolved")} broken />
             </div>
           </div>

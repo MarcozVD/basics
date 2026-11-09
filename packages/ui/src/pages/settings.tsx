@@ -26,6 +26,7 @@ import {
 import { useEmbeddingsProgress } from "@/lib/events";
 import { useIntro } from "@/lib/intro";
 import { type DockEdge, type NavigationStyle, setDockEdge, setNavigationStyle, useNavigation } from "@/lib/navigation";
+import { useDocumentTitle } from "@/lib/page-title";
 import { queryKeys, useConnectStatus, useEmbeddings, useHealth } from "@/lib/queries";
 import { useRouteSearchParams } from "@/lib/route-query";
 import { type Theme, useTheme } from "@/lib/theme";
@@ -1086,6 +1087,7 @@ function AboutSection() {
 
 export function SettingsPage() {
   const t = useT();
+  useDocumentTitle(t("settings.title"));
   const [params, setParams] = useRouteSearchParams();
   const requested = params.get("section");
   const active: SectionId = isSection(requested) ? requested : "general";

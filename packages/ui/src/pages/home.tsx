@@ -1,6 +1,6 @@
 import type { ActivityEvent, PackInfo, ProposalSummary } from "@marcozvd/basics-core";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, Check, Copy, GitFork, Inbox, Package, X } from "lucide-react";
+import { ArrowRight, Check, CircleDashed, Copy, GitFork, Inbox, Link2Off, Package, X } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
@@ -20,6 +20,7 @@ import { SPRING_LAYOUT } from "@/lib/ease";
 import { useIntentNavigate } from "@/lib/intent-navigate";
 import { useIntro } from "@/lib/intro";
 import { packProposer } from "@/lib/packs";
+import { useDocumentTitle } from "@/lib/page-title";
 import { useActivity, useConnectStatus, useInbox, useNotes, usePacks, useStats } from "@/lib/queries";
 import { type RecentItem, readRecentItems } from "@/lib/recent-notes";
 import { formatCompactRelativeTime, formatFullDateTime, formatRelativeTime } from "@/lib/relative-time";
@@ -615,6 +616,8 @@ interface HealthDetailProps {
   value: number;
   /** The already pluralized line the user reads. */
   text: string;
+  /** A severity mark, so the warning does not rest on the colour alone. */
+  icon: ReactNode;
   children: (close: () => void) => ReactNode;
 }
 
@@ -622,7 +625,7 @@ interface HealthDetailProps {
  * A health metric with details: above zero it opens the same list (and the same
  * Open/Create actions) the old Home tile did; at zero it stays plain text.
  */
-function HealthDetail({ stat, label, value, text, children }: HealthDetailProps) {
+function HealthDetail({ stat, label, value, text, icon, children }: HealthDetailProps) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
 
@@ -634,8 +637,9 @@ function HealthDetail({ stat, label, value, text, children }: HealthDetailProps)
           data-stat={stat}
           data-alert="true"
           aria-label={`${label}: ${value} — ${t("home.showDetails")}`}
-          className={cn(HEALTH_LINK, "text-destructive-text")}
+          className={cn(HEALTH_LINK, "inline-flex items-center gap-1 text-destructive-text")}
         >
+          {icon}
           {text}
         </button>
       </MorphPopoverTrigger>
@@ -697,6 +701,7 @@ function HealthLine({ stats }: { stats: ReturnType<typeof useStats> }) {
           label={t("home.brokenLinks")}
           value={broken}
           text={t(broken === 1 ? "home.health.brokenOne" : "home.health.broken", { count: broken })}
+          icon={<Link2Off className="size-3.5 shrink-0" aria-hidden="true" />}
         >
           {(close) => (
             <ul className="flex flex-col gap-0.5 p-1">
@@ -744,6 +749,7 @@ function HealthLine({ stats }: { stats: ReturnType<typeof useStats> }) {
           label={t("home.orphans")}
           value={orphanCount}
           text={t(orphanCount === 1 ? "home.health.orphanOne" : "home.health.orphans", { count: orphanCount })}
+          icon={<CircleDashed className="size-3.5 shrink-0" aria-hidden="true" />}
         >
           {(close) => (
             <ul className="flex flex-col gap-0.5 p-1">
@@ -863,6 +869,7 @@ export function HomePage() {
   // Questions about a normal vault are still loading when Home first paints, so treat the
   // description as settled rather than showing it and pulling it away a frame later.
   const intro = useIntro("home", stats.isSuccess ? notesTotal > 0 : true);
+  useDocumentTitle(t("home.title"));
 
   const [selectedPacks, setSelectedPacks] = useState<Set<string>>(new Set());
   const [packLanguage, setPackLanguage] = useState<Language>(language);
