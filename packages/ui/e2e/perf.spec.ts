@@ -16,11 +16,101 @@ const STATE = ".vault-path-budget";
 const HERE = import.meta.dirname;
 const CLICK_WINDOW_MS = 340;
 const LONG_TASK_BUDGET_MS = 150;
+/** Hover is a per-frame interaction, so its burst budget matches the page budget. */
+const HOVER_BUDGET_MS = 150;
 
 interface BudgetSample {
   t0: number;
   long: { start: number; duration: number }[];
   frames: number[];
+}
+
+interface HoverSample extends BudgetSample {
+  sampling: boolean;
+}
+
+interface HoverCyNode {
+  id: () => string;
+  isParent: () => boolean;
+  data: (key: string) => unknown;
+  renderedBoundingBox: (options: { includeLabels: boolean }) => { x1: number; y1: number; x2: number; y2: number };
+}
+
+interface HoverCyGraph {
+  nodes: () => { filter: (fn: (node: HoverCyNode) => boolean) => { map: <T>(fn: (node: HoverCyNode) => T) => T[] } };
+  nodes: (selector: string) => { length: number };
+}
+
+/** The 20 nodes a sweep crosses: spread over the picture, never a compound box. */
+async function hoverPoints(page: Page): Promise<{ id: string; x: number; y: number }[]> {
+  return page.evaluate(() => {
+    const cy = (window as unknown as { __basicsCy?: HoverCyGraph }).__basicsCy;
+    const host = document.querySelector('[data-testid="graph-canvas"]') as HTMLElement | null;
+    if (!cy || !host) throw new Error("graph canvas not available");
+    const rect = host.getBoundingClientRect();
+    const nodes = cy
+      .nodes()
+      .filter((node) => !node.isParent() && !node.data("bandLabel") && !node.data("spacer"))
+      .map((node) => {
+        const box = node.renderedBoundingBox({ includeLabels: false });
+        return { id: node.id(), x: (box.x1 + box.x2) / 2, y: (box.y1 + box.y2) / 2 };
+      })
+      .filter((point) => point.x > 8 && point.y > 8 && point.x < rect.width - 8 && point.y < rect.height - 8);
+    if (nodes.length < 8) throw new Error(`only ${nodes.length} nodes to hover`);
+    const count = Math.min(20, nodes.length);
+    const step = nodes.length / count;
+    return Array.from({ length: count }, (_, index) => nodes[Math.floor(index * step)]);
+  });
+}
+
+/**
+ * Sweeps the pointer across nodes and returns the worst frame gap and long tasks of that
+ * burst. `passes` walks the set in alternating order so adjacent nodes are crossed both ways.
+ */
+async function hoverSweep(page: Page, passes = 2): Promise<{ worstGap: number; long: number[] }> {
+  const points = await hoverPoints(page);
+  const origin = await page.getByTestId("graph-canvas").boundingBox();
+  if (!origin) throw new Error("graph canvas has no geometry");
+
+  await page.evaluate(() => {
+    const win = window as unknown as { __hoverSample?: HoverSample };
+    const sample: HoverSample = { t0: performance.now(), long: [], frames: [], sampling: true };
+    win.__hoverSample = sample;
+    new PerformanceObserver((list) => {
+      for (const entry of list.getEntries()) sample.long.push({ start: entry.startTime, duration: entry.duration });
+    }).observe({ entryTypes: ["longtask"] });
+    const tick = (ts: number) => {
+      sample.frames.push(ts);
+      if (sample.sampling) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+
+  // Start outside the picture, then touch every node and leave each time.
+  await page.mouse.move(origin.x + 4, origin.y + 4);
+  for (let pass = 0; pass < passes; pass++) {
+    const order = pass % 2 === 0 ? points : [...points].reverse();
+    for (const point of order) {
+      await page.mouse.move(origin.x + point.x, origin.y + point.y, { steps: 1 });
+      await page.waitForTimeout(40);
+    }
+    await page.mouse.move(origin.x + 4, origin.y + 4);
+    await page.waitForTimeout(80);
+  }
+  await page.evaluate(() => {
+    (window as unknown as { __hoverSample?: HoverSample }).__hoverSample!.sampling = false;
+  });
+  await page.waitForTimeout(80);
+
+  return page.evaluate(() => {
+    const sample = (window as unknown as { __hoverSample: HoverSample }).__hoverSample;
+    let worstGap = 0;
+    for (let index = 1; index < sample.frames.length; index++) {
+      worstGap = Math.max(worstGap, sample.frames[index] - sample.frames[index - 1]);
+    }
+    const long = sample.long.filter((entry) => entry.start >= sample.t0 - 2).map((entry) => entry.duration);
+    return { worstGap, long };
+  });
 }
 
 async function waitForHealth(port: number): Promise<void> {
@@ -330,4 +420,58 @@ test.describe("page budget", () => {
     await expect(page).toHaveURL(/\/inbox\b/);
     await expect(page.getByRole("heading", { level: 1, name: "Inbox" })).toBeVisible();
   });
+
+  /**
+   * The graph is the one page whose pointer interaction used to restyle hundreds of
+   * elements per node. A sweep has to stay in the same budget as a page click.
+   */
+  const hoverTest = (mode: "free" | "grouped") =>
+    test(`hovering nodes in the ${mode} graph stays inside the frame budget`, async ({ page }) => {
+      await page.setViewportSize({ width: 1280, height: 820 });
+      await page.addInitScript((grouped) => {
+        (window as unknown as { __BASICS_E2E__: boolean }).__BASICS_E2E__ = true;
+        localStorage.setItem("basics:graph-group", grouped ? "1" : "0");
+      }, mode === "grouped");
+      await page.goto("/graph");
+      await expect(page.getByTestId("graph-canvas").locator("canvas").first()).toBeVisible({ timeout: 120_000 });
+      await expect
+        .poll(
+          () =>
+            page.evaluate(() => {
+              const cy = (window as unknown as { __basicsCy?: HoverCyGraph }).__basicsCy;
+              const perf = (
+                window as unknown as {
+                  __basicsGraphPerf?: { mounts: { settledAt: number | null }[] };
+                }
+              ).__basicsGraphPerf;
+              const last = perf?.mounts[perf.mounts.length - 1];
+              return Boolean(cy && cy.nodes().length > 150 && last?.settledAt != null);
+            }),
+          { timeout: 180_000 },
+        )
+        .toBe(true);
+      await page.waitForTimeout(900);
+
+      // The first sweep warms styles and labels; the second is what a reader feels.
+      await hoverSweep(page, 1);
+      const { worstGap, long } = await hoverSweep(page, 2);
+      expect(worstGap).toBeLessThan(HOVER_BUDGET_MS);
+      for (const duration of long) expect(duration).toBeLessThan(HOVER_BUDGET_MS);
+
+      // The sweep really highlighted a node and faded the rest (it left the picture last).
+      const points = await hoverPoints(page);
+      const origin = await page.getByTestId("graph-canvas").boundingBox();
+      if (!origin) throw new Error("graph canvas has no geometry");
+      await page.mouse.move(origin.x + points[0].x, origin.y + points[0].y, { steps: 1 });
+      await page.waitForTimeout(120);
+      const highlighted = await page.evaluate(() => {
+        const cy = (window as unknown as { __basicsCy?: HoverCyGraph }).__basicsCy;
+        return { lit: cy?.nodes(".lit").length ?? 0, fade: cy?.nodes(".fade").length ?? 0 };
+      });
+      expect(highlighted.lit).toBeGreaterThan(0);
+      expect(highlighted.fade).toBeGreaterThan(0);
+    });
+
+  hoverTest("free");
+  hoverTest("grouped");
 });

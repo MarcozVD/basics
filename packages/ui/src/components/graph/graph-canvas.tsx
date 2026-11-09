@@ -171,7 +171,7 @@ function readPalette(): Palette {
   };
 }
 
-function buildStyle(palette: Palette, reduce: boolean): StylesheetJson {
+function buildStyle(palette: Palette): StylesheetJson {
   return [
     {
       selector: "node",
@@ -193,8 +193,6 @@ function buildStyle(palette: Palette, reduce: boolean): StylesheetJson {
         "text-outline-width": 2,
         "min-zoomed-font-size": LABEL_SIZE * LABEL_MIN_ZOOM,
         "overlay-opacity": 0,
-        "transition-property": "opacity",
-        "transition-duration": reduce ? 0 : 120,
       },
     },
     {
@@ -311,8 +309,6 @@ function buildStyle(palette: Palette, reduce: boolean): StylesheetJson {
         "curve-style": "haystack",
         "haystack-radius": 0,
         "overlay-opacity": 0,
-        "transition-property": "opacity",
-        "transition-duration": reduce ? 0 : 120,
       },
     },
     {
@@ -456,7 +452,7 @@ interface PersistentCanvas {
   shell: HTMLDivElement;
   bridge: CanvasBridge;
   /** Stylesheet already applied, so a return does not rebuild one that still matches. */
-  style: { palette: Palette; reduce: boolean };
+  style: { palette: Palette };
   /** The exact data object mirrored into `cy`; a different one goes through `syncElements`. */
   dataRef: GraphData | null;
   /** Grouping plus the band titles `cy` was synced with; a change forces a re-sync. */
@@ -820,6 +816,20 @@ function runLayout(cy: Core, opts: { randomize: boolean; animate: boolean; compa
   settleTo(cy, after, { animate: opts.animate, onSettled: opts.onSettled });
 }
 
+interface HighlightState {
+  lit: Set<string>;
+  fade: Set<string>;
+  veiled: Set<string>;
+}
+
+const EMPTY_HIGHLIGHT: HighlightState = { lit: new Set(), fade: new Set(), veiled: new Set() };
+/** The classes each instance currently carries, so a hover only touches the delta. */
+const highlightStates = new WeakMap<Core, HighlightState>();
+
+function isStructureNode(node: NodeSingular): boolean {
+  return node.isParent() || Boolean(node.data("bandLabel")) || Boolean(node.data("spacer"));
+}
+
 /**
  * Grouped mode reads by structure, not by links: all edges stay veiled except those of
  * the hovered/selected node, whose neighbours are lit and the rest dimmed.
@@ -827,27 +837,74 @@ function runLayout(cy: Core, opts: { randomize: boolean; animate: boolean; compa
  * A layer box has no useful edges (its members are joined to it by containment), so when
  * the box itself is active its members are lit instead of drawing those edges.
  */
-function emphasizeNode(cy: Core, activeId: string | null): void {
-  cy.batch(() => {
-    cy.edges().addClass("veiled").removeClass("lit");
-    cy.nodes().removeClass("fade lit");
-    if (!activeId) return;
-    const node = cy.getElementById(activeId);
-    if (node.empty()) return;
-    // Padding and spacer nodes are structure, not members worth highlighting.
-    const members = node.isParent() ? node.children().not(":parent, [bandLabel], [spacer]") : null;
-    if (members?.nonempty()) {
-      members.addClass("lit");
-      cy.nodes().not(members).not(":parent, [bandLabel], [spacer]").addClass("fade");
-      return;
-    }
-    // A layer box with no member on screen has no useful edges either.
-    if (node.isParent()) return;
-    const ring = node.closedNeighborhood();
-    ring.addClass("lit");
-    cy.nodes().not(ring).not(":parent, [bandLabel], [spacer]").addClass("fade");
-    node.connectedEdges().removeClass("veiled").addClass("lit");
+function highlightTargets(cy: Core, activeId: string | null, boxed: boolean): HighlightState {
+  const lit = new Set<string>();
+  const fade = new Set<string>();
+  const veiled = new Set<string>();
+  const found = activeId ? cy.getElementById(activeId) : null;
+  const active = found?.nonempty() && found.isNode() ? (found as NodeSingular) : null;
+
+  if (!boxed) {
+    if (!active) return { lit, fade, veiled };
+    active.closedNeighborhood().forEach((element) => {
+      lit.add(element.id());
+    });
+    cy.elements().forEach((element) => {
+      if (!lit.has(element.id())) fade.add(element.id());
+    });
+    return { lit, fade, veiled };
+  }
+
+  cy.edges().forEach((edge) => {
+    veiled.add(edge.id());
   });
+  if (!active) return { lit, fade, veiled };
+
+  if (active.isParent()) {
+    const members = active.children().not(":parent, [bandLabel], [spacer]");
+    if (members.empty()) return { lit, fade, veiled };
+    members.forEach((member) => {
+      lit.add(member.id());
+    });
+    cy.nodes().forEach((other) => {
+      if (lit.has(other.id()) || isStructureNode(other)) return;
+      fade.add(other.id());
+    });
+    return { lit, fade, veiled };
+  }
+
+  active.closedNeighborhood().forEach((element) => {
+    lit.add(element.id());
+    veiled.delete(element.id());
+  });
+  cy.nodes().forEach((other) => {
+    if (lit.has(other.id()) || isStructureNode(other)) return;
+    fade.add(other.id());
+  });
+  return { lit, fade, veiled };
+}
+
+const HIGHLIGHT_CLASSES = ["lit", "fade", "veiled"] as const;
+
+/** Applies only the classes whose target state changed since the last call. */
+function applyHighlight(cy: Core, activeId: string | null, boxed: boolean): void {
+  const next = highlightTargets(cy, activeId, boxed);
+  const previous = highlightStates.get(cy) ?? EMPTY_HIGHLIGHT;
+  cy.batch(() => {
+    for (const name of HIGHLIGHT_CLASSES) {
+      for (const id of previous[name]) {
+        if (next[name].has(id)) continue;
+        const element = cy.getElementById(id);
+        if (element.nonempty()) element.removeClass(name);
+      }
+      for (const id of next[name]) {
+        if (previous[name].has(id)) continue;
+        const element = cy.getElementById(id);
+        if (element.nonempty()) element.addClass(name);
+      }
+    }
+  });
+  highlightStates.set(cy, next);
 }
 
 /** Mirrors `data` into the graph in place; returns how many nodes were added, removed or re-parented. */
@@ -915,7 +972,58 @@ function syncElements(cy: Core, data: GraphData, layout: GroupedLayout | null): 
   keptLabels.delete(cy);
   cullingLabels.delete(cy);
   detailLabelsShown.delete(cy);
+  // The classes belong to the node set that is now gone; start the next pass from clean.
+  highlightStates.delete(cy);
+  cy.batch(() => cy.elements().removeClass("fade lit veiled"));
   return changed;
+}
+
+/**
+ * The tooltip keeps its own state so a hover re-renders this small subtree, never the
+ * 1600-line canvas that owns the cytoscape instance.
+ */
+function GraphHoverTooltip({ bridge, palette }: { bridge: CanvasBridge; palette: Palette | null }) {
+  const t = useT();
+  const reduce = useReducedMotion() ?? false;
+  const [hover, setHover] = useState<Hover | null>(null);
+  // The instance handlers read this through the bridge; a new mount replaces it.
+  bridge.setHover = setHover;
+  useEffect(() => {
+    return () => {
+      if (bridge.setHover === setHover) bridge.setHover = () => {};
+    };
+  }, [bridge]);
+
+  return (
+    <AnimatePresence>
+      {hover && (
+        <motion.div
+          key={hover.id}
+          initial={{ opacity: 0, y: reduce ? 0 : 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, transition: { duration: 0.08 } }}
+          transition={{ duration: 0.14, ease: EASE_OUT }}
+          aria-hidden="true"
+          className="pointer-events-none absolute z-10"
+          style={{ left: hover.x + hover.radius + 10, top: hover.y }}
+        >
+          <div className="-translate-y-1/2 rounded-xl border border-border bg-popover px-2.5 py-1.5 shadow-[0_8px_30px_rgba(0,0,0,0.18)]">
+            <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+              <span
+                className="size-1.5 shrink-0 rounded-full"
+                style={{ backgroundColor: palette?.types[hover.type] ?? `var(--type-${hover.type})` }}
+              />
+              {t(`type.${hover.type}` as TranslationKey)}
+              <span className="opacity-50">·</span>
+              {t("graph.connections", { count: hover.degree })}
+            </div>
+            <div className="max-w-56 truncate text-[13px] font-semibold tracking-tight text-popover-foreground">{hover.title}</div>
+            <div className="max-w-56 truncate font-mono text-[11px] text-muted-foreground">{hover.id}</div>
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
 }
 
 export default function GraphCanvas({
@@ -953,7 +1061,6 @@ export default function GraphCanvas({
   const painted = useRef(false);
   /** The click that leaves this route already dropped the unpainted instance. */
   const abandoned = useRef(false);
-  const [hover, setHover] = useState<Hover | null>(null);
   const [palette, setPalette] = useState<Palette | null>(null);
   // Creating the instance and feeding it elements are two heavy steps; let the first one
   // paint before the second starts, so the canvas boot is not one long blocked task.
@@ -978,7 +1085,6 @@ export default function GraphCanvas({
   bridge.boxed = boxed;
   bridge.selectedId = selectedId;
   bridge.cache = cacheScope;
-  bridge.setHover = setHover;
   bridge.setPalette = setPalette;
   /** Grouping switched on/off: the picture changes shape, so fit it again. */
   const lastBoxed = useRef(boxed);
@@ -1129,7 +1235,7 @@ export default function GraphCanvas({
       container.appendChild(shell);
       cy = cytoscape({
         container: host,
-        style: buildStyle(initialPalette, reduce),
+        style: buildStyle(initialPalette),
         minZoom: 0.1,
         maxZoom: 3,
         boxSelectionEnabled: false,
@@ -1143,7 +1249,7 @@ export default function GraphCanvas({
           cy,
           shell,
           bridge,
-          style: { palette: initialPalette, reduce },
+          style: { palette: initialPalette },
           dataRef: null,
           layoutKey: "",
           fontsApplied: false,
@@ -1195,26 +1301,43 @@ export default function GraphCanvas({
       };
     };
 
+    /**
+     * Pointer events arrive in bursts: an out and an in for the next node usually share a
+     * frame. Keep only the latest target and apply it once, so moving between two nodes is
+     * one highlight change instead of a clear followed by a re-apply.
+     */
+    let pendingHover: string | null | undefined;
+    let hoverFrame: number | null = null;
+    const flushHover = () => {
+      hoverFrame = null;
+      if (pendingHover === undefined) return;
+      const id = pendingHover;
+      pendingHover = undefined;
+      // Leaving a node restores the grouped selection; flat mode clears every highlight.
+      applyHighlight(cy, id ?? (bridge.boxed ? bridge.selectedId : null), bridge.boxed);
+      if (!id) {
+        bridge.setHover(null);
+        return;
+      }
+      const node = cy.getElementById(id);
+      bridge.setHover(node.nonempty() && node.isNode() ? hoverFrom(node as NodeSingular) : null);
+    };
+    const scheduleHover = (id: string | null) => {
+      pendingHover = id;
+      if (hoverFrame === null) hoverFrame = requestAnimationFrame(flushHover);
+    };
+
     // A kept instance is already listening; binding again would double every handler.
     if (!kept) {
       cy.on("mouseover", "node", (event) => {
         const node = event.target as NodeSingular;
         if (node.data("bandLabel") || node.data("spacer")) return;
-        if (bridge.boxed) emphasizeNode(cy, node.id());
-        else {
-          cy.batch(() => {
-            cy.elements().addClass("fade");
-            node.closedNeighborhood().removeClass("fade").addClass("lit");
-          });
-        }
         if (bridge.container) bridge.container.style.cursor = "pointer";
-        bridge.setHover(hoverFrom(node));
+        scheduleHover(node.id());
       });
       cy.on("mouseout", "node", () => {
-        if (bridge.boxed) emphasizeNode(cy, bridge.selectedId ?? null);
-        else cy.batch(() => cy.elements().removeClass("fade lit"));
         if (bridge.container) bridge.container.style.cursor = "";
-        bridge.setHover(null);
+        scheduleHover(null);
       });
       cy.on("viewport", () => {
         toggleDetailLabels(cy);
@@ -1275,6 +1398,11 @@ export default function GraphCanvas({
       observer.disconnect();
       resize.disconnect();
       unsubscribeIntent();
+      if (hoverFrame !== null) {
+        cancelAnimationFrame(hoverFrame);
+        hoverFrame = null;
+      }
+      pendingHover = undefined;
       bridge.container = null;
       cyRef.current = null;
       // The leaving click already dropped this unpainted instance and its queued render.
@@ -1324,14 +1452,14 @@ export default function GraphCanvas({
     if (!palette) return;
     const cy = cyRef.current;
     if (!cy) return;
-    // A kept instance keeps the stylesheet it already has, unless theme or motion changed.
+    // A kept instance keeps the stylesheet it already has, unless the theme changed.
     const applied = persistent?.cy === cy ? persistent.style : null;
-    if (applied && applied.reduce === reduce && samePalette(applied.palette, palette)) return;
-    if (persistent?.cy === cy) persistent.style = { palette, reduce };
+    if (applied && samePalette(applied.palette, palette)) return;
+    if (persistent?.cy === cy) persistent.style = { palette };
     const started = performance.now();
-    cy.style(buildStyle(palette, reduce));
+    cy.style(buildStyle(palette));
     perfPhase(perfRecord.current, "stylesheet", performance.now() - started);
-  }, [palette, reduce]);
+  }, [palette]);
 
   // Patch elements in place; only a structural change re-runs the layout, and the camera
   // only moves on the first run (local graphs re-fit, they are rebuilt per note).
@@ -1576,8 +1704,7 @@ export default function GraphCanvas({
       cy.nodes(".picked").removeClass("picked");
       if (picked) cy.getElementById(picked).addClass("picked");
     });
-    if (boxed) emphasizeNode(cy, picked ?? null);
-    else cy.batch(() => cy.elements().removeClass("fade lit veiled"));
+    applyHighlight(cy, picked ?? null, boxed);
     perfPhase(perfRecord.current, "selection", performance.now() - started);
     if (applied) applied.appliedSelection = picked;
   }, [elements, selectedId, mode, centerId, boxed, elementsReady]);
@@ -1593,34 +1720,7 @@ export default function GraphCanvas({
         aria-label={t("graph.canvas", { nodes: elements.nodes.length, edges: elements.edges.length })}
         className="h-full w-full outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
       />
-      <AnimatePresence>
-        {hover && (
-          <motion.div
-            key={hover.id}
-            initial={{ opacity: 0, y: reduce ? 0 : 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, transition: { duration: 0.08 } }}
-            transition={{ duration: 0.14, ease: EASE_OUT }}
-            aria-hidden="true"
-            className="pointer-events-none absolute z-10"
-            style={{ left: hover.x + hover.radius + 10, top: hover.y }}
-          >
-            <div className="-translate-y-1/2 rounded-xl border border-border bg-popover/90 px-2.5 py-1.5 shadow-[0_8px_30px_rgba(0,0,0,0.18)] backdrop-blur-md">
-              <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                <span
-                  className="size-1.5 shrink-0 rounded-full"
-                  style={{ backgroundColor: palette?.types[hover.type] ?? `var(--type-${hover.type})` }}
-                />
-                {t(`type.${hover.type}` as TranslationKey)}
-                <span className="opacity-50">·</span>
-                {t("graph.connections", { count: hover.degree })}
-              </div>
-              <div className="max-w-56 truncate text-[13px] font-semibold tracking-tight text-popover-foreground">{hover.title}</div>
-              <div className="max-w-56 truncate font-mono text-[11px] text-muted-foreground">{hover.id}</div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <GraphHoverTooltip bridge={bridge} palette={palette} />
     </div>
   );
 }
