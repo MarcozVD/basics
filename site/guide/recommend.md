@@ -5,7 +5,7 @@ basics recommend "REST API without SEO, in TypeScript"
 basics recommend "REST API to serve ML models" --json
 ```
 
-`recommend` ranks the tech notes of each layer against a project description. The output shows the score and its
+`recommend` ranks the tech notes of each layer against a project description. The CLI output shows the score and its
 breakdown:
 
 ```
@@ -24,9 +24,15 @@ backend
 Profiles whose description matches are returned too, which is why the same description can suggest a whole stack. A
 layer with no candidate above zero is omitted from the output — the CLI prints no section for it, `recommend_stack`
 leaves it out of `layers` (the core response still returns it as an empty list, for a stable API), and the **Recommend**
-screen renders no column for it. When every requested layer is empty, the screen shows one quiet message instead.
+screen renders no section for it. When every requested layer is empty, the screen shows one quiet message instead.
 
-The MCP tool `recommend_stack` returns the same ranking; the **Recommend** screen renders it.
+The MCP tool `recommend_stack` returns the same ranking. The **Recommend** screen shows it as a shortlist without numbers: profiles first, then one section per layer in reading order. Each tech is one card with its title and up to three reason lines:
+
+- **Matches**: the `use_when` and `performs_best` phrases that matched your description.
+- **Fits profile**: the profiles above whose stack includes the tech.
+- **Watch out**: the note's `avoid_when` phrases that matched, and phrases your description negates, such as *without login* against a note that says *login*.
+
+A tech that fits several layers appears once, under the layer of its note's first `layer`, and **Also fits** names the others. Each card's **Why** lists the score parts: keywords, text, synonyms, semantic (in hybrid mode), negation and language. The order of the cards is the ranking.
 
 ## Ask an agent
 
@@ -70,7 +76,7 @@ Basics only passes the agent the description, the chosen layers and the `plan-st
 - Naming a language (`in TypeScript`, `en TypeScript`) boosts techs written in that language and lowers same-layer
   techs written in another one.
 
-Scores are relative to your own notes; exact values are not part of the stable API (see [Stability](./stability.md)).
+Scores are relative to your own notes; exact values are not part of the stable API (see [Stability](./stability.md)). The Recommend screen shows them only under each card's **Why**.
 
 ## Embeddings (opt-in)
 
@@ -103,8 +109,8 @@ The index lives in `<vault>/.basics/embeddings.json` and `embeddings.bin`. Only 
 re-embedded, deleted notes leave the index, and changing the model rebuilds it.
 
 With embeddings on, `basics recommend`, `recommend_stack` and the Recommend screen use **hybrid** mode: keyword and
-semantic scores are normalized per layer and fused, and the displayed score is the hybrid one. The UI shows the active
-mode, **Keywords** or **Hybrid**.
+semantic scores are normalized per layer and fused, and the scores shown are the hybrid ones. The UI shows the active
+mode, **Keywords** or **Hybrid**. In hybrid mode a card's **Why** adds a **semantic** row.
 
 The model is configurable with `embeddingsModel` (default `Xenova/multilingual-e5-small`).
 

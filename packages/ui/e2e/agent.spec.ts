@@ -28,7 +28,7 @@ test("an agent plans the stack and its cited techs can be selected", async ({ pa
   await expect(panel.getByRole("button", { name: /Select these/ })).toBeVisible();
 
   await panel.getByRole("button", { name: /Select these/ }).click();
-  await expect(page.getByRole("checkbox", { name: "Select fastapi", exact: true })).toBeChecked();
+  await expect(page.getByRole("checkbox", { name: "Select FastAPI", exact: true })).toBeChecked();
 });
 
 test("a running agent can be cancelled", async ({ page }) => {
