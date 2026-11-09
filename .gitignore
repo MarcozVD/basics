@@ -10,3 +10,6 @@ packages/ui/test-results/
 packages/ui/playwright-report/
 packages/ui/e2e/.vault-path
 packages/ui/e2e/.vault-path-*
+
+# Local design-tool state (impeccable critiques, snapshots)
+.impeccable/
