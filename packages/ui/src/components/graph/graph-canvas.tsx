@@ -19,7 +19,7 @@ import {
   nodeDiameter,
 } from "./graph-model";
 import { type GraphPerfMount, perfCount, perfFirstFrame, perfMount, perfPhase, perfSettled } from "./graph-perf";
-import { computeRingLayout, type RingLayout } from "./graph-rings";
+import { computeRingLayout, nonOverlappingRingLabels, type RingLayout } from "./graph-rings";
 
 cytoscape.use(fcose);
 
@@ -629,6 +629,25 @@ const keptLabels = new WeakMap<Core, Set<string>>();
 const cullingLabels = new WeakMap<Core, boolean>();
 /** Decorative geometry must not change the culling threshold or add a viewport scan. */
 const ringGuideCounts = new WeakMap<Core, number>();
+/** Collision-free labels for the compact free graph; grouped/local graphs keep their policy. */
+const ringLabels = new WeakMap<Core, Set<string>>();
+
+function measureRingLabels(data: GraphData, rings: RingLayout): Set<string> {
+  const context = document.createElement("canvas").getContext("2d");
+  if (context) context.font = `500 ${LABEL_SIZE}px ${FONT}`;
+  return nonOverlappingRingLabels(
+    [...data.nodes]
+      .sort((a, b) => b.degree - a.degree || a.id.localeCompare(b.id))
+      .map((node) => {
+        const p = rings.positions.get(node.id)!;
+        const dot = nodeDiameter(node.degree) / 2;
+        // Ellipsis caps labels at 140 model px. Include outline and dot in the
+        // envelope, so two retained titles never collide at the 0.6 label zoom.
+        const halfWidth = Math.max(dot, Math.min(140, context?.measureText(node.title).width ?? 140) / 2) + 8;
+        return { id: node.id, x1: p.x - halfWidth, x2: p.x + halfWidth, y1: p.y - dot - 4, y2: p.y + dot + 4 + LABEL_SIZE * 1.4 + 4 };
+      }),
+  );
+}
 
 function labelKeepSet(cy: Core): Set<string> {
   const cached = keptLabels.get(cy);
@@ -653,11 +672,12 @@ function toggleLabelCulling(cy: Core): void {
   if (cullingLabels.get(cy) === cull) return;
   cullingLabels.set(cy, cull);
   const keep = cull ? labelKeepSet(cy) : null;
+  const collisionFree = ringLabels.get(cy);
   cy.batch(() => {
     cy.nodes()
       .not(":parent, [bandLabel], [spacer], [ringGuide]")
       .forEach((node) => {
-        node.toggleClass("cull", keep !== null && !keep.has(node.id()));
+        node.toggleClass("cull", (keep !== null && !keep.has(node.id())) || (collisionFree !== undefined && !collisionFree.has(node.id())));
       });
   });
 }
@@ -877,6 +897,8 @@ function applyHighlight(cy: Core, activeId: string | null, boxed: boolean): void
 /** Mirrors `data` into the graph in place; returns how many nodes were added, removed or re-parented. */
 function syncElements(cy: Core, data: GraphData, layout: GroupedLayout | null, rings: RingLayout | null): number {
   ringGuideCounts.set(cy, rings?.rings.length ?? 0);
+  if (rings) ringLabels.set(cy, measureRingLabels(data, rings));
+  else ringLabels.delete(cy);
   const wanted = toElements(data, layout, rings);
   const ids = new Set(wanted.map((element) => element.data.id as string));
   let changed = 0;

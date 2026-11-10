@@ -2,11 +2,13 @@ import type { GraphData, GraphNode } from "@marcozvd/basics-core";
 import { nodeDiameter } from "./graph-model";
 
 export interface GraphRing {
-  /** Profiles/projects, techs, practices, checks, then all other nodes. */
+  /** Profiles/projects, techs, practices, checks, layers, then other nodes. */
   band: number;
   radius: number;
   /** Clockwise order, starting at the ring's rotation. */
   ids: string[];
+  /** Packed rows inside this band; only the outer boundary gets a guide. */
+  rows: { radius: number; ids: string[] }[];
 }
 
 export interface RingLayout {
@@ -20,12 +22,11 @@ const BANDS = new Map<string, number>([
   ["tech", 1],
   ["practice", 2],
   ["check", 3],
+  ["layer", 4],
 ]);
 const TURN = Math.PI * 2;
-/** Matches the canvas's capped label width and 12px label under each dot. */
-const LABEL_WIDTH = 140;
-const LABEL_HEIGHT = 14.4;
 const GAP = 24;
+const BAND_GAP = 48;
 
 function hash(id: string): number {
   let value = 0x811c9dc5;
@@ -34,6 +35,37 @@ function hash(id: string): number {
 }
 
 const angle = (value: number) => ((value % TURN) + TURN) % TURN;
+
+export interface RingLabelBox {
+  id: string;
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+}
+
+/** Keep higher-priority measured labels first. Grid buckets avoid a quadratic scan. */
+export function nonOverlappingRingLabels(boxes: RingLabelBox[]): Set<string> {
+  const cells = new Map<string, RingLabelBox[]>();
+  const keep = new Set<string>();
+  for (const box of boxes) {
+    const keys: string[] = [];
+    for (let x = Math.floor(box.x1 / 160); x <= Math.floor(box.x2 / 160); x++) {
+      for (let y = Math.floor(box.y1 / 160); y <= Math.floor(box.y2 / 160); y++) keys.push(`${x}:${y}`);
+    }
+    if (
+      keys.some((key) => cells.get(key)?.some((other) => box.x1 < other.x2 && box.x2 > other.x1 && box.y1 < other.y2 && box.y2 > other.y1))
+    )
+      continue;
+    keep.add(box.id);
+    for (const key of keys) {
+      const cell = cells.get(key) ?? [];
+      cell.push(box);
+      cells.set(key, cell);
+    }
+  }
+  return keep;
+}
 
 /**
  * Full-vault rings, without a simulation or browser state. Only populated bands occupy
@@ -52,8 +84,8 @@ export function computeRingLayout(data: GraphData): RingLayout {
     neighbors.get(edge.target)?.add(edge.source);
   }
   const adjacent = new Map([...neighbors].map(([id, ids]) => [id, [...ids].sort(compare)]));
-  const bands: GraphNode[][] = Array.from({ length: 5 }, () => []);
-  for (const node of data.nodes) bands[BANDS.get(node.type) ?? 4].push(node);
+  const bands: GraphNode[][] = Array.from({ length: 6 }, () => []);
+  for (const node of data.nodes) bands[BANDS.get(node.type) ?? 5].push(node);
 
   const positions: RingLayout["positions"] = new Map();
   const angles = new Map<string, number>();
@@ -105,28 +137,42 @@ export function computeRingLayout(data: GraphData): RingLayout {
     const order = new Map(traversal.map((id, index) => [id, index]));
     const desired = (id: string) => preferred.get(id) ?? ((order.get(id) as number) * TURN) / nodes.length;
     const ids = traversal.sort((a, b) => desired(a) - desired(b) || (order.get(a) as number) - (order.get(b) as number));
+    const extent = Math.max(...nodes.map((node) => nodeDiameter(node.degree) / 2));
+    const spacing = Math.max(48, extent * 2 + GAP);
+    const rows: GraphRing["rows"] = [];
+    let remaining = ids.length;
+    let radius = rings.length ? previousRadius + previousExtent + extent + BAND_GAP : ids.length === 1 ? 0 : spacing;
+    while (remaining) {
+      // Chord capacity, rather than arc length, keeps adjacent dots separated.
+      const capacity = radius === 0 ? 1 : Math.max(1, Math.floor(Math.PI / Math.asin(Math.min(1, spacing / (2 * radius)))));
+      const count = Math.min(remaining, capacity);
+      rows.push({ radius, ids: Array<string>(count) });
+      remaining -= count;
+      if (remaining) radius += spacing;
+    }
+    // Interleave rows by angle so inward-linked clusters occupy the same sector
+    // across the band, instead of wrapping each contiguous chunk around a circle.
+    const slots = rows.flatMap((row, rowIndex) =>
+      row.ids.fill("").map((_, index) => ({ row, rowIndex, index, theta: ((index + 0.5) * TURN) / row.ids.length })),
+    );
+    slots.sort((a, b) => a.theta - b.theta || a.rowIndex - b.rowIndex);
     let rotationX = 0;
     let rotationY = 0;
     ids.forEach((id, index) => {
       if (!preferred.has(id)) return;
-      const offset = desired(id) - (index * TURN) / ids.length;
+      const offset = desired(id) - slots[index].theta;
       rotationX += Math.cos(offset);
       rotationY += Math.sin(offset);
     });
     const rotation = Math.hypot(rotationX, rotationY) > 1e-8 ? Math.atan2(rotationY, rotationX) : -Math.PI / 2;
-    // A circle enclosing the complete dot + label box makes spacing safe at every angle.
-    const extent = nodes.reduce((max, node) => {
-      const dot = nodeDiameter(node.degree);
-      return Math.max(max, Math.hypot(Math.max(LABEL_WIDTH, dot) / 2, dot / 2 + 4 + LABEL_HEIGHT));
-    }, 0);
-    const circumferenceRadius = ids.length > 1 ? (2 * extent + GAP) / (2 * Math.sin(Math.PI / ids.length)) : 0;
-    const radius = Math.max(circumferenceRadius, rings.length ? previousRadius + previousExtent + extent + GAP : 0);
     ids.forEach((id, index) => {
-      const theta = rotation + (index * TURN) / ids.length;
+      const slot = slots[index];
+      slot.row.ids[slot.index] = id;
+      const theta = rotation + slot.theta;
       angles.set(id, angle(theta));
-      positions.set(id, { x: Math.cos(theta) * radius, y: Math.sin(theta) * radius });
+      positions.set(id, { x: Math.cos(theta) * slot.row.radius, y: Math.sin(theta) * slot.row.radius });
     });
-    rings.push({ band, radius, ids });
+    rings.push({ band, radius, ids, rows });
     previousRadius = radius;
     previousExtent = extent;
   });

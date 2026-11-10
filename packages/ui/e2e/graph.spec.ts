@@ -341,7 +341,7 @@ test("graph renders, search + Enter selects a node and the drawer opens its note
   await expect(page).toHaveURL(/\/notes\/fastapi$/);
 });
 
-test("free graph puts profiles/projects inside tech, practices and checks in stable rings", async ({ page }) => {
+test("free graph puts profiles/projects inside tech, practices and checks in stable bands", async ({ page }) => {
   const project = await page.request.post("/api/notes", {
     data: {
       id: "ring-project",
@@ -422,7 +422,8 @@ for (const theme of ["light", "dark"]) {
     for (const guide of guides) {
       expect(guide.position).toEqual({ x: 0, y: 0 });
       expect(guide.memberRadii.length).toBeGreaterThan(0);
-      for (const radius of guide.memberRadii) expect(radius).toBeCloseTo(guide.radius, 1);
+      for (const radius of guide.memberRadii) expect(radius).toBeLessThanOrEqual(guide.radius + 0.1);
+      expect(Math.max(...guide.memberRadii)).toBeCloseTo(guide.radius, 1);
       expect(guide.events).toBe("no");
       expect(guide.background).toBe(0);
       expect(guide.borderWidth).toBe(1.5);
@@ -724,7 +725,7 @@ test("grouped mode hides edges to a node's own layer box", async ({ page }) => {
  * The big-vault specs use a generated vault to prove the first picture is already
  * settled and interactive, including the reduced-motion path.
  */
-const LARGE_PORT = 4813;
+const LARGE_PORT = 4824;
 const LARGE_STATE = ".vault-path-large";
 const HERE = import.meta.dirname;
 
@@ -775,6 +776,35 @@ test.describe("large vault", () => {
   test.beforeEach(async ({ page }) => {
     // Free mode uses the full-vault rings.
     await page.addInitScript(() => localStorage.setItem("basics:graph-group", "0"));
+  });
+
+  test("crowded bands fill multiple rows with ordered boundaries and collision-free labels", async ({ page }) => {
+    await page.goto("/graph");
+    await expect.poll(async () => (await readPerf(page))?.last?.settledAt ?? null, { timeout: 120_000 }).not.toBeNull();
+    const bands = await page.evaluate(() => {
+      const cy = (window as unknown as { __basicsCy: CyHandle }).__basicsCy;
+      return ["profile", "tech", "practice", "layer"].map((type) => {
+        const radii = cy.nodes(`[type = "${type}"]`).map((n) => Math.hypot(n.position().x, n.position().y));
+        return { type, min: Math.min(...radii), max: Math.max(...radii), rows: new Set(radii.map((r) => Math.round(r))).size };
+      });
+    });
+    expect(bands[1].rows).toBeGreaterThan(1);
+    expect(bands[1].max).toBeLessThan(1500);
+    bands.forEach((band, index) => {
+      if (index) expect(band.min).toBeGreaterThan(bands[index - 1].max);
+    });
+    for (const zoom of [0.6, 1.25, 2]) {
+      const boxes = await page.evaluate((level) => {
+        const cy = (window as unknown as { __basicsCy: CyHandle }).__basicsCy;
+        cy.viewport({ zoom: level, pan: cy.pan() });
+        return cy
+          .nodes()
+          .filter((n) => !n.data("ringGuide") && Number(n.style("text-opacity")) > 0)
+          .map((n) => ({ id: n.id(), box: n.boundingBox({ includeLabels: true }) }));
+      }, zoom);
+      expect(boxes.length).toBeGreaterThan(0);
+      expect(overlaps(boxes)).toEqual([]);
+    }
   });
 
   test("a node opens its panel from the settled cold ring layout", async ({ page }) => {
