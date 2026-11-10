@@ -1,8 +1,23 @@
 # Releasing
 
-Releases are cut from a version tag. Pushing a `v*` tag runs
+Releases are cut from a minor version tag. Pushing a `vX.Y.0` tag runs
 [`.github/workflows/release.yml`](.github/workflows/release.yml), which publishes both npm packages with provenance
 and creates the matching GitHub Release.
+
+## Checkpoint tags (`vX.Y.Z`, Z > 0)
+
+Every merged pull request between two releases gets a checkpoint tag on its merge commit, counting up from the last
+release: after `v1.7.0` the next merges are tagged `v1.7.1`, `v1.7.2`, and so on, and the next release is `v1.8.0`.
+
+```bash
+git fetch origin
+git tag -a v1.7.1 <merge-sha> -m "#28 feat(ui): arrange the free graph in rings by note type"
+git push origin v1.7.1   # push only this tag
+```
+
+Checkpoint tags are git only: they do not publish to npm, create a GitHub Release or build the desktop app (the release
+workflow only runs for tags ending in `.0`). Package versions and changesets are untouched; the pending changesets
+are collected into the next `vX.Y.0` release as usual.
 
 ## One-time owner setup
 

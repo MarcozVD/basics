@@ -3,7 +3,8 @@ name: Release
 on:
   push:
     tags:
-      - "v*"
+      # Only minor releases (vX.Y.0) publish. vX.Y.Z with Z > 0 are checkpoint tags for merged PRs: git only.
+      - "v*.*.0"
 
 permissions:
   contents: write
@@ -11,6 +12,7 @@ permissions:
 
 jobs:
   release:
+    if: endsWith(github.ref_name, '.0')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
