@@ -30,8 +30,8 @@ claude mcp add --transport http basics http://127.0.0.1:4747/mcp
 ```
 
 Pídele a tu agente que recomiende un stack y revisa en el Inbox lo que proponga.
-El resto de clientes (Cursor, VS Code, Codex, OpenCode, Windsurf) están en
-[Clientes MCP](https://marcozvd.github.io/basics/guide/mcp-clients.html).
+El resto de clientes (Cursor, VS Code, Codex, OpenCode, Windsurf, oh-my-pi, Gemini CLI, Qwen Code, Kimi CLI, Goose, Amp) están en
+[Clientes MCP](https://marcozvd.github.io/basics/guide/mcp-clients.html). Cualquier otro agente recibe fragmentos para copiar con `basics connect --print`.
 
 ## Qué hace
 
@@ -42,7 +42,7 @@ El resto de clientes (Cursor, VS Code, Codex, OpenCode, Windsurf) están en
 - **Packs** — packs iniciales oficiales en inglés y español, además de packs comunitarios de cualquier repositorio de GitHub; las notas y actualizaciones nuevas llegan como propuestas al inbox, nunca como escrituras silenciosas.
 - **UI web local y MCP** — interfaz React con editor, grafo, diff del inbox y banco de pruebas de recomendación, y MCP por HTTP o stdio.
 - **Aplicación de escritorio** — la misma UI y servidor MCP en una ventana independiente residente en la bandeja, con su propio runtime de Node incluido; no hace falta npm. Ver [Aplicación de escritorio](https://marcozvd.github.io/basics/guide/desktop.html).
-- **Skill para agentes** — un `SKILL.md` que enseña a Claude Code, OpenCode o Codex cuándo usar cada herramienta de Basics. Ver [Skill para agentes](https://marcozvd.github.io/basics/guide/agent-skill.html).
+- **Skill para agentes** — un `SKILL.md` que enseña a Claude Code, OpenCode, Codex y a los demás agentes que configura `basics connect` cuándo usar cada herramienta de Basics. Ver [Skill para agentes](https://marcozvd.github.io/basics/guide/agent-skill.html).
 
 ![Una propuesta del agente revisada en el Inbox y luego un stack recomendado y exportado](site/public/media/basics-inbox-recommend.gif)
 

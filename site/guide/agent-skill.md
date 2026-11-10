@@ -38,6 +38,12 @@ To install it by hand, copy the `skills/basics` folder into the agent's skills d
 | Claude Code | `~/.claude/skills/basics/`, or `.claude/skills/basics/` inside one project |
 | OpenCode | `~/.config/opencode/skills/basics/` |
 | Codex | `~/.codex/skills/basics/` |
+| oh-my-pi | `~/.omp/agent/skills/basics/` |
+| Gemini CLI | `~/.gemini/skills/basics/` |
+| Qwen Code | `~/.qwen/skills/basics/` |
+| Kimi CLI | `~/.kimi/skills/basics/` |
+| Goose | `~/.agents/skills/basics/` |
+| Amp | `~/.config/amp/skills/basics/` |
 
 ```bash
 git clone --depth 1 https://github.com/MarcozVD/basics /tmp/basics

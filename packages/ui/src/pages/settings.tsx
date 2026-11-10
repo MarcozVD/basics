@@ -53,6 +53,12 @@ const CLIENTS: { id: ConnectClientId; name: string }[] = [
   { id: "codex", name: "Codex" },
   { id: "cursor", name: "Cursor" },
   { id: "claude-desktop", name: "Claude Desktop" },
+  { id: "oh-my-pi", name: "oh-my-pi" },
+  { id: "gemini-cli", name: "Gemini CLI" },
+  { id: "qwen-code", name: "Qwen Code" },
+  { id: "kimi-cli", name: "Kimi CLI" },
+  { id: "goose", name: "Goose" },
+  { id: "amp", name: "Amp" },
 ];
 
 const LINKS = {
@@ -783,9 +789,14 @@ function AgentsSection() {
         for (const entry of failed) {
           next[entry.client] = { error: entry.message ?? t("state.error.unknown") };
         }
+        for (const entry of applied.entries.filter((entry) => entry.result === "manual" || entry.result === "skipped")) {
+          next[entry.client] = { note: entry.message, diff: entry.diff };
+        }
         return next;
       });
-      if (failed.length === 0) toast.success(t("settings.saved"));
+      if (failed.length === 0 && applied.entries.every((entry) => entry.result !== "manual" && entry.result !== "skipped")) {
+        toast.success(t("settings.saved"));
+      }
       refresh();
     },
     onError: (error, clients) => {
@@ -806,7 +817,7 @@ function AgentsSection() {
         ...current,
         [client]: failed ? { error: failed.message ?? t("state.error.unknown") } : {},
       }));
-      if (!failed) toast.success(t("settings.saved"));
+      if (!failed && result.entries.every((entry) => entry.result !== "manual")) toast.success(t("settings.saved"));
       refresh();
     },
     onError: (error, client) => {
@@ -850,97 +861,127 @@ function AgentsSection() {
       ) : status.isError ? (
         <ErrorState error={status.error} />
       ) : (
-        <Rows>
-          {CLIENTS.map(({ id, name }) => {
-            const entry = clients.find((client) => client.client === id);
-            const connected = entry?.connected ?? false;
-            const detectedHere = entry?.detected ?? false;
-            const row = feedback[id] ?? {};
-            const isConnecting = connectingTo.includes(id);
-            const isDisconnecting = disconnecting === id;
+        <>
+          {[true, false].map((installed) => {
+            const rows = CLIENTS.filter(({ id }) => {
+              const entry = clients.find((client) => client.client === id);
+              return Boolean(entry?.detected || entry?.connected) === installed;
+            }).map(({ id, name }) => {
+              const entry = clients.find((client) => client.client === id);
+              const connected = entry?.connected ?? false;
+              const detectedHere = entry?.detected ?? false;
+              const row = feedback[id] ?? {};
+              const isConnecting = connectingTo.includes(id);
+              const isDisconnecting = disconnecting === id;
 
-            return (
-              <div key={id} data-client={id} className="flex flex-col gap-2 px-4 py-3.5">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="flex min-w-0 items-center gap-2.5">
-                    <span
-                      aria-hidden="true"
-                      className="grid size-7 shrink-0 place-items-center rounded-full text-[11px] font-semibold"
-                      style={{ backgroundColor: `${agentColor(name)}1f`, color: agentColor(name) }}
-                    >
-                      {agentInitial(name)}
-                    </span>
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium">{name}</p>
-                      <p className="mt-0.5 truncate font-mono text-[11px] text-muted-foreground">{entry?.configPath ?? "—"}</p>
+              return (
+                <div key={id} data-client={id} className="flex flex-col gap-2 px-4 py-3.5">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      <span
+                        aria-hidden="true"
+                        className="grid size-7 shrink-0 place-items-center rounded-full text-[11px] font-semibold"
+                        style={{ backgroundColor: `${agentColor(name)}1f`, color: agentColor(name) }}
+                      >
+                        {agentInitial(name)}
+                      </span>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium">{name}</p>
+                        <p className="mt-0.5 truncate font-mono text-[11px] text-muted-foreground">{entry?.configPath ?? "—"}</p>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {connected ? (
+                        <Chip tone="primary">{t("settings.agents.connected")}</Chip>
+                      ) : detectedHere ? (
+                        <Chip tone="muted">{t("settings.agents.installed")}</Chip>
+                      ) : (
+                        <Chip tone="plain">{t("settings.agents.missing")}</Chip>
+                      )}
+                      {entry && entry.skill !== null ? (
+                        <Chip tone="muted">{entry.skill ? t("settings.agents.skill") : t("settings.agents.noSkill")}</Chip>
+                      ) : null}
+                      {connected ? (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          disabled={busy}
+                          aria-busy={isDisconnecting}
+                          onClick={() => disconnect.mutate(id)}
+                        >
+                          {t("settings.agents.disconnect")}
+                        </Button>
+                      ) : (
+                        <Button variant="primary" size="sm" disabled={busy} aria-busy={isConnecting} onClick={() => connect.mutate([id])}>
+                          {t("settings.agents.connect")}
+                        </Button>
+                      )}
                     </div>
                   </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    {connected ? (
-                      <Chip tone="primary">{t("settings.agents.connected")}</Chip>
-                    ) : detectedHere ? (
-                      <Chip tone="muted">{t("settings.agents.installed")}</Chip>
-                    ) : (
-                      <Chip tone="plain">{t("settings.agents.missing")}</Chip>
-                    )}
-                    {entry && entry.skill !== null ? (
-                      <Chip tone="muted">{entry.skill ? t("settings.agents.skill") : t("settings.agents.noSkill")}</Chip>
-                    ) : null}
-                    {connected ? (
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        disabled={busy}
-                        aria-busy={isDisconnecting}
-                        onClick={() => disconnect.mutate(id)}
-                      >
-                        {t("settings.agents.disconnect")}
-                      </Button>
-                    ) : (
-                      <Button
-                        variant="primary"
-                        size="sm"
-                        disabled={busy || !detectedHere}
-                        aria-busy={isConnecting}
-                        onClick={() => connect.mutate([id])}
-                      >
-                        {t("settings.agents.connect")}
-                      </Button>
-                    )}
-                  </div>
-                </div>
 
-                {row.note ? <p className="text-xs text-muted-foreground">{row.note}</p> : null}
-                {row.error ? (
-                  <p role="alert" className="text-xs text-destructive">
-                    {connected
-                      ? t("settings.agents.disconnectFailed", { client: name, message: row.error })
-                      : t("settings.agents.connectFailed", { client: name, message: row.error })}
-                  </p>
-                ) : null}
-                {row.diff ? (
-                  <Collapsible
-                    open={openDiffs[id] ?? false}
-                    onOpenChange={(open) => setOpenDiffs((current) => ({ ...current, [id]: open }))}
-                  >
-                    <CollapsibleTrigger className="min-h-7 justify-start gap-1.5 rounded-lg px-1 text-[11px] font-medium text-muted-foreground hover:bg-muted/40">
-                      <ChevronDown
-                        aria-hidden="true"
-                        className={cn("size-3.5 shrink-0 transition-transform duration-200", !(openDiffs[id] ?? false) && "-rotate-90")}
-                      />
-                      {t("settings.agents.showDiff")}
-                    </CollapsibleTrigger>
-                    <CollapsibleContent>
-                      <pre className="mt-1.5 max-h-64 overflow-auto rounded-xl border border-border bg-muted/40 p-3 font-mono text-[11px] leading-relaxed">
-                        {row.diff}
-                      </pre>
-                    </CollapsibleContent>
-                  </Collapsible>
-                ) : null}
-              </div>
+                  {row.note ? <p className="text-xs text-muted-foreground">{row.note}</p> : null}
+                  {row.error ? (
+                    <p role="alert" className="text-xs text-destructive">
+                      {connected
+                        ? t("settings.agents.disconnectFailed", { client: name, message: row.error })
+                        : t("settings.agents.connectFailed", { client: name, message: row.error })}
+                    </p>
+                  ) : null}
+                  {row.diff ? (
+                    <Collapsible
+                      open={openDiffs[id] ?? false}
+                      onOpenChange={(open) => setOpenDiffs((current) => ({ ...current, [id]: open }))}
+                    >
+                      <CollapsibleTrigger className="min-h-7 justify-start gap-1.5 rounded-lg px-1 text-[11px] font-medium text-muted-foreground hover:bg-muted/40">
+                        <ChevronDown
+                          aria-hidden="true"
+                          className={cn("size-3.5 shrink-0 transition-transform duration-200", !(openDiffs[id] ?? false) && "-rotate-90")}
+                        />
+                        {t("settings.agents.showDiff")}
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                        <pre className="mt-1.5 max-h-64 overflow-auto rounded-xl border border-border bg-muted/40 p-3 font-mono text-[11px] leading-relaxed">
+                          {row.diff}
+                        </pre>
+                      </CollapsibleContent>
+                    </Collapsible>
+                  ) : null}
+                </div>
+              );
+            });
+            return installed ? (
+              rows.length ? (
+                <Rows key="installed">{rows}</Rows>
+              ) : null
+            ) : (
+              <details key="other-agents" className="group">
+                <summary className="cursor-pointer rounded-lg py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-ring">
+                  {t("settings.agents.otherAgents")}
+                </summary>
+                <Rows>{rows}</Rows>
+              </details>
             );
           })}
-        </Rows>
+          <details>
+            <summary className="cursor-pointer rounded-lg py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-ring">
+              {t("settings.agents.otherAgent")}
+            </summary>
+            <p className="my-3 text-sm text-muted-foreground">{t("settings.agents.manualHint")}</p>
+            {status.data?.snippets
+              ? Object.entries(status.data.snippets).map(([format, value]) => (
+                  <div key={format} data-snippet={format} className="mb-4 min-w-0">
+                    <div className="mb-1 flex items-center justify-between gap-2">
+                      <span className="text-xs font-medium">{t(`settings.agents.snippet.${format}` as TranslationKey)}</span>
+                      <CopyButton value={value} />
+                    </div>
+                    <pre className="max-w-full overflow-x-auto rounded-xl border border-border bg-muted/40 p-3 font-mono text-[11px] leading-relaxed">
+                      {value}
+                    </pre>
+                  </div>
+                ))
+              : null}
+          </details>
+        </>
       )}
     </Section>
   );

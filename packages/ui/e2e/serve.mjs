@@ -100,6 +100,7 @@ const home = path.join(runDir, "home");
 // Claude Desktop resolves its config from `%APPDATA%` on Windows, not from the home directory.
 const appData = path.join(home, "AppData", "Roaming");
 fs.mkdirSync(path.join(home, ".cursor"), { recursive: true });
+fs.mkdirSync(path.join(home, ".gemini"), { recursive: true });
 fs.mkdirSync(appData, { recursive: true });
 
 // Skills for the Skills page: a few agent folders with one or two skills each, the same skill

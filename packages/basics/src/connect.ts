@@ -4,9 +4,24 @@ import os from "node:os";
 import path from "node:path";
 import { atomicWrite } from "@marcozvd/basics-core";
 import { onPath } from "./agents.js";
+import { editGoose, gooseEntry } from "./connect-goose.js";
+import { patchPresetJson, readPresetJson } from "./connect-json.js";
 
-export const CONNECT_CLIENTS = ["claude-code", "opencode", "codex", "cursor", "claude-desktop"] as const;
+export const CONNECT_CLIENTS = [
+  "claude-code",
+  "opencode",
+  "codex",
+  "cursor",
+  "claude-desktop",
+  "oh-my-pi",
+  "gemini-cli",
+  "qwen-code",
+  "kimi-cli",
+  "goose",
+  "amp",
+] as const;
 export type ConnectClient = (typeof CONNECT_CLIENTS)[number];
+const JSON_PRESETS = new Set<ConnectClient>(["oh-my-pi", "gemini-cli", "qwen-code", "kimi-cli", "amp"]);
 export type ConnectTransport = "stdio" | "http";
 export type ConnectOutcome = "registered" | "updated" | "unchanged" | "skipped" | "dry-run" | "manual" | "error";
 export type DisconnectOutcome = "removed" | "absent" | "dry-run" | "manual" | "error";
@@ -73,12 +88,14 @@ export interface ConnectStatusEntry {
 export interface ConnectStatusResult {
   vault: string;
   clients: ConnectStatusEntry[];
+  snippets: ReturnType<typeof connectSnippets>;
 }
 
 export interface ConnectStatusOptions {
   /** Absolute path of the current vault. */
   vault: string;
   home?: string;
+  url?: string;
 }
 
 export interface DisconnectSkillResult {
@@ -126,6 +143,12 @@ const SKILL_DIRS: Partial<Record<ConnectClient, (home: string) => string>> = {
   "claude-code": (home) => path.join(home, ".claude", "skills", "basics"),
   opencode: (home) => path.join(home, ".config", "opencode", "skills", "basics"),
   codex: (home) => path.join(home, ".codex", "skills", "basics"),
+  "oh-my-pi": (home) => path.join(home, ".omp", "agent", "skills", "basics"),
+  "gemini-cli": (home) => path.join(home, ".gemini", "skills", "basics"),
+  "qwen-code": (home) => path.join(home, ".qwen", "skills", "basics"),
+  "kimi-cli": (home) => path.join(home, ".kimi", "skills", "basics"),
+  goose: (home) => path.join(home, ".agents", "skills", "basics"),
+  amp: (home) => path.join(home, ".config", "amp", "skills", "basics"),
 };
 
 const SERVER_RELATIVE = path.join("dist", "mcp", "server.js");
@@ -142,6 +165,18 @@ export function connectCommand(vault: string): string[] {
   const node = process.env.BASICS_CONNECT_NODE || process.execPath;
   const server = process.env.BASICS_CONNECT_SERVER || path.join(packageRoot(), SERVER_RELATIVE);
   return [node, server, path.resolve(vault)];
+}
+
+/** Copyable configuration uses the same runtime and server as automatic registration. */
+export function connectSnippets(vault: string, url = "http://127.0.0.1:4747/mcp") {
+  const command = connectCommand(vault);
+  const quote = (arg: string) => (process.platform === "win32" ? `'${arg.replace(/'/g, "''")}'` : `'${arg.replace(/'/g, "'\\''")}'`);
+  return {
+    json: JSON.stringify({ mcpServers: { basics: { command: command[0], args: command.slice(1) } } }, null, 2),
+    toml: `[mcp_servers.basics]\ncommand = ${tomlString(command[0])}\nargs = [${command.slice(1).map(tomlString).join(", ")}]`,
+    http: url,
+    command: `${process.platform === "win32" ? "& " : ""}${command.map(quote).join(" ")}`,
+  };
 }
 
 /** `skills/basics/SKILL.md` from the npm package or, when running from source, the repo. */
@@ -189,6 +224,23 @@ function clientFile(client: ConnectClient, home: string): string {
       return path.join(home, ".cursor", "mcp.json");
     case "claude-desktop":
       return path.join(claudeDesktopDir(home), "claude_desktop_config.json");
+    case "oh-my-pi":
+      return path.join(home, ".omp", "agent", "mcp.json");
+    case "gemini-cli":
+      return path.join(home, ".gemini", "settings.json");
+    case "qwen-code":
+      return path.join(home, ".qwen", "settings.json");
+    case "kimi-cli":
+      return path.join(home, ".kimi", "mcp.json");
+    case "goose":
+      return process.platform === "win32"
+        ? path.join(process.env.APPDATA ?? path.join(home, "AppData", "Roaming"), "Block", "goose", "config", "config.yaml")
+        : path.join(home, ".config", "goose", "config.yaml");
+    case "amp": {
+      const json = path.join(home, ".config", "amp", "settings.json");
+      const jsonc = path.join(home, ".config", "amp", "settings.jsonc");
+      return hasContent(json) || !hasContent(jsonc) ? json : jsonc;
+    }
   }
 }
 
@@ -200,6 +252,12 @@ export function detectClients(home = os.homedir()): Record<ConnectClient, boolea
     codex: fs.existsSync(path.join(home, ".codex")) || Boolean(onPath("codex")),
     cursor: fs.existsSync(path.join(home, ".cursor")) || Boolean(onPath("cursor")),
     "claude-desktop": fs.existsSync(claudeDesktopDir(home)),
+    "oh-my-pi": fs.existsSync(path.join(home, ".omp")) || Boolean(onPath("omp")),
+    "gemini-cli": fs.existsSync(path.join(home, ".gemini")) || Boolean(onPath("gemini")),
+    "qwen-code": fs.existsSync(path.join(home, ".qwen")) || Boolean(onPath("qwen")),
+    "kimi-cli": fs.existsSync(path.join(home, ".kimi")) || Boolean(onPath("kimi")),
+    goose: fs.existsSync(path.dirname(clientFile("goose", home))) || Boolean(onPath("goose")),
+    amp: fs.existsSync(path.join(home, ".config", "amp")) || Boolean(onPath("amp")),
   };
 }
 
@@ -244,8 +302,10 @@ function stringList(value: unknown): string[] {
 function entryInfo(value: unknown): EntryInfo | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
   const entry = value as Record<string, unknown>;
+  if (typeof entry.httpUrl === "string") return { transport: "http", url: entry.httpUrl, argv: [] };
+  if (typeof entry.uri === "string") return { transport: "http", url: entry.uri, argv: [] };
   if (typeof entry.url === "string") return { transport: "http", url: entry.url, argv: [] };
-  const argv = [...stringList(entry.command), ...stringList(entry.args)];
+  const argv = [...stringList(entry.command ?? entry.cmd), ...stringList(entry.args)];
   return argv.length ? { transport: "stdio", argv } : undefined;
 }
 
@@ -301,11 +361,21 @@ function readClientEntry(client: ConnectClient, file: string): EntryInfo | undef
   if (!fs.existsSync(file)) return undefined;
   try {
     if (client === "codex") return readTomlEntry(file);
-    let cursor: unknown = JSON.parse(fs.readFileSync(file, "utf8"));
+    if (client === "goose") {
+      const value = gooseEntry(file);
+      if (value && typeof value === "object" && "enabled" in value && value.enabled === false) return undefined;
+      return entryInfo(value);
+    }
+    const text = fs.readFileSync(file, "utf8");
+    const root = JSON_PRESETS.has(client) ? readPresetJson(text) : JSON.parse(text);
+    if (client === "oh-my-pi" && Array.isArray(root.disabledServers) && root.disabledServers.includes("basics")) return undefined;
+    let cursor: unknown = root;
     for (const key of keyPathFor(client)) {
       if (!cursor || typeof cursor !== "object" || Array.isArray(cursor)) return undefined;
       cursor = (cursor as Record<string, unknown>)[key];
     }
+    if (JSON_PRESETS.has(client) && cursor && typeof cursor === "object" && "enabled" in cursor && cursor.enabled === false)
+      return undefined;
     return entryInfo(cursor);
   } catch {
     // Unparseable config: treat as not connected rather than failing the whole list.
@@ -340,14 +410,20 @@ export function connectStatus(opts: ConnectStatusOptions): ConnectStatusResult {
       configPath: displayPath(file, home),
     };
   });
-  return { vault, clients };
+  return { vault, clients, snippets: connectSnippets(vault, opts.url) };
 }
 
 function desiredEntry(client: ConnectClient, command: string[], url: string | undefined): Record<string, unknown> {
+  if (client === "goose")
+    return url
+      ? { type: "streamable_http", name: "basics", enabled: true, uri: url, timeout: 300 }
+      : { type: "stdio", name: "basics", enabled: true, cmd: command[0], args: command.slice(1), envs: {}, timeout: 300 };
   if (client === "opencode") {
     return url ? { type: "remote", url, enabled: true } : { type: "local", command, enabled: true };
   }
   if (url) {
+    if (client === "gemini-cli" || client === "qwen-code") return { httpUrl: url };
+    if (client === "amp" || client === "kimi-cli") return { url };
     return client === "cursor" || client === "claude-desktop" ? { url } : { type: "http", url };
   }
   return { command: command[0], args: command.slice(1) };
@@ -355,6 +431,7 @@ function desiredEntry(client: ConnectClient, command: string[], url: string | un
 
 function keyPathFor(client: ConnectClient): string[] {
   if (client === "opencode") return ["mcp", "basics"];
+  if (client === "amp") return ["amp.mcpServers", "basics"];
   return ["mcpServers", "basics"];
 }
 
@@ -601,6 +678,29 @@ function register(
   const keyPath = keyPathFor(client);
   const target = displayPath(file, home);
 
+  if (client === "goose") {
+    const before = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : null;
+    const value = desiredEntry(client, command, url);
+    try {
+      const existed = before ? Boolean(gooseEntry(file)) : false;
+      const after = editGoose(before ?? "", value);
+      if (after === before) return { target, change: "none", result: "unchanged" };
+      const diff = diffText(before, after);
+      if (dryRun) return { target, change: "extensions.basics", result: "dry-run", diff };
+      backupOnce(file);
+      atomicWrite(file, after);
+      return { target, change: "extensions.basics", result: existed ? "updated" : "registered" };
+    } catch (err) {
+      return {
+        target,
+        change: "none",
+        result: "manual",
+        message: `${String(err)}. Merge extensions.basics into ${target}`,
+        diff: `extensions:\n  basics: ${JSON.stringify(value)}`,
+      };
+    }
+  }
+
   if (client === "codex") {
     if (transport === "http") {
       return {
@@ -620,6 +720,36 @@ function register(
   }
 
   const value = desiredEntry(client, command, url);
+  if (JSON_PRESETS.has(client)) {
+    const before = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : null;
+    try {
+      const root = before?.trim() ? readPresetJson(before) : {};
+      const servers = root[keyPath[0]];
+      const current = servers && typeof servers === "object" ? (servers as Record<string, unknown>).basics : undefined;
+      let after = JSON.stringify(current) === JSON.stringify(value) ? (before ?? "") : patchPresetJson(before ?? "", keyPath, value);
+      if (client === "oh-my-pi" && Array.isArray(root.disabledServers) && root.disabledServers.includes("basics")) {
+        after = patchPresetJson(
+          after,
+          ["disabledServers"],
+          root.disabledServers.filter((name) => name !== "basics"),
+        );
+      }
+      if (after === before) return { target, change: "none", result: "unchanged" };
+      const edit = { file, before, after, changed: true, existed: current !== undefined };
+      return { target, change: keyPath.join("."), ...applyJson(edit, keyPath, value, dryRun) };
+    } catch (err) {
+      return {
+        target,
+        change: "none",
+        ...applyJson(
+          { file, before, after: before ?? "", changed: false, existed: false, parseError: String(err) },
+          keyPath,
+          value,
+          dryRun,
+        ),
+      };
+    }
+  }
   const edit = editJson(file, keyPath, value);
   const change = changeLabel(edit, keyPath, transport, url);
   if (!edit.changed && !edit.parseError) return { target, change: "none", result: "unchanged" };
@@ -808,6 +938,33 @@ function unregister(
   const file = clientFile(client, home);
   const keyPath = keyPathFor(client);
   const target = displayPath(file, home);
+
+  if (JSON_PRESETS.has(client)) {
+    try {
+      if (!fs.existsSync(file)) return { target, change: "none", result: "absent" };
+      const before = fs.readFileSync(file, "utf8");
+      const after = patchPresetJson(before, keyPath);
+      const edit = { file, before, after, changed: before !== after, absent: before === after };
+      return { target, change: before === after ? "none" : `remove ${keyPath.join(".")}`, ...applyRemove(edit, keyPath, home, dryRun) };
+    } catch (err) {
+      return { target, change: "none", result: "manual", message: `${String(err)}. Remove only ${keyPath.join(".")} from ${target}` };
+    }
+  }
+
+  if (client === "goose") {
+    try {
+      if (!fs.existsSync(file) || !gooseEntry(file)) return { target, change: "none", result: "absent" };
+      const before = fs.readFileSync(file, "utf8");
+      const after = editGoose(before);
+      return {
+        target,
+        change: "remove extensions.basics",
+        ...applyRemove({ file, before, after, changed: before !== after, absent: false }, ["extensions", "basics"], home, dryRun),
+      };
+    } catch (err) {
+      return { target, change: "none", result: "manual", message: `${String(err)}. Remove only extensions.basics from ${target}` };
+    }
+  }
 
   if (client === "claude-code" && allowCli && onPath("claude") && process.env.BASICS_CONNECT_NO_CLI !== "1") {
     if (dryRun) {

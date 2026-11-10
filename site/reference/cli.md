@@ -150,11 +150,12 @@ basics connect [options]
 
 | Flag | Description | Default |
 | --- | --- | --- |
-| `--client <names...>` | clients to register (claude-code, opencode, codex, cursor, claude-desktop); default: every client detected | — |
+| `--client <names...>` | clients to register (claude-code, opencode, codex, cursor, claude-desktop, oh-my-pi, gemini-cli, qwen-code, kimi-cli, goose, amp); default: every client detected | — |
 | `--transport <transport>` | stdio or http | `stdio` |
 | `--port <n>` | port for the http transport | `4747` |
 | `--no-skill` | do not install the Basics skill | — |
 | `--dry-run` | print every change without writing anything | — |
+| `--print` | print generic JSON, TOML, HTTP and command snippets without writing anything | — |
 
 ### `basics disconnect`
 
@@ -166,7 +167,7 @@ basics disconnect [options] [clients...]
 
 | Flag | Description | Default |
 | --- | --- | --- |
-| `--client <names...>` | clients to clean up (claude-code, opencode, codex, cursor, claude-desktop); default: every client | — |
+| `--client <names...>` | clients to clean up (claude-code, opencode, codex, cursor, claude-desktop, oh-my-pi, gemini-cli, qwen-code, kimi-cli, goose, amp); default: every client | — |
 | `--no-skill` | only remove the MCP entry, keep the Basics skill | — |
 | `--dry-run` | print every change without writing anything | — |
 

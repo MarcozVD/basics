@@ -415,7 +415,7 @@ export function createApp(opts: {
   });
 
   /** Where each client stands: detected, pointed at this vault, skill installed. Reads only. */
-  app.get("/api/connect/status", (c) => c.json(connectStatus({ vault: opts.root })));
+  app.get("/api/connect/status", (c) => c.json(connectStatus({ vault: opts.root, url: `${new URL(c.req.url).origin}/mcp` })));
 
   /** Every skill installed for this user; a read-only scan, a broken file becomes a row with `error`. */
   app.get("/api/skills", (c) => c.json(scanSkills()));

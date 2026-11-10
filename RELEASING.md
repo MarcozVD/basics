@@ -11,9 +11,11 @@ release: after `v1.7.0` the next merges are tagged `v1.7.1`, `v1.7.2`, and so on
 
 ```bash
 git fetch origin
-git tag -a v1.7.1 <merge-sha> -m "#28 feat(ui): arrange the free graph in rings by note type"
+git tag -a v1.7.1 <merge-sha> -m "PR 28: ci: publish only vX.Y.0 tags; vX.Y.Z are checkpoint tags"
 git push origin v1.7.1   # push only this tag
 ```
+
+Start the message with `PR <n>:`, not `#`: git's default cleanup drops lines that begin with `#`, which leaves the tag without a message.
 
 Checkpoint tags are git only: they do not publish to npm, create a GitHub Release or build the desktop app (the release
 workflow only runs for tags ending in `.0`). Package versions and changesets are untouched; the pending changesets

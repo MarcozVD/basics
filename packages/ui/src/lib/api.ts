@@ -217,7 +217,18 @@ export function getConfig(): Promise<AppConfig> {
 }
 
 /** Coding clients `basics connect` can register the MCP server with. */
-export type ConnectClientId = "claude-code" | "opencode" | "codex" | "cursor" | "claude-desktop";
+export type ConnectClientId =
+  | "claude-code"
+  | "opencode"
+  | "codex"
+  | "cursor"
+  | "claude-desktop"
+  | "oh-my-pi"
+  | "gemini-cli"
+  | "qwen-code"
+  | "kimi-cli"
+  | "goose"
+  | "amp";
 
 export interface ConnectSkillEntry {
   path: string;
@@ -261,6 +272,7 @@ export interface ConnectStatusEntry {
 export interface ConnectStatus {
   vault: string;
   clients: ConnectStatusEntry[];
+  snippets: { json: string; toml: string; http: string; command: string };
 }
 
 export interface DisconnectResult {

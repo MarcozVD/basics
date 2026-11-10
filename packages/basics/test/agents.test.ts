@@ -350,9 +350,11 @@ test("a second run while one is active is rejected", async () => {
   );
 });
 
-test("a missing CLI is reported as unavailable", () => {
-  const runner = new AgentRunner({ resolveExe: () => undefined });
-  assert.throws(() => runner.start({ agent: "codex", prompt: "plan" }, { onChunk: () => {}, onDone: () => {} }), AgentUnavailableError);
+test("a missing CLI is reported as unavailable", async () => {
+  await withFakePath(fakeBins().dir, () => {
+    const runner = new AgentRunner({ resolveExe: () => undefined });
+    assert.throws(() => runner.start({ agent: "codex", prompt: "plan" }, { onChunk: () => {}, onDone: () => {} }), AgentUnavailableError);
+  });
 });
 
 test("POST /api/agents/run streams over SSE, rejects a second run and keeps the guard", async () => {

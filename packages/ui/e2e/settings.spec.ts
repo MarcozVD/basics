@@ -1,6 +1,22 @@
 import { expect, test } from "@playwright/test";
 
-const CLIENTS = ["Claude Code", "opencode", "Codex", "Cursor", "Claude Desktop"];
+const CLIENTS = [
+  "Claude Code",
+  "opencode",
+  "Codex",
+  "Cursor",
+  "Claude Desktop",
+  "oh-my-pi",
+  "Gemini CLI",
+  "Qwen Code",
+  "Kimi CLI",
+  "Goose",
+  "Amp",
+];
+
+test.afterEach(async ({ request }) => {
+  await request.put("/api/config", { data: { language: "en" } });
+});
 
 test("opens Settings with Ctrl+, and the sidebar marks it current", async ({ page }) => {
   await page.goto("/");
@@ -78,6 +94,8 @@ test("Agents lists every client and connects, then disconnects, Cursor", async (
   await page.goto("/settings?section=agents");
   await expect(page.getByRole("heading", { name: "Agents", level: 2 })).toBeVisible();
 
+  await page.getByText("Other agents", { exact: true }).click();
+
   for (const client of CLIENTS) {
     await expect(page.getByText(client, { exact: true })).toBeVisible();
   }
@@ -96,6 +114,58 @@ test("Agents lists every client and connects, then disconnects, Cursor", async (
   await row.getByRole("button", { name: "Disconnect", exact: true }).click();
   await expect(row.getByText("Installed, not connected")).toBeVisible();
 });
+
+test("Gemini preset connects in temp HOME and exposes its change", async ({ page }) => {
+  await page.goto("/settings?section=agents");
+  const row = page.locator('[data-client="gemini-cli"]');
+  await expect(row.getByText("Installed, not connected")).toBeVisible();
+  await row.getByRole("button", { name: "Connect", exact: true }).press("Enter");
+  await expect(row.getByText("Connected", { exact: true })).toBeVisible();
+  await row.getByRole("button", { name: "Show what changed" }).press("Enter");
+  await expect(row.locator("pre")).toContainText("mcpServers");
+  await expect(row.getByText("Skill installed", { exact: true })).toBeVisible();
+  await row.getByRole("button", { name: "Disconnect", exact: true }).press("Enter");
+  await expect(row.getByText("Installed, not connected")).toBeVisible();
+});
+
+for (const language of ["en", "es"] as const) {
+  for (const theme of ["light", "dark"] as const) {
+    test(`Other agent snippets copy with keyboard: ${language}, ${theme}`, async ({ page, context }) => {
+      await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+      await page.addInitScript(
+        ({ language, theme }) => {
+          localStorage.setItem("basics-language", language);
+          localStorage.setItem("basics-theme", theme);
+        },
+        { language, theme },
+      );
+      // The persisted server language owns localization; change it through Settings.
+      await page.goto("/settings");
+      await page.getByRole("tab", { name: language === "es" ? "Español" : "English" }).click();
+      for (const width of [1280, 390]) {
+        await page.setViewportSize({ width, height: 820 });
+        await page.goto("/settings?section=agents");
+        await expect(page.locator("html")).toHaveAttribute("lang", language);
+        if (theme === "dark") await expect(page.locator("html")).toHaveClass(/dark/);
+        else await expect(page.locator("html")).not.toHaveClass(/dark/);
+        const summary = page.locator("summary").filter({ hasText: language === "es" ? "Otro agente:" : "Other agent:" });
+        await summary.press("Enter");
+        const snippets = await page.request
+          .get("/api/connect/status")
+          .then((response) => response.json())
+          .then((status) => status.snippets);
+        for (const format of ["json", "toml", "http", "command"]) {
+          const block = page.locator(`[data-snippet="${format}"]`);
+          await expect(block.locator("pre")).toHaveText(snippets[format]);
+          await block.getByRole("button").press("Enter");
+          // The Windows clipboard normalizes text to CRLF.
+          expect((await page.evaluate(() => navigator.clipboard.readText())).replace(/\r\n/g, "\n")).toBe(snippets[format]);
+        }
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      }
+    });
+  }
+}
 
 test("Startup and Updates point at the desktop app in a browser", async ({ page }) => {
   await page.goto("/settings?section=startup");
