@@ -11,6 +11,7 @@ Read the whole vault catalog in one call: every layer with its techs (kind, use_
 | Input | Type | Required | Description |
 | --- | --- | --- | --- |
 | `layers` | `string`[] | no | Restrict the catalog to these layer ids |
+| `workflow` | { version, role, name } | no | Are you a specialised agent in an orchestrated team? Answer from your assigned task: orchestrator (or lead), dev, tester, or another named role. If you are a general agent, no orchestration is in use, or you do not answer, continue with the current single-agent Basics workflow. Decide once per conversation; do not ask the user to choose your role. |
 
 Minimal call:
 
@@ -106,6 +107,7 @@ Compile best practices and validation checks for a chosen set of technologies in
 | --- | --- | --- | --- |
 | `tech_ids` | `string`[] | yes | — |
 | `versions` | map<string, `string`> | no | — |
+| `workflow` | { version, role, name } | no | Are you a specialised agent in an orchestrated team? Answer from your assigned task: orchestrator (or lead), dev, tester, or another named role. If you are a general agent, no orchestration is in use, or you do not answer, continue with the current single-agent Basics workflow. Decide once per conversation; do not ask the user to choose your role. |
 
 Minimal call:
 
