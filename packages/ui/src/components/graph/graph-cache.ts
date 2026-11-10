@@ -121,7 +121,8 @@ function hash(text: string): string {
 export function graphCacheKey(vault: string, layout: GraphLayoutMode, data: GraphData): string {
   const nodes = data.nodes.map((node) => (layout === "flat" ? `${node.id}:${node.type}:${node.degree}` : node.id)).sort();
   const edges = data.edges.map((edge) => `${edge.source}>${edge.target}`).sort();
-  return hash(`${vault}\u0000${layout}\u0000${nodes.join("\u0001")}\u0000${edges.join("\u0001")}`);
+  const version = layout === "flat" ? "rings-compact-v1" : "";
+  return hash(`${vault}\u0000${layout}${version}\u0000${nodes.join("\u0001")}\u0000${edges.join("\u0001")}`);
 }
 
 /** Best entry for this vault and layout: exact first, otherwise the one sharing most nodes. */
