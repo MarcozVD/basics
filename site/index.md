@@ -34,5 +34,5 @@ Connect an agent, ask it to recommend a stack, and review what it proposes in th
 
 - [Install and create your first vault](./guide/getting-started.md)
 - [Learn the vault, note types and the agent loop](./guide/concepts.md)
-- [Connect Claude Code, Cursor, VS Code, Codex or Windsurf](./guide/mcp-clients.md)
+- [Connect Claude Code, Cursor, VS Code, Codex, Gemini CLI and more](./guide/mcp-clients.md)
 - [Browse every command and MCP tool](./reference/cli.md)

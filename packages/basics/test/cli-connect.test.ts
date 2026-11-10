@@ -82,6 +82,18 @@ function desktopDir(box: Sandbox): string {
 
 const expectedCommand = (box: Sandbox): string[] => [process.execPath, path.resolve(SERVER), path.resolve(box.vault)];
 
+test("--print emits all generic snippets without registering clients or skills", () => {
+  const box = sandbox();
+  const before = fs.readdirSync(box.home);
+  const result = runConnect(["--print", "--port", "4828", "--client", "gemini-cli"], box);
+  assert.equal(result.status, 0, result.stderr);
+  assert.ok(result.stdout.includes('"mcpServers"'));
+  assert.ok(result.stdout.includes("[mcp_servers.basics]"));
+  assert.ok(result.stdout.includes("http://127.0.0.1:4828/mcp"));
+  assert.ok(result.stdout.includes(JSON.stringify(box.vault)));
+  assert.deepEqual(fs.readdirSync(box.home), before);
+});
+
 test("connect registers every detected client, merges configs and installs the skill", () => {
   const box = sandbox();
   const home = box.home;

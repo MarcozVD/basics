@@ -4,7 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "vitest";
-import { connect, connectStatus, disconnect } from "../src/connect.js";
+import { CONNECT_CLIENTS, connect, connectStatus, disconnect } from "../src/connect.js";
 import { createApp } from "../src/server/app.js";
 
 const ROOT = path.resolve(import.meta.dirname, "../../..");
@@ -93,13 +93,18 @@ function desktopDir(box: Sandbox): string {
   return path.join(box.home, ".config", "Claude");
 }
 
-/** Every client directory exists, so `connect` with no client list picks all five up. */
+/** Every client directory exists, so `connect` with no client list picks every preset up. */
 function installAllClients(box: Sandbox): void {
   fs.mkdirSync(path.join(box.home, ".claude"), { recursive: true });
   fs.mkdirSync(path.join(box.home, ".config", "opencode"), { recursive: true });
   fs.mkdirSync(path.join(box.home, ".codex"), { recursive: true });
   fs.mkdirSync(path.join(box.home, ".cursor"), { recursive: true });
   fs.mkdirSync(desktopDir(box), { recursive: true });
+  for (const dir of [".omp", ".gemini", ".qwen", ".kimi", ".config/amp"]) fs.mkdirSync(path.join(box.home, dir), { recursive: true });
+  fs.mkdirSync(
+    process.platform === "win32" ? path.join(box.env.APPDATA ?? "", "Block", "goose", "config") : path.join(box.home, ".config", "goose"),
+    { recursive: true },
+  );
 }
 
 test("connectStatus reports a fresh machine as neither installed nor connected", () => {
@@ -111,7 +116,7 @@ test("connectStatus reports a fresh machine as neither installed nor connected",
     assert.equal(status.vault, path.resolve(box.vault));
     assert.deepEqual(
       status.clients.map((client) => client.client),
-      ["claude-code", "opencode", "codex", "cursor", "claude-desktop"],
+      [...CONNECT_CLIENTS],
     );
     for (const client of status.clients) {
       assert.equal(client.detected, false, client.client);
@@ -140,13 +145,13 @@ test("connectStatus follows connect(), then disconnect() clears it again", () =>
     }
     assert.deepEqual(
       status.clients.map((client) => client.skill),
-      [true, true, true, null, null],
+      [true, true, true, null, null, true, true, true, true, true, true],
     );
     assert.ok(status.clients.some((client) => client.configPath === "~/.claude.json"));
     assert.ok(status.clients.some((client) => client.configPath === "~/.codex/config.toml"));
 
     const removed = disconnect({ home: box.home });
-    assert.equal(removed.entries.length, 5);
+    assert.equal(removed.entries.length, CONNECT_CLIENTS.length);
     for (const entry of removed.entries) {
       assert.equal(entry.result, "removed", `${entry.client}: ${entry.message ?? ""}`);
       if (entry.skill) assert.equal(entry.skill.result, "removed", entry.client);
@@ -245,7 +250,7 @@ test("disconnect removes only the Basics entry and the skill, keeping every othe
       fs.writeFileSync(path.join(dir, "keep.txt"), "keep");
     }
 
-    const result = disconnect({ home });
+    const result = disconnect({ home, clients: ["claude-code", "opencode", "codex", "cursor", "claude-desktop"] });
     assert.equal(result.entries.length, 5);
     for (const entry of result.entries) assert.equal(entry.result, "removed", `${entry.client}: ${entry.message ?? ""}`);
 

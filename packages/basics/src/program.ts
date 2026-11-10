@@ -56,7 +56,7 @@ import {
   writeVaultMeta,
 } from "@marcozvd/basics-core";
 import { Command } from "commander";
-import { CONNECT_CLIENTS, type ConnectResult, connect, type DisconnectResult, disconnect } from "./connect.js";
+import { CONNECT_CLIENTS, type ConnectResult, connect, connectSnippets, type DisconnectResult, disconnect } from "./connect.js";
 import {
   createEmbedder,
   directorySize,
@@ -906,6 +906,7 @@ interface ConnectCliOptions {
   port?: string;
   skill: boolean;
   dryRun?: boolean;
+  print?: boolean;
 }
 
 function printConnect(result: ConnectResult): void {
@@ -933,6 +934,12 @@ function connectCli(opts: ConnectCliOptions): void {
   if (transport !== "stdio" && transport !== "http") fail(`unknown transport "${transport}"`, "use --transport stdio or --transport http");
   const port = Number(opts.port ?? 4747);
   if (!Number.isInteger(port) || port < 1 || port > 65535) fail(`invalid port "${opts.port}"`, "use --port <1-65535>");
+
+  if (opts.print) {
+    const snippets = connectSnippets(resolveVaultDir(program.opts().vault), `http://127.0.0.1:${port}/mcp`);
+    for (const [format, snippet] of Object.entries(snippets)) console.log(`\n${format}\n${snippet}`);
+    return;
+  }
 
   const result = connect({
     vault: resolveVaultDir(program.opts().vault),
@@ -1099,6 +1106,7 @@ export function buildProgram(): Command {
     .option("--port <n>", "port for the http transport", "4747")
     .option("--no-skill", "do not install the Basics skill")
     .option("--dry-run", "print every change without writing anything")
+    .option("--print", "print generic JSON, TOML, HTTP and command snippets without writing anything")
     .action((opts: ConnectCliOptions) => connectCli(opts));
 
   program

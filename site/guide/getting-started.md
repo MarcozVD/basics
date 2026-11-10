@@ -61,8 +61,8 @@ Or connect over stdio without the UI:
 claude mcp add basics --scope user -- basics-mcp /absolute/path/to/my-vault
 ```
 
-Every other client (Claude Desktop, Cursor, VS Code, Codex CLI, OpenCode, Windsurf) is covered in
-[MCP clients](./mcp-clients.md).
+Every other client (Claude Desktop, Cursor, VS Code, Codex CLI, OpenCode, Windsurf, oh-my-pi, Gemini CLI, Qwen Code, Kimi CLI, Goose, Amp) is covered in
+[MCP clients](./mcp-clients.md). Any other agent gets copyable snippets from `basics connect --print`.
 
 ## First recommendation
 
