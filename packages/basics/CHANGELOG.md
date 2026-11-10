@@ -1,5 +1,17 @@
 # @marcozvd/basics
 
+## 1.8.0
+
+### Minor Changes
+
+- 53a5000: Basics can now guide an orchestrator, a developer and a tester differently when an agent says it has one of those roles. Each agent declares its role once through an optional `workflow` argument on `get_vault_overview` and `get_stack_context`. General agents see no change.
+- 2614ed8: Connect Basics to oh-my-pi, Gemini CLI, Qwen Code, Kimi CLI, Goose, and Amp, including their Basics skills. Settings lists other agents in a collapsed group, with copyable JSON, TOML, HTTP, and command snippets for any agent. `basics connect --print` prints the same snippets.
+- c63383d: The full graph is arranged in rings by note type: profiles and projects in the centre, then tech, practices, checks and layers, with faint ring guides. Switching Group by layer on and off is now fast after the first time, and each view keeps its own zoom and position. Hover highlights no longer stick after switching views.
+
+### Patch Changes
+
+- @marcozvd/basics-core@1.8.0
+
 ## 1.7.0
 
 ### Minor Changes
