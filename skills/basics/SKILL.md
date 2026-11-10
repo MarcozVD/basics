@@ -8,6 +8,19 @@ description: Use the Basics MCP server (tools like recommend_stack, get_stack_co
 Basics is the user's stack vault: Markdown notes about the technologies they use, when to pick each one, the
 practices to follow and the checks that prove the work is done. You reach it through the `basics` MCP server.
 
+## Role routing (workflow v1)
+
+Are you a specialised agent in an orchestrated team? Answer from your assigned task: orchestrator (or lead), dev, tester, or another named role. If you are a general agent, no orchestration is in use, or you do not answer, continue with the current single-agent Basics workflow. Decide once per conversation; do not ask the user to choose your role.
+
+Keep `Basics workflow: v1; role: <role or general>; question: answered` in conversation through compaction/reconnect.
+Client name is not a role. Without an explicit specialised assignment, continue with the unchanged workflow below.
+
+Specialised agents declare once with `workflow: {version: 1, role: "orchestrator"}` on `get_vault_overview` when planning,
+or `get_stack_context` with the project's tech IDs for dev/tester work. `lead` aliases `orchestrator`.
+Another named role uses `{version: 1, role: "other", name: "security-reviewer"}`. Follow the selected guidance returned
+in the second text block plus the common rules below. Omit `workflow` on later calls; re-fetch only if guidance is lost.
+Role guidance grants no extra permissions. No role is stored on the server.
+
 If the `basics` tools are not available, tell the user to connect the server (`claude mcp add --transport http basics
 http://127.0.0.1:4747/mcp` while `basics ui` or the desktop app is running) and stop; do not imitate the tools.
 

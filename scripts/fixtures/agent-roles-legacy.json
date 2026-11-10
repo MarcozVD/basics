@@ -1,0 +1,555 @@
+{
+  "sha": "1e0801a0ed48966edbf05d37b3d37ed88382f414",
+  "contract": {
+    "tools": [
+      {
+        "name": "get_vault_overview",
+        "description": "Read the whole vault catalog in one call: every layer with its techs (kind, use_when, avoid_when, performs_best), the stack profiles and the past projects. Archived projects are omitted; finished (done) projects stay, so their stack and lessons still inform the next choice. Use it to reason over the vault when a ranked shortlist is not enough; read deciding notes with get_note before choosing. Read-only.",
+        "inputSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "layers": {
+              "description": "Restrict the catalog to these layer ids",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "list_layers",
+        "description": "List the stack layers (backend, frontend, testing, ...) and the technologies stored under each.",
+        "inputSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "search_vault",
+        "description": "Full-text search over the user's stack vault. Returns ranked hits (id, type, title, score) plus the total that matched, so a capped list says so. Use before proposing new notes to avoid duplicates.",
+        "inputSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "enum": ["layer", "tech", "practice", "check", "profile", "project"]
+            },
+            "layer": {
+              "description": "Restrict to tech notes in this layer",
+              "type": "string"
+            },
+            "limit": {
+              "description": "Maximum hits to return (default 10)",
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 50
+            }
+          },
+          "required": ["query"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "get_note",
+        "description": "Read a vault note (frontmatter + markdown body) plus which notes link to it.",
+        "inputSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            }
+          },
+          "required": ["id"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "recommend_stack",
+        "description": "Given a natural-language project description, return ranked technology candidates per layer and matching stack profiles from the user's vault. Each candidate carries the `use_when`/`performs_best`/`avoid_when` phrases that matched and the `score_breakdown` parts that scored (weighted keyword overlap scaled by word rarity, plus negation and language fit; `hybrid` when embeddings are on). `per_layer` is a maximum, not a minimum: a layer with nothing above zero is omitted. Treat it as a shortlist: read the candidate notes, choose, and explain the choice to the user. Prefer the user's vault over general knowledge.",
+        "inputSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "description": {
+              "type": "string"
+            },
+            "layers": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "per_layer": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 10
+            }
+          },
+          "required": ["description"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "get_stack_context",
+        "description": "Compile best practices and validation checks for a chosen set of technologies into one markdown document. Call once the stack is chosen and follow it while writing code; run the listed checks before declaring work done.",
+        "inputSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "tech_ids": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "versions": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          },
+          "required": ["tech_ids"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "get_check_templates",
+        "description": "Return the file templates (tests, configs) shipped by the checks of a chosen stack. Write missing files into the project; never overwrite existing files.",
+        "inputSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "stack": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "versions": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          },
+          "required": ["stack"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "detect_stack",
+        "description": "Detect technologies and versions from a project directory's package.json, pyproject.toml and requirements files. Read-only.",
+        "inputSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "Existing project directory"
+            }
+          },
+          "required": ["path"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "propose_note",
+        "description": "Propose a new note or an update to an existing one. It lands in the vault inbox for the user to approve; it is NOT applied directly. Frontmatter must match the note type schema (e.g. tech: kind, layer, use_when, avoid_when, performs_best, practices, checks). Use [[id]] wikilinks in the body to connect notes.",
+        "inputSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "Slug, e.g. 'fastapi' or 'react-server-components'"
+            },
+            "type": {
+              "type": "string",
+              "enum": ["layer", "tech", "practice", "check", "profile", "project"]
+            },
+            "frontmatter": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {},
+              "description": "Fields for the note type, excluding 'type'"
+            },
+            "body": {
+              "type": "string",
+              "description": "Markdown body"
+            },
+            "reason": {
+              "type": "string",
+              "description": "Why this note should be added/changed"
+            },
+            "agent": {
+              "type": "string",
+              "description": "Name of the proposing agent, e.g. 'claude-code'"
+            }
+          },
+          "required": ["id", "type", "frontmatter", "body", "reason", "agent"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "record_project_outcome",
+        "description": "Propose an outcome for a project note: append lessons, optionally extend tech notes (use_when, avoid_when, performs_best, lessons) and add a dated outcome section. A finished (done) project still accepts outcomes: its lessons keep counting for later decisions. Everything lands in the vault inbox for review; nothing is applied directly.",
+        "inputSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "project": {
+              "type": "string",
+              "description": "Project note id"
+            },
+            "summary": {
+              "type": "string",
+              "description": "What happened and what was learned"
+            },
+            "lessons": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "tech_updates": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "add_use_when": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "add_avoid_when": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "add_performs_best": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "lesson": {
+                    "type": "string"
+                  }
+                },
+                "required": ["id"],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": ["project", "summary"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "export_project",
+        "description": "Render the files that make a project's coding agents follow the user's stack: STACK.md always, plus AGENTS.md, CLAUDE.md and/or Cursor rules. Pass the current file contents in `existing` so agent-file blocks merge instead of overwriting user text; basics never writes outside the vault.",
+        "inputSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "stack": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "targets": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["agents", "claude", "cursor"]
+              }
+            },
+            "existing": {
+              "description": "Current file contents keyed by relative path",
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          },
+          "required": ["stack"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "list_proposals",
+        "description": "List agent proposals waiting for user review in the vault inbox.",
+        "inputSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        }
+      }
+    ],
+    "prompts": [
+      {
+        "name": "plan-stack",
+        "description": "Plan a project's stack from the vault: read the whole catalog and the ranked shortlist, decide one tech per layer, explain the choice, propose any note the vault is missing for that decision and ask for confirmation before writing files.",
+        "arguments": [
+          {
+            "name": "project",
+            "description": "What the user is building: product, users and any constraint already known.",
+            "required": true
+          }
+        ]
+      }
+    ],
+    "prompt": "Plan the stack for this project:\n\nCounter dashboard\n\nWork from the user's vault, not from general knowledge:\n\n1. `get_vault_overview` for every layer with its techs (`use_when`, `avoid_when`, `performs_best`), the profiles and the past projects. Pass `layers` only when the user already named them.\n2. `recommend_stack` with the same description as a cross-check. It is a shortlist, not the decision.\n3. `get_note` on the deciding notes before committing, especially when two candidates are close or a profile looks like a match.\n\nAnswer with a short **stack decision**: one tech per needed layer, one line of reason each citing the vault note (`[[id]]`) and the `use_when` it matched; name any `avoid_when` that ruled out an alternative. Prefer a matching profile, and what past projects used successfully while respecting their lessons.\n\nFill the gaps the decision exposes: when a tech it needs has no note, or a chosen note links a missing `[[id]]`, `search_vault` then `propose_note` — never more notes than the decision uses. Each proposal needs the right `type`; for a tech its `kind`, `layer` (an existing layer id) and `language` when it applies; at least 2 `use_when`, 1 `avoid_when`, `tags` and `related`; `[[id]]` links and `related` only to notes that exist or that you propose now; a 3–6 line body (what it is, when it beats the alternatives in the vault, one pitfall); and a `reason` naming the decision that needed it.\n\nList the proposals (\"Propuestas al Inbox: rustls, reqwest\") and repeat that nothing is applied until the user approves it in the Inbox. Then ask ONE question: \"¿Usamos este stack? / Shall we use this stack?\" in the user's language.\n\nAfter a yes, follow the skill's New project steps: `get_stack_context` for the chosen techs, `get_check_templates` for the files to create, then `export_project` (send the existing agent file contents in `existing`) and write the returned files into the project root.",
+    "results": [
+      {
+        "name": "get_vault_overview",
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\"layers\":[{\"id\":\"backend\",\"title\":\"Backend\",\"techs\":[{\"id\":\"fastapi\",\"title\":\"FastAPI\",\"kind\":\"framework\",\"use_when\":[\"API REST o JSON async\",\"microservicios y servicios que exponen modelos de ML\",\"backend para SPA o app móvil\"],\"avoid_when\":[\"sitio con renderizado server-side de HTML pesado\",\"admin CRUD clásico con mucho formulario (mejor Django)\"],\"performs_best\":[\"alta concurrencia I/O\",\"validación tipada con pydantic y docs OpenAPI automáticas\"],\"language\":\"python\"},{\"id\":\"nextjs\",\"title\":\"Next.js\",\"kind\":\"framework\",\"use_when\":[\"web con SEO y renderizado server-side\",\"landing, ecommerce, SaaS fullstack en un solo repo\"],\"avoid_when\":[\"API pura sin interfaz\",\"SPA interna detrás de login sin necesidad de SEO\"],\"performs_best\":[\"SSR, SSG e ISR\",\"despliegue en Vercel o edge\"],\"language\":\"typescript\"},{\"id\":\"python\",\"title\":\"Python\",\"kind\":\"language\",\"use_when\":[\"APIs y servicios backend con desarrollo rápido\",\"ciencia de datos, machine learning, scripts y automatización\"],\"avoid_when\":[\"CPU-bound de baja latencia sin extensiones nativas\",\"aplicaciones de navegador\"],\"performs_best\":[\"ecosistema de datos y ML\",\"prototipado rápido\"]},{\"id\":\"typescript\",\"title\":\"TypeScript\",\"kind\":\"language\",\"use_when\":[\"aplicaciones web frontend\",\"backend Node compartiendo tipos con frontend\",\"herramientas CLI y servidores MCP\"],\"avoid_when\":[\"computación numérica intensiva\"],\"performs_best\":[\"tipado estático en código JavaScript grande\",\"fullstack con un solo lenguaje\"]}]},{\"id\":\"data\",\"title\":\"Data\",\"techs\":[{\"id\":\"postgresql\",\"title\":\"PostgreSQL\",\"kind\":\"database\",\"use_when\":[\"datos relacionales con transacciones\",\"SaaS, CRUD, ecommerce\",\"búsqueda full-text o datos geoespaciales moderados\"],\"avoid_when\":[\"caché efímera de muy baja latencia (mejor Redis)\"],\"performs_best\":[\"consistencia ACID e integridad referencial\",\"consultas complejas y JSONB\"]},{\"id\":\"python\",\"title\":\"Python\",\"kind\":\"language\",\"use_when\":[\"APIs y servicios backend con desarrollo rápido\",\"ciencia de datos, machine learning, scripts y automatización\"],\"avoid_when\":[\"CPU-bound de baja latencia sin extensiones nativas\",\"aplicaciones de navegador\"],\"performs_best\":[\"ecosistema de datos y ML\",\"prototipado rápido\"]}]},{\"id\":\"frontend\",\"title\":\"Frontend\",\"techs\":[{\"id\":\"nextjs\",\"title\":\"Next.js\",\"kind\":\"framework\",\"use_when\":[\"web con SEO y renderizado server-side\",\"landing, ecommerce, SaaS fullstack en un solo repo\"],\"avoid_when\":[\"API pura sin interfaz\",\"SPA interna detrás de login sin necesidad de SEO\"],\"performs_best\":[\"SSR, SSG e ISR\",\"despliegue en Vercel o edge\"],\"language\":\"typescript\"},{\"id\":\"react\",\"title\":\"React\",\"kind\":\"library\",\"use_when\":[\"SPA interactiva tipo dashboard o panel\",\"interfaz con mucho estado de cliente\"],\"avoid_when\":[\"sitio estático de contenido casi sin interactividad\"],\"performs_best\":[\"ecosistema de componentes enorme\",\"UI compleja basada en componentes\"],\"language\":\"typescript\"},{\"id\":\"typescript\",\"title\":\"TypeScript\",\"kind\":\"language\",\"use_when\":[\"aplicaciones web frontend\",\"backend Node compartiendo tipos con frontend\",\"herramientas CLI y servidores MCP\"],\"avoid_when\":[\"computación numérica intensiva\"],\"performs_best\":[\"tipado estático en código JavaScript grande\",\"fullstack con un solo lenguaje\"]}]},{\"id\":\"infra\",\"title\":\"Infra\",\"techs\":[]},{\"id\":\"testing\",\"title\":\"Testing\",\"techs\":[{\"id\":\"playwright\",\"title\":\"Playwright\",\"kind\":\"framework\",\"use_when\":[\"tests end-to-end de aplicaciones web en navegador\",\"validar flujos de usuario críticos como login o checkout\"],\"avoid_when\":[\"lógica pura sin interfaz\"],\"performs_best\":[\"multi-navegador, auto-wait, trazas para depurar\"],\"language\":\"typescript\"},{\"id\":\"pytest\",\"title\":\"pytest\",\"kind\":\"framework\",\"use_when\":[\"tests unitarios e integración en Python\",\"tests de API FastAPI con TestClient o httpx\"],\"avoid_when\":[\"tests end-to-end de navegador\"],\"performs_best\":[\"fixtures y parametrización\"],\"language\":\"python\"},{\"id\":\"vitest\",\"title\":\"Vitest\",\"kind\":\"framework\",\"use_when\":[\"tests unitarios de TypeScript, React o Node\",\"proyectos con Vite\"],\"avoid_when\":[\"tests end-to-end de navegador real\"],\"performs_best\":[\"velocidad y compatibilidad con API de Jest\"],\"language\":\"typescript\"}]}],\"profiles\":[{\"id\":\"ml-api\",\"title\":\"API de machine learning\",\"use_when\":[\"servir modelos de machine learning\",\"procesamiento de datos vía API\"],\"stack\":{\"backend\":[\"fastapi\",\"python\"],\"testing\":[\"pytest\"]}},{\"id\":\"saas-web\",\"title\":\"SaaS web fullstack\",\"use_when\":[\"SaaS con usuarios y suscripciones\",\"panel de administración o dashboard con datos\"],\"stack\":{\"frontend\":[\"react\",\"typescript\"],\"backend\":[\"fastapi\",\"python\"],\"data\":[\"postgresql\"],\"testing\":[\"pytest\",\"vitest\",\"playwright\"]}}],\"projects\":[{\"id\":\"role-eval-dashboard\",\"title\":\"Role eval dashboard\",\"status\":\"active\",\"stack\":{\"frontend\":[\"react\",\"typescript\"],\"testing\":[\"playwright\"]}}]}"
+            }
+          ]
+        }
+      },
+      {
+        "name": "list_layers",
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "[{\"id\":\"backend\",\"title\":\"Backend\",\"techs\":[\"fastapi\",\"nextjs\",\"python\",\"typescript\"]},{\"id\":\"data\",\"title\":\"Data\",\"techs\":[\"postgresql\",\"python\"]},{\"id\":\"frontend\",\"title\":\"Frontend\",\"techs\":[\"nextjs\",\"react\",\"typescript\"]},{\"id\":\"infra\",\"title\":\"Infra\",\"techs\":[]},{\"id\":\"testing\",\"title\":\"Testing\",\"techs\":[\"playwright\",\"pytest\",\"vitest\"]}]"
+            }
+          ]
+        }
+      },
+      {
+        "name": "search_vault",
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\"hits\":[{\"id\":\"react-components\",\"type\":\"practice\",\"title\":\"Componentes React\",\"score\":8},{\"id\":\"react\",\"type\":\"tech\",\"title\":\"React\",\"score\":7},{\"id\":\"e2e-critical-flows\",\"type\":\"check\",\"title\":\"Flujos críticos E2E\",\"score\":2},{\"id\":\"vitest\",\"type\":\"tech\",\"title\":\"Vitest\",\"score\":2},{\"id\":\"nextjs\",\"type\":\"tech\",\"title\":\"Next.js\",\"score\":1},{\"id\":\"typescript\",\"type\":\"tech\",\"title\":\"TypeScript\",\"score\":1}],\"total\":6}"
+            }
+          ]
+        }
+      },
+      {
+        "name": "get_note",
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\"id\":\"react\",\"data\":{\"title\":\"React\",\"tags\":[\"ui\",\"spa\",\"componentes\"],\"source\":\"manual\",\"type\":\"tech\",\"kind\":\"library\",\"layer\":\"frontend\",\"language\":\"typescript\",\"use_when\":[\"SPA interactiva tipo dashboard o panel\",\"interfaz con mucho estado de cliente\"],\"avoid_when\":[\"sitio estático de contenido casi sin interactividad\"],\"performs_best\":[\"ecosistema de componentes enorme\",\"UI compleja basada en componentes\"],\"related\":[\"nextjs\",\"vitest\",\"playwright\"],\"practices\":[\"react-components\"],\"checks\":[]},\"body\":\"# React\\n\\nLibrería de UI. Para SSR/SEO usar [[nextjs]].\",\"links\":[\"frontend\",\"typescript\",\"nextjs\",\"vitest\",\"playwright\",\"react-components\"],\"backlinks\":[\"e2e-critical-flows\",\"react-components\",\"saas-web\",\"role-eval-dashboard\",\"nextjs\",\"typescript\"]}"
+            }
+          ]
+        }
+      },
+      {
+        "name": "recommend_stack",
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\"description\":\"dashboard interactivo TypeScript React\",\"mode\":\"keywords\",\"profiles\":[{\"id\":\"saas-web\",\"score\":106,\"stack\":{\"frontend\":[\"react\",\"typescript\"],\"backend\":[\"fastapi\",\"python\"],\"data\":[\"postgresql\"],\"testing\":[\"pytest\",\"vitest\",\"playwright\"]}}],\"layers\":{\"frontend\":[{\"id\":\"react\",\"kind\":\"library\",\"score\":215,\"matched_use_when\":[\"SPA interactiva tipo dashboard o panel\"],\"language_boost\":3,\"score_breakdown\":{\"keywords\":172,\"synonyms\":40,\"language\":3}},{\"id\":\"nextjs\",\"kind\":\"framework\",\"score\":9,\"language_boost\":3,\"score_breakdown\":{\"text\":6,\"language\":3}},{\"id\":\"typescript\",\"kind\":\"language\",\"score\":6,\"score_breakdown\":{\"text\":6}}]},\"note\":\"Shortlist, not a decision: read the candidate notes before choosing; score_breakdown lists the parts that scored and per_layer is a maximum.\"}"
+            }
+          ]
+        }
+      },
+      {
+        "name": "get_stack_context",
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "# Stack context\n\n## Technologies\n\n### React (`react`)\n\n- layer: frontend\n- use when: SPA interactiva tipo dashboard o panel; interfaz con mucho estado de cliente\n- avoid when: sitio estático de contenido casi sin interactividad\n\n#### React\n\nLibrería de UI. Para SSR/SEO usar [[nextjs]].\n\n### TypeScript (`typescript`)\n\n- layer: frontend, backend\n- use when: aplicaciones web frontend; backend Node compartiendo tipos con frontend; herramientas CLI y servidores MCP\n- avoid when: computación numérica intensiva\n\n#### TypeScript\n\nBase de [[react]] y [[nextjs]]. Tests con [[vitest]].\n\n### Playwright (`playwright`)\n\n- layer: testing\n- use when: tests end-to-end de aplicaciones web en navegador; validar flujos de usuario críticos como login o checkout\n- avoid when: lógica pura sin interfaz\n\n#### Playwright\n\nTests E2E de navegador.\n\n\n## Best practices\n\n### Componentes React (`react-components`)\n\n- Componentes pequeños y puros; estado lo más cerca de donde se usa.\n- Estado de servidor con TanStack Query (o server components en [[nextjs]]), no en `useState`.\n- Accesibilidad: elementos semánticos, labels en inputs, navegable con teclado.\n\n### TypeScript estricto (`typescript-strict`)\n\n- `\"strict\": true` en tsconfig; prohibido `any` implícito.\n- Validar datos externos en el borde con `zod`, derivar tipos con `z.infer`.\n- Preferir uniones discriminadas sobre flags booleanos.\n\n\n## Checks (validate generated code against these)\n\n### Typecheck TypeScript (`typescript-typecheck`)\n\n- kind: build\n- run: `npx tsc --noEmit`\n\nCero errores de tipo. No silenciar con `@ts-ignore` sin comentario justificando.\n\n### Flujos críticos E2E (`e2e-critical-flows`)\n\n- kind: test\n- run: `npx playwright test`\n\nCada flujo crítico (registro, login, acción principal del producto) tiene un test E2E que pasa en Chromium y Firefox.\nUsar selectores por rol (`getByRole`), no por clases CSS.\n"
+            }
+          ]
+        }
+      },
+      {
+        "name": "get_check_templates",
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "[]\n\nWrite missing files into the project; never overwrite existing files."
+            }
+          ]
+        }
+      },
+      {
+        "name": "detect_stack",
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\"techs\":[],\"unknown\":[],\"files\":[\"package.json\"]}"
+            }
+          ]
+        }
+      },
+      {
+        "name": "propose_note",
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\"status\":\"pending_review\",\"id\":\"react-components\",\"action\":\"update\",\"path\":\"<fixture>/vault/inbox/react-components.md\"}"
+            }
+          ]
+        }
+      },
+      {
+        "name": "record_project_outcome",
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\"status\":\"pending_review\",\"proposals\":[\"role-eval-dashboard\"]}"
+            }
+          ]
+        }
+      },
+      {
+        "name": "export_project",
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "[\n  {\n    \"path\": \"STACK.md\",\n    \"content\": \"<!-- generated by basics; edit the vault, not this file -->\\n\\n# Stack context\\n\\n## Technologies\\n\\n### React (`react`)\\n\\n- layer: frontend\\n- use when: SPA interactiva tipo dashboard o panel; interfaz con mucho estado de cliente\\n- avoid when: sitio estático de contenido casi sin interactividad\\n\\n#### React\\n\\nLibrería de UI. Para SSR/SEO usar [[nextjs]].\\n\\n### TypeScript (`typescript`)\\n\\n- layer: frontend, backend\\n- use when: aplicaciones web frontend; backend Node compartiendo tipos con frontend; herramientas CLI y servidores MCP\\n- avoid when: computación numérica intensiva\\n\\n#### TypeScript\\n\\nBase de [[react]] y [[nextjs]]. Tests con [[vitest]].\\n\\n### Playwright (`playwright`)\\n\\n- layer: testing\\n- use when: tests end-to-end de aplicaciones web en navegador; validar flujos de usuario críticos como login o checkout\\n- avoid when: lógica pura sin interfaz\\n\\n#### Playwright\\n\\nTests E2E de navegador.\\n\\n\\n## Best practices\\n\\n### Componentes React (`react-components`)\\n\\n- Componentes pequeños y puros; estado lo más cerca de donde se usa.\\n- Estado de servidor con TanStack Query (o server components en [[nextjs]]), no en `useState`.\\n- Accesibilidad: elementos semánticos, labels en inputs, navegable con teclado.\\n\\n### TypeScript estricto (`typescript-strict`)\\n\\n- `\\\"strict\\\": true` en tsconfig; prohibido `any` implícito.\\n- Validar datos externos en el borde con `zod`, derivar tipos con `z.infer`.\\n- Preferir uniones discriminadas sobre flags booleanos.\\n\\n\\n## Checks (validate generated code against these)\\n\\n### Typecheck TypeScript (`typescript-typecheck`)\\n\\n- kind: build\\n- run: `npx tsc --noEmit`\\n\\nCero errores de tipo. No silenciar con `@ts-ignore` sin comentario justificando.\\n\\n### Flujos críticos E2E (`e2e-critical-flows`)\\n\\n- kind: test\\n- run: `npx playwright test`\\n\\nCada flujo crítico (registro, login, acción principal del producto) tiene un test E2E que pasa en Chromium y Firefox.\\nUsar selectores por rol (`getByRole`), no por clases CSS.\\n\\n\"\n  },\n  {\n    \"path\": \"AGENTS.md\",\n    \"content\": \"# User rules\\nKeep this user text.\\n\\n<!-- basics:start -->\\n## Stack\\n\\nfrontend: react, typescript\\nbackend: typescript\\ntesting: playwright\\n\\nFollow the practices in STACK.md and run its checks before finishing a task.\\n\\nIf the basics MCP server is available, use get_stack_context / propose_note to read or extend the stack knowledge.\\n<!-- basics:end -->\\n\"\n  },\n  {\n    \"path\": \"CLAUDE.md\",\n    \"content\": \"# User rules\\nKeep this user text.\\n\\n<!-- basics:start -->\\n## Stack\\n\\nfrontend: react, typescript\\nbackend: typescript\\ntesting: playwright\\n\\nFollow the practices in STACK.md and run its checks before finishing a task.\\n\\nIf the basics MCP server is available, use get_stack_context / propose_note to read or extend the stack knowledge.\\n<!-- basics:end -->\\n\"\n  }\n]\n\nWrite these files into the project root; basics never writes outside the vault."
+            }
+          ]
+        }
+      },
+      {
+        "name": "list_proposals",
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "[{\"id\":\"react-components\",\"type\":\"practice\",\"action\":\"update\",\"proposed_by\":\"contract-agent\",\"reason\":\"Counter fixture evidence\",\"created\":\"<timestamp>\",\"base_hash\":\"<hash>\"},{\"id\":\"role-eval-dashboard\",\"type\":\"project\",\"action\":\"update\",\"proposed_by\":\"contract-agent\",\"reason\":\"Outcome of role-eval-dashboard: Checked counter\",\"created\":\"<timestamp>\",\"base_hash\":\"<hash>\"}]"
+            }
+          ]
+        }
+      },
+      {
+        "name": "get_note",
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "note \"does-not-exist\" not found"
+            }
+          ],
+          "isError": true
+        }
+      },
+      {
+        "name": "get_stack_context",
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "# Stack context\n\n> Unknown in vault: does-not-exist"
+            }
+          ]
+        }
+      },
+      {
+        "name": "export_project",
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "unknown tech ids: backend (not a tech note)"
+            }
+          ],
+          "isError": true
+        }
+      },
+      {
+        "name": "propose_note",
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "agent names starting with 'pack:' are reserved"
+            }
+          ],
+          "isError": true
+        }
+      },
+      {
+        "name": "detect_stack",
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "not a directory: <fixture>/missing"
+            }
+          ],
+          "isError": true
+        }
+      },
+      {
+        "name": "get_note",
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "MCP error -32602: Input validation error: Invalid arguments for tool get_note: Invalid input: expected string, received undefined at id"
+            }
+          ],
+          "isError": true
+        }
+      },
+      {
+        "name": "missing-vault",
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "Vault not found at <fixture>/vault"
+            }
+          ],
+          "isError": true
+        }
+      }
+    ]
+  },
+  "skillBody": "If the `basics` tools are not available, tell the user to connect the server (`claude mcp add --transport http basics\nhttp://127.0.0.1:4747/mcp` while `basics ui` or the desktop app is running) and stop; do not imitate the tools.\n\n## Rules\n\n- **The vault beats general knowledge.** When a vault note covers a decision, follow it. If you disagree, say so and\n  explain why, but do not silently pick something else.\n- **Nothing is applied directly.** `propose_note` and `record_project_outcome` put proposals in the vault inbox for the\n  user to review. Say \"proposed for review\", never \"added\" or \"saved\".\n- **Never overwrite project files.** Templates and exported files are written only where no file exists yet, except the\n  marked `<!-- basics:start -->` … `<!-- basics:end -->` blocks that `export_project` merges.\n- **Search before you propose.** Run `search_vault` first so you update an existing note instead of creating a\n  duplicate.\n- Pass your client name as `agent` (for example `claude-code`). Names starting with `pack:` are reserved.\n\n## New project\n\nIf the client supports MCP prompts, start with the `plan-stack` prompt and the project description: it runs the\nwhole flow below in one step. Otherwise follow these steps.\n\n1. `get_vault_overview` for the whole catalog (layers, techs, profiles and past projects) and `recommend_stack` with\n   the project description as a ranked cross-check. Treat the ranking as a shortlist, not the decision.\n2. Decide yourself from the vault: one tech per needed layer. Prefer a matching profile when one fits. Prefer what\n   past projects used successfully, and respect their lessons. If the decision needs something the vault does not\n   have yet, fill the gap (see [Filling gaps](#filling-gaps)).\n3. Tell the user the decision in this shape, one line per layer:\n\n   `Vamos a usar: <layer>: <tech> — <reason from [[note]]>`\n\n   Then list the alternatives you ruled out and why (from their `avoid_when`), and list any proposals you made\n   (\"Propuestas al Inbox: rustls, reqwest\") saying nothing is applied until the user approves it. Ask ONE question —\n   \"¿Usamos este stack? / Shall we use this stack?\" — before writing any file.\n4. After the user says yes, `get_stack_context` with the chosen tech ids. Keep that document as your working rules for\n   the project.\n5. `get_check_templates` and write the files that do not exist yet.\n6. `export_project` with the stack. Send the current contents of `AGENTS.md`, `CLAUDE.md` or Cursor rules in `existing`\n   so the user's own text survives, then write the returned files into the project root.\n7. If the project has no project note, `propose_note` with type `project`, the stack by layer and the description.\n   Say \"proposed for review\"; it lands in the vault inbox.\n\n## Filling gaps\n\nSometimes the right decision uses a technology the vault has no note for, or a chosen note links to a `[[id]]` that\nwas never written. Close that gap with a proposal instead of quietly falling back on general knowledge.\n\n1. `search_vault` for the missing note, then `get_note` on the closest hits: if a note already covers it, propose an\n   update instead of a duplicate.\n2. `propose_note` only the notes the decision actually uses — never a wish list.\n3. Make each proposal useful on its own: correct `type`, and for a tech the right `kind` and `layer` (an existing\n   layer id) plus `language` when it applies; at least 2 `use_when`, at least 1 `avoid_when`, `tags` and `related`.\n   Link `[[id]]` in the body and `related` only to notes that exist or that you propose in the same answer. Write a\n   body of 3–6 lines, specific: what it is, when it beats the alternatives already in the vault, and one concrete\n   pitfall or setup note. The `reason` says which project decision needed it.\n4. List the proposals in your answer (\"Propuestas al Inbox: rustls, reqwest\") and say they are proposed for review:\n   nothing is applied until the user approves it in the Inbox.\n\n## Existing project\n\n1. If the project has `STACK.md`, read it: it is the compiled context. If it has `basics.json`, its `stack` lists the\n   tech ids.\n2. Otherwise run `detect_stack` on the project directory and confirm the detected technologies with the user.\n3. `get_stack_context` with those ids (and `versions` from `basics.json` or `detect_stack`) before you change code.\n\n## While coding\n\n- Follow the practices in the stack context. When a practice conflicts with what the user asks, point it out and let\n  them decide.\n- Before you say the work is done, run the checks listed in the stack context and report each result. A failing check\n  means the work is not done.\n\n## Teaching the vault\n\n- When you learn something worth keeping (a pitfall, a version quirk, a better default), `search_vault` for the note,\n  then `propose_note` with the full frontmatter and body and a one-line `reason`. Link related notes with `[[id]]`.\n- At the end of meaningful work on a project, `record_project_outcome` with a short summary, the lessons and any\n  `tech_updates`. The project id is the `project` field in `basics.json`; if there is no project note, propose one with\n  `propose_note` (type `project`) first.\n- `list_proposals` shows what is still waiting for review; do not propose the same change twice.\n"
+}

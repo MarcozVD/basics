@@ -23,6 +23,7 @@ import {
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { getRecommender } from "../recommender.js";
+import { workflowGuidance, workflowSchema } from "./workflows.js";
 
 const { version } = createRequire(import.meta.url)("../../package.json") as { version: string };
 
@@ -297,8 +298,9 @@ const TOOLS: ToolSpec[] = [
       "Use it to reason over the vault when a ranked shortlist is not enough; read deciding notes with get_note before choosing. Read-only.",
     inputSchema: {
       layers: z.array(z.string()).optional().describe("Restrict the catalog to these layer ids"),
+      workflow: workflowSchema,
     },
-    run: async ({ layers }, ctx) =>
+    run: async ({ layers, workflow }, ctx) =>
       withVault(() => {
         // The catalog is the most expensive response (a whole-vault walk on every call), so it is
         // built once per vault generation.
@@ -307,7 +309,10 @@ const TOOLS: ToolSpec[] = [
           return renderOverview(overview);
         });
         ctx.log("get_vault_overview", []);
-        return text(body);
+        const result = text(body);
+        const guidance = workflowGuidance(workflow);
+        if (guidance) result.content.push({ type: "text", text: guidance });
+        return result;
       }),
   }),
   defineTool({
@@ -414,14 +419,21 @@ const TOOLS: ToolSpec[] = [
     description:
       "Compile best practices and validation checks for a chosen set of technologies into one markdown document. " +
       "Call once the stack is chosen and follow it while writing code; run the listed checks before declaring work done.",
-    inputSchema: { tech_ids: z.array(z.string()).min(1), versions: z.record(z.string(), z.string()).optional() },
-    run: async ({ tech_ids, versions }, ctx) =>
+    inputSchema: {
+      tech_ids: z.array(z.string()).min(1),
+      versions: z.record(z.string(), z.string()).optional(),
+      workflow: workflowSchema,
+    },
+    run: async ({ tech_ids, versions, workflow }, ctx) =>
       withVault(() => {
         const markdown = ctx.memo(`context:${tech_ids.join(",")}:${JSON.stringify(versions ?? {})}`, (vault) =>
           renderContext(vault, tech_ids, { versions }),
         );
         ctx.log("get_stack_context", tech_ids);
-        return text(markdown);
+        const result = text(markdown);
+        const guidance = workflowGuidance(workflow);
+        if (guidance) result.content.push({ type: "text", text: guidance });
+        return result;
       }),
   }),
   defineTool({

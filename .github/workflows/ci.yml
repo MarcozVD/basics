@@ -25,6 +25,7 @@ jobs:
       - if: matrix.os == 'ubuntu-latest' && matrix.node == 22
         run: npm run check:reference
       - run: npm test
+      - run: npm run eval:agent-roles
       - run: node packages/basics/dist/cli.js --vault examples/vault validate
 
   e2e:

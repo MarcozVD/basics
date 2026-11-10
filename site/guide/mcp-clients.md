@@ -254,6 +254,10 @@ path to `dist/mcp/server.js`.
 | `propose_note`, `record_project_outcome` | create inbox proposals, never direct writes |
 | `list_proposals` | read the pending inbox |
 
+`get_vault_overview` and `get_stack_context` also take an optional `workflow` argument, for agents that have an
+orchestrated-team role. Without it, or with `general`, both return exactly what they returned before. See
+[Agent skill](./agent-skill.md#roles-in-an-orchestrated-team).
+
 Prompts are MCP prompts the client can insert into the conversation:
 
 | Prompt | Effect |

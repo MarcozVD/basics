@@ -16,6 +16,7 @@
     "test:watch": "vitest",
     "e2e": "npm run e2e -w @marcozvd/basics-ui",
     "eval": "node scripts/eval.mjs",
+    "eval:agent-roles": "node scripts/eval-agent-roles.mjs",
     "docs:dev": "vitepress dev site",
     "docs:build": "vitepress build site",
     "docs:preview": "vitepress preview site",
