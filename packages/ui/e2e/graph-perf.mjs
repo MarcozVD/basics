@@ -7,6 +7,8 @@
  *
  * Usage (repo root, after `npm run build`):
  *   node packages/ui/e2e/graph-perf.mjs --label before
+ *   node packages/ui/e2e/graph-perf.mjs --toggles --port 4832 --label before --out toggles.json
+ * Add --profile with --toggles to save CPU profiles for the first switch in each direction.
  *
  * It owns its servers (ports 4811/4812), temp vaults, temp config and a throwaway
  * HOME/USERPROFILE/APPDATA under the OS temp folder. Nothing touches the real vault,
@@ -26,6 +28,8 @@ const argv = process.argv.slice(2);
 const label = argv.includes("--label") ? argv[argv.indexOf("--label") + 1] : "run";
 const outFile = argv.includes("--out") ? argv[argv.indexOf("--out") + 1] : null;
 const only = argv.includes("--only") ? argv[argv.indexOf("--only") + 1] : null;
+const toggles = argv.includes("--toggles");
+const basePort = argv.includes("--port") ? Number(argv[argv.indexOf("--port") + 1]) : 4811;
 const TECHS = 600;
 const PRACTICES = 240;
 const LAYERS = 12;
@@ -129,7 +133,7 @@ function readPerf(page) {
 function readCache(page) {
   return page.evaluate(() => {
     try {
-      const raw = sessionStorage.getItem("basics:graph-cache:v1");
+      const raw = sessionStorage.getItem("basics:graph-cache:v2");
       if (!raw) return null;
       return JSON.parse(raw).map((entry) => ({
         key: entry.key,
@@ -346,44 +350,135 @@ function table(results) {
   return [line(header), line(widths.map((width) => "-".repeat(width))), ...rows.map(line)].join("\n");
 }
 
+/** Toggle diagnostics on the same fixtures; --port keeps manual servers separate from CI. */
+async function measureToggles(browser, base) {
+  const context = await browser.newContext({ viewport: { width: 1280, height: 820 } });
+  await context.addInitScript(() => {
+    window.__BASICS_E2E__ = true;
+    localStorage.setItem("basics:graph-group", "1");
+    window.__toggleSample = null;
+    new PerformanceObserver((list) => {
+      const sample = window.__toggleSample;
+      if (!sample) return;
+      for (const task of list.getEntries()) {
+        if (task.startTime >= sample.start) sample.long.push({ start: task.startTime, duration: task.duration });
+      }
+    }).observe({ type: "longtask", buffered: true });
+  });
+  const page = await context.newPage();
+  await page.goto(`${base}/graph`);
+  await waitSettled(page, 1);
+  await afterPaint(page);
+  const profiler = argv.includes("--profile") ? await context.newCDPSession(page) : null;
+  if (profiler) await profiler.send("Profiler.enable");
+  const samples = [];
+  for (let run = 0; run < 6; run++) {
+    if (profiler && run < 2) await profiler.send("Profiler.start");
+    await page.evaluate(() => {
+      document.addEventListener(
+        "click",
+        () => {
+          const sample = { start: performance.now(), frames: [], long: [], active: true };
+          sample.frames.push(sample.start);
+          window.__toggleSample = sample;
+          window.__basicsGraphPerf.mounts.at(-1).phases = {};
+          const tick = (ts) => {
+            sample.frames.push(ts);
+            if (sample.active) requestAnimationFrame(tick);
+          };
+          requestAnimationFrame(tick);
+        },
+        { capture: true, once: true },
+      );
+    });
+    await page.getByTestId("graph-group").getByRole("switch").click();
+    await page.waitForFunction(() => {
+      const sample = window.__toggleSample;
+      return sample && window.__basicsGraphPerf.mounts.at(-1).settledAt >= sample.start;
+    });
+    await afterPaint(page);
+    await page.waitForTimeout(150);
+    samples.push(
+      await page.evaluate(() => {
+        const sample = window.__toggleSample;
+        sample.active = false;
+        const mount = window.__basicsGraphPerf.mounts.at(-1);
+        let worstGap = 0;
+        for (let i = 1; i < sample.frames.length; i++) worstGap = Math.max(worstGap, sample.frames[i] - sample.frames[i - 1]);
+        return {
+          direction: localStorage.getItem("basics:graph-group") === "1" ? "free-to-grouped" : "grouped-to-free",
+          settledMs: Math.round((mount.settledAt - sample.start) * 10) / 10,
+          worstGapMs: Math.round(worstGap * 10) / 10,
+          longTasks: sample.long.map((task) => Math.round(task.duration * 10) / 10),
+          phases: { ...mount.phases },
+          counters: { ...window.__basicsGraphPerf.counters },
+          nodes: mount.nodes,
+          edges: mount.edges,
+        };
+      }),
+    );
+    if (profiler && run < 2) {
+      const { profile } = await profiler.send("Profiler.stop");
+      if (outFile) fs.writeFileSync(`${outFile}.${base.split(":").at(-1)}.${run}.cpuprofile`, JSON.stringify(profile));
+    }
+  }
+  await context.close();
+  return samples;
+}
+
 const servers = [];
 try {
-  servers.push(startServer(4811, exampleVault, "examples"));
-  servers.push(startServer(4812, syntheticVault, "synthetic"));
-  await Promise.all([waitHealth("http://127.0.0.1:4811"), waitHealth("http://127.0.0.1:4812")]);
+  const exampleBase = `http://127.0.0.1:${basePort}`;
+  const syntheticBase = `http://127.0.0.1:${basePort + 1}`;
+  servers.push(startServer(basePort, exampleVault, "examples"));
+  servers.push(startServer(basePort + 1, syntheticVault, "synthetic"));
+  await Promise.all([waitHealth(exampleBase), waitHealth(syntheticBase)]);
 
   const browser = await chromium.launch();
   const results = { label, generatedAt: new Date().toISOString(), vaults: {} };
   const plans = [
-    ["examples", "http://127.0.0.1:4811", true],
-    ["examples", "http://127.0.0.1:4811", false],
-    ["synthetic600", "http://127.0.0.1:4812", true],
-    ["synthetic600", "http://127.0.0.1:4812", false],
+    ["examples", exampleBase, true],
+    ["examples", exampleBase, false],
+    ["synthetic600", syntheticBase, true],
+    ["synthetic600", syntheticBase, false],
   ];
   try {
-    for (const [vault, base, grouped] of plans) {
-      if (only && `${vault}-${grouped ? "grouped" : "flat"}` !== only) continue;
-      results.vaults[vault] ??= {};
-      results.vaults[vault][grouped ? "grouped" : "flat"] = await measureVariant(browser, base, grouped);
+    if (toggles) {
+      for (const [vault, base] of [
+        ["examples", exampleBase],
+        ["synthetic600", syntheticBase],
+      ]) {
+        results.vaults[vault] = await measureToggles(browser, base);
+        console.log(`${vault} ${JSON.stringify(results.vaults[vault])}`);
+      }
+      if (outFile) fs.writeFileSync(path.resolve(outFile), `${JSON.stringify(results, null, 2)}\n`);
+    } else {
+      for (const [vault, base, grouped] of plans) {
+        if (only && `${vault}-${grouped ? "grouped" : "flat"}` !== only) continue;
+        results.vaults[vault] ??= {};
+        results.vaults[vault][grouped ? "grouped" : "flat"] = await measureVariant(browser, base, grouped);
+      }
     }
   } finally {
     await browser.close();
   }
 
-  console.log(`\n# graph perf (${label})\n`);
-  console.log(table(results));
-  console.log("\n## render phases (ms)\n");
-  for (const [vault, variants] of Object.entries(results.vaults)) {
-    for (const variant of Object.values(variants)) {
-      console.log(
-        `${vault} ${variant.grouped ? "grouped" : "flat"} · cold ${JSON.stringify(variant.coldPhases)} · return ${JSON.stringify(variant.returnPhases)} (source ${variant.returnSource}, mount ${variant.returnMountMs}ms, first frame ${variant.returnFirstFrameMs}ms, settled ${variant.returnSettledMs}ms, layouts ${variant.returnLayouts}, long tasks ${variant.returnLongTasks}/${variant.returnLongestLongTaskMs}ms) · reload ${JSON.stringify(variant.reloadPhases)} (mount ${variant.reloadMountMs}ms, first frame ${variant.reloadFirstFrameMs}ms) · return diff ${variant.returnPositionsDiffer} ${JSON.stringify(variant.returnDiffDetail)}`,
-      );
+  if (!toggles) {
+    console.log(`\n# graph perf (${label})\n`);
+    console.log(table(results));
+    console.log("\n## render phases (ms)\n");
+    for (const [vault, variants] of Object.entries(results.vaults)) {
+      for (const variant of Object.values(variants)) {
+        console.log(
+          `${vault} ${variant.grouped ? "grouped" : "flat"} · cold ${JSON.stringify(variant.coldPhases)} · return ${JSON.stringify(variant.returnPhases)} (source ${variant.returnSource}, mount ${variant.returnMountMs}ms, first frame ${variant.returnFirstFrameMs}ms, settled ${variant.returnSettledMs}ms, layouts ${variant.returnLayouts}, long tasks ${variant.returnLongTasks}/${variant.returnLongestLongTaskMs}ms) · reload ${JSON.stringify(variant.reloadPhases)} (mount ${variant.reloadMountMs}ms, first frame ${variant.reloadFirstFrameMs}ms) · return diff ${variant.returnPositionsDiffer} ${JSON.stringify(variant.returnDiffDetail)}`,
+        );
+      }
     }
-  }
-  console.log("");
-  if (outFile) {
-    fs.writeFileSync(path.resolve(outFile), `${JSON.stringify(results, null, 2)}\n`);
-    console.log(`json: ${path.resolve(outFile)}`);
+    console.log("");
+    if (outFile) {
+      fs.writeFileSync(path.resolve(outFile), `${JSON.stringify(results, null, 2)}\n`);
+      console.log(`json: ${path.resolve(outFile)}`);
+    }
   }
 } finally {
   for (const server of servers) server.kill();
