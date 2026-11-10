@@ -2,6 +2,18 @@ import { type ChildProcess, spawn } from "node:child_process";
 import path from "node:path";
 import { expect, type Page, test } from "@playwright/test";
 
+// Keep frame-gap sampling independent of headless-window occlusion on Windows.
+test.use({
+  launchOptions: {
+    args: [
+      "--disable-background-timer-throttling",
+      "--disable-renderer-backgrounding",
+      "--disable-backgrounding-occluded-windows",
+      "--disable-features=CalculateNativeWinOcclusion",
+    ],
+  },
+});
+
 interface CyBox {
   x1: number;
   y1: number;
@@ -25,6 +37,7 @@ interface CyNodeHandle {
   locked: () => boolean;
   selectable: () => boolean;
   grabbable: () => boolean;
+  emit: (event: string) => void;
 }
 
 interface CyCollection {
@@ -46,6 +59,7 @@ interface CyEdgeCollection {
 }
 
 interface CyHandle {
+  batching: () => boolean;
   getElementById: (id: string) => CyNodeHandle;
   nodes: (selector?: string) => CyCollection;
   edges: (selector?: string) => CyEdgeCollection;
@@ -147,6 +161,24 @@ async function readPerf(page: Page): Promise<GraphPerf | null> {
       last: last ? { nodes: last.nodes, firstFrameAt: last.firstFrameAt, settledAt: last.settledAt, source: last.source } : null,
     };
   });
+}
+
+/** Wait for this switch's mount, including its selection/hover refresh after element sync. */
+async function switchGraph(page: Page, action: () => Promise<unknown>): Promise<void> {
+  const before = await page.evaluate(() => {
+    const perf = (window as unknown as { __basicsGraphPerf: { mounts: unknown[] } }).__basicsGraphPerf;
+    return { mounts: perf.mounts.length, start: performance.now() };
+  });
+  await action();
+  await page.waitForFunction(({ mounts, start }) => {
+    const perf = (
+      window as unknown as {
+        __basicsGraphPerf: { mounts: { settledAt: number | null; phases: Record<string, number> }[] };
+      }
+    ).__basicsGraphPerf;
+    const last = perf.mounts.at(-1);
+    return perf.mounts.length > mounts && (last?.settledAt ?? 0) >= start && last?.phases.selection !== undefined;
+  }, before);
 }
 
 /**
@@ -424,6 +456,155 @@ for (const theme of ["light", "dark"]) {
   });
 }
 
+test("toggles reuse each mode's camera and renderer without stale hover, filters or search", async ({ page }) => {
+  await openGraph(page);
+  const practiceCount = await page.evaluate(
+    () => (window as unknown as { __basicsCy: CyHandle }).__basicsCy.nodes('[type = "practice"]').length,
+  );
+  expect(practiceCount).toBeGreaterThan(0);
+  await page.evaluate(() => {
+    const win = window as unknown as { __basicsCy: CyHandle; __groupedCy?: CyHandle };
+    win.__groupedCy = win.__basicsCy;
+    win.__basicsCy.viewport({ zoom: 0.7, pan: { x: 80, y: 90 } });
+    win.__basicsCy.getElementById("fastapi").emit("mouseover");
+  });
+  await expect
+    .poll(() => page.evaluate(() => (window as unknown as { __basicsCy: CyHandle }).__basicsCy.nodes(".lit").length))
+    .toBeGreaterThan(0);
+  const toggle = page.getByTestId("graph-group").getByRole("switch");
+  await toggle.focus();
+  await switchGraph(page, () => toggle.press("Space"));
+  await expect.poll(async () => (await readGraph(page))?.fastapiParent).toBe("");
+  await page.evaluate(() => {
+    const win = window as unknown as { __basicsCy: CyHandle; __freeCy?: CyHandle };
+    win.__freeCy = win.__basicsCy;
+    win.__basicsCy.viewport({ zoom: 0.8, pan: { x: 110, y: 120 } });
+  });
+  await switchGraph(page, () => toggle.press("Space"));
+  await expect.poll(async () => (await readGraph(page))?.fastapiParent).toBe("backend");
+  expect(
+    await page.evaluate(() => {
+      const win = window as unknown as { __basicsCy: CyHandle; __groupedCy: CyHandle; __freeCy: CyHandle };
+      return {
+        same: win.__basicsCy === win.__groupedCy,
+        activePaused: win.__basicsCy.batching(),
+        inactivePaused: win.__freeCy.batching(),
+        zoom: win.__basicsCy.zoom(),
+        pan: win.__basicsCy.pan(),
+        lit: win.__basicsCy.nodes(".lit").length,
+        faded: win.__basicsCy.nodes(".fade").length,
+      };
+    }),
+  ).toEqual({ same: true, activePaused: false, inactivePaused: true, zoom: 0.7, pan: { x: 80, y: 90 }, lit: 0, faded: 0 });
+  await page.getByTestId("graph-search").fill("fastapi");
+  await page.getByTestId("graph-type-practice").click();
+  await switchGraph(page, () => toggle.click());
+  await expect.poll(async () => (await readGraph(page))?.fastapiParent).toBe("");
+  expect(
+    await page.evaluate(() => {
+      const win = window as unknown as { __basicsCy: CyHandle; __freeCy: CyHandle; __groupedCy: CyHandle };
+      return {
+        same: win.__basicsCy === win.__freeCy,
+        activePaused: win.__basicsCy.batching(),
+        inactivePaused: win.__groupedCy.batching(),
+        zoom: win.__basicsCy.zoom(),
+        pan: win.__basicsCy.pan(),
+        hits: win.__basicsCy
+          .nodes(".hit")
+          .map((n) => n.id())
+          .sort(),
+        hidden: win.__basicsCy.nodes('[type = "practice"].gone').length,
+        staleGrouped: win.__basicsCy.nodes("[grouped]").length,
+      };
+    }),
+  ).toEqual({
+    same: true,
+    activePaused: false,
+    inactivePaused: true,
+    zoom: 0.8,
+    pan: { x: 110, y: 120 },
+    hits: ["fastapi", "fastapi-endpoint-tests", "fastapi-structure"],
+    hidden: practiceCount,
+    staleGrouped: 0,
+  });
+  expect((await readPerf(page))?.counters.layouts).toBe(2);
+});
+
+test("retained views cancel pending hover on every switch", async ({ page }) => {
+  await openGraph(page);
+  await page.mouse.move(0, 0);
+  // Visit both views repeatedly: the original mount's handlers used to outlive its cleanup.
+  for (let visit = 0; visit < 6; visit++) {
+    await switchGraph(page, () =>
+      page.evaluate(() => {
+        const win = window as unknown as { __basicsCy: CyHandle; __leavingCy?: CyHandle };
+        const cy = win.__basicsCy;
+        win.__leavingCy = cy;
+        // Queue hover and leave in the same task, before its animation frame can run.
+        cy.getElementById("fastapi").emit("mouseover");
+        document.querySelector<HTMLButtonElement>('[data-testid="graph-group"] [role="switch"]')!.click();
+      }),
+    );
+    // Let any uncancelled frame run, then inspect both the active and detached views.
+    await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+    expect(
+      await page.evaluate(() => {
+        const win = window as unknown as { __basicsCy: CyHandle; __leavingCy: CyHandle };
+        return [win.__basicsCy, win.__leavingCy].map((cy) => ({ lit: cy.nodes(".lit").length, faded: cy.nodes(".fade").length }));
+      }),
+    ).toEqual([
+      { lit: 0, faded: 0 },
+      { lit: 0, faded: 0 },
+    ]);
+  }
+});
+
+test("returning to a retained mode applies vault and theme changes made in the other mode", async ({ page }) => {
+  await openGraph(page);
+  const toggle = page.getByTestId("graph-group").getByRole("switch");
+  await toggle.click();
+  await expect.poll(async () => (await readGraph(page))?.fastapiParent).toBe("");
+  const created = await page.request.post("/api/notes", {
+    data: { id: "toggle-added", data: { type: "tech", kind: "framework", title: "Toggle added", layer: "backend" }, body: "" },
+  });
+  expect(created.ok()).toBe(true);
+  try {
+    await expect
+      .poll(() => page.evaluate(() => (window as unknown as { __basicsCy: CyHandle }).__basicsCy.getElementById("toggle-added").nonempty()))
+      .toBe(true);
+    await toggle.click();
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const note = (window as unknown as { __basicsCy: CyHandle }).__basicsCy.getElementById("toggle-added");
+          return note.nonempty() ? note.parent().id() : "";
+        }),
+      )
+      .toBe("backend");
+    await page.evaluate(() => document.documentElement.classList.add("dark"));
+    await toggle.click();
+    await expect.poll(async () => (await readGraph(page))?.fastapiParent).toBe("");
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const cy = (window as unknown as { __basicsCy: CyHandle }).__basicsCy;
+          const sample = document.createElement("span");
+          sample.style.color = getComputedStyle(document.documentElement).getPropertyValue("--foreground");
+          document.body.append(sample);
+          const expected = getComputedStyle(sample).color.replace(/\s/g, "");
+          sample.remove();
+          return cy
+            .nodes("[ringGuide]")
+            .map((n) => n.style("border-color").replace(/\s/g, ""))
+            .every((color) => color === expected);
+        }),
+      )
+      .toBe(true);
+  } finally {
+    await page.request.delete("/api/notes/toggle-added");
+  }
+});
+
 test("grouped graph boxes its layers on a grid and the switch flattens it", async ({ page }) => {
   await page.goto("/graph");
 
@@ -679,5 +860,81 @@ test.describe("large vault", () => {
     expect(perf?.counters.fcose).toBe(0);
     // No intermediate picture and no glide: the nodes were put where they belong.
     expect(perf?.counters.glides).toBe(0);
+  });
+
+  test("returning between both grouping modes stays within the measured toggle budget", async ({ page }) => {
+    // 860-node measurements after the fix peaked near 183ms for a retained view;
+    // 300ms leaves shared-machine headroom while rejecting the old 500-900ms stalls.
+    const budget = 300;
+    await page.setViewportSize({ width: 1280, height: 820 });
+    await page.goto("/graph");
+    const toggle = page.getByTestId("graph-group").getByRole("switch");
+    await expect.poll(async () => (await readPerf(page))?.last?.settledAt ?? null, { timeout: 120_000 }).not.toBeNull();
+    expect((await readPerf(page))?.last?.nodes).toBeGreaterThan(500);
+    await page.waitForTimeout(900);
+    // Build each view once, then measure the return trip in both directions.
+    for (const grouped of [true, false]) {
+      await toggle.click();
+      await expect
+        .poll(async () => {
+          const state = await readGraph(page);
+          return grouped ? (state?.parentCount ?? 0) > 0 : state?.parentCount === 0;
+        })
+        .toBe(true);
+      await expect.poll(async () => (await readPerf(page))?.last?.settledAt ?? null).not.toBeNull();
+      await page.waitForTimeout(900);
+    }
+    const layouts = (await readPerf(page))!.counters.layouts;
+    expect(layouts).toBe(2);
+    await page.evaluate(() => {
+      const win = window as unknown as { __toggleBudget?: { start: number; frames: number[]; long: number[]; active: boolean } };
+      new PerformanceObserver((list) => {
+        const sample = win.__toggleBudget;
+        if (!sample?.active) return;
+        for (const task of list.getEntries()) if (task.startTime >= sample.start) sample.long.push(task.duration);
+      }).observe({ type: "longtask", buffered: true });
+    });
+    const samples: { grouped: boolean; gap: number; long: number[] }[] = [];
+    for (const grouped of [true, false, true, false]) {
+      await page.evaluate(() => {
+        document.addEventListener(
+          "click",
+          () => {
+            const sample = { start: performance.now(), frames: [] as number[], long: [] as number[], active: true };
+            sample.frames.push(sample.start);
+            (window as unknown as { __toggleBudget: typeof sample }).__toggleBudget = sample;
+            const tick = (ts: number) => {
+              sample.frames.push(ts);
+              if (sample.active) requestAnimationFrame(tick);
+            };
+            requestAnimationFrame(tick);
+          },
+          { once: true, capture: true },
+        );
+      });
+      await toggle.click();
+      await page.waitForFunction(() => {
+        const win = window as unknown as {
+          __toggleBudget?: { start: number };
+          __basicsGraphPerf?: { mounts: { settledAt: number | null }[] };
+        };
+        return win.__toggleBudget && (win.__basicsGraphPerf?.mounts.at(-1)?.settledAt ?? 0) >= win.__toggleBudget.start;
+      });
+      await page.waitForTimeout(450);
+      const sample = await page.evaluate(() => {
+        const sample = (window as unknown as { __toggleBudget: { frames: number[]; long: number[]; active: boolean } }).__toggleBudget;
+        sample.active = false;
+        let gap = 0;
+        for (let i = 1; i < sample.frames.length; i++) gap = Math.max(gap, sample.frames[i] - sample.frames[i - 1]);
+        return { gap, long: sample.long };
+      });
+      samples.push({ grouped, ...sample });
+      expect((await readPerf(page))?.counters.layouts).toBe(layouts);
+    }
+    await test.info().attach("group-toggle-samples", { body: JSON.stringify(samples, null, 2), contentType: "application/json" });
+    for (const sample of samples) {
+      expect(sample.gap, sample.grouped ? "free to grouped" : "grouped to free").toBeLessThan(budget);
+      for (const duration of sample.long) expect(duration).toBeLessThan(budget);
+    }
   });
 });

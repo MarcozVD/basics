@@ -457,6 +457,8 @@ interface CanvasBridge {
  */
 interface PersistentCanvas {
   cy: Core;
+  /** An open batch suspends the detached renderer's draw and texture-cache queues. */
+  suspended: boolean;
   /** Stable parent of the cytoscape container: detaching this never detaches `cy`'s own container. */
   shell: HTMLDivElement;
   bridge: CanvasBridge;
@@ -476,7 +478,8 @@ interface PersistentCanvas {
   appliedSelection?: string | null;
 }
 
-let persistent: PersistentCanvas | null = null;
+/** At most two retained views; local graphs remain scoped to the editor mount. */
+const fullCanvases = new Map<boolean, PersistentCanvas>();
 
 function createBridge(): CanvasBridge {
   return {
@@ -992,7 +995,7 @@ function GraphHoverTooltip({ bridge, palette }: { bridge: CanvasBridge; palette:
   );
 }
 
-export default function GraphCanvas({
+function GraphCanvasInstance({
   data,
   mode,
   centerId,
@@ -1033,6 +1036,7 @@ export default function GraphCanvas({
   const elements = useMemo(() => (mode === "local" && centerId ? localGraph(data, centerId) : data), [data, mode, centerId]);
   // The editor's local graph keeps its compact force layout.
   const boxed = mode === "full" && grouped;
+  let persistent = mode === "full" ? (fullCanvases.get(boxed) ?? null) : null;
 
   // Callbacks and options change every render; handlers read the latest through the bridge.
   // A kept instance already closed over the bridge of the mount that created it, so this
@@ -1105,7 +1109,13 @@ export default function GraphCanvas({
     let cy: Core;
     if (kept) {
       cy = kept.cy;
+      // Hover belongs to the previous visit. Reset it before the retained canvas can paint.
+      applyHighlight(cy, bridge.selectedId, bridge.boxed);
       container.appendChild(kept.shell);
+      if (kept.suspended) {
+        kept.suspended = false;
+        cy.endBatch();
+      }
       // The instance still holds the picture and the camera it was left with.
       firstRun.current = false;
       // It already reached the screen on an earlier visit; leaving again must keep it.
@@ -1135,9 +1145,10 @@ export default function GraphCanvas({
         hideEdgesOnViewport: large,
         pixelRatio: "auto",
       });
-      if (mode === "full")
+      if (mode === "full") {
         persistent = {
           cy,
+          suspended: false,
           shell,
           bridge,
           style: { palette: initialPalette },
@@ -1149,6 +1160,8 @@ export default function GraphCanvas({
           appliedQuery: null,
           appliedSelection: undefined,
         };
+        fullCanvases.set(boxed, persistent);
+      }
     }
     cyRef.current = cy;
     perfPhase(perfRecord.current, kept ? "reattach" : "create", performance.now() - createStart);
@@ -1173,6 +1186,7 @@ export default function GraphCanvas({
       if (bridge.cache) rememberCamera(bridge.cache, { zoom: cy.zoom(), pan: { ...cy.pan() } });
       cy.destroy();
       if (persistent?.cy === cy) persistent = null;
+      fullCanvases.delete(boxed);
       cyRef.current = null;
     };
     const unsubscribeIntent = onNavigationIntent(abandonBoot);
@@ -1216,18 +1230,21 @@ export default function GraphCanvas({
       if (hoverFrame === null) hoverFrame = requestAnimationFrame(flushHover);
     };
 
-    // A kept instance is already listening; binding again would double every handler.
+    // Hover frames belong to this mount so its cleanup can cancel every pending update.
+    const onMouseOver = (event: cytoscape.EventObject) => {
+      const node = event.target as NodeSingular;
+      if (node.data("bandLabel") || node.data("spacer") || node.data("ringGuide")) return;
+      if (bridge.container) bridge.container.style.cursor = "pointer";
+      scheduleHover(node.id());
+    };
+    const onMouseOut = () => {
+      if (bridge.container) bridge.container.style.cursor = "";
+      scheduleHover(null);
+    };
+    cy.on("mouseover", "node", onMouseOver);
+    cy.on("mouseout", "node", onMouseOut);
+    // Other handlers read the shared bridge and need only one binding per instance.
     if (!kept) {
-      cy.on("mouseover", "node", (event) => {
-        const node = event.target as NodeSingular;
-        if (node.data("bandLabel") || node.data("spacer") || node.data("ringGuide")) return;
-        if (bridge.container) bridge.container.style.cursor = "pointer";
-        scheduleHover(node.id());
-      });
-      cy.on("mouseout", "node", () => {
-        if (bridge.container) bridge.container.style.cursor = "";
-        scheduleHover(null);
-      });
       cy.on("viewport", () => {
         toggleDetailLabels(cy);
         toggleLabelCulling(cy);
@@ -1288,6 +1305,8 @@ export default function GraphCanvas({
       observer.disconnect();
       resize.disconnect();
       unsubscribeIntent();
+      cy.off("mouseover", "node", onMouseOver);
+      cy.off("mouseout", "node", onMouseOut);
       if (hoverFrame !== null) {
         cancelAnimationFrame(hoverFrame);
         hoverFrame = null;
@@ -1300,8 +1319,10 @@ export default function GraphCanvas({
       // Leaving the page must abandon the boot: a pending placement or a
       // glide that outlives the mount would block the next page on the main thread.
       if (persistent?.cy === cy) {
-        cy.stop();
-        cy.elements().stop();
+        // stop() requests a renderer redraw even when nothing is animating. Avoid
+        // repainting a detached picture on the frame that shows the other mode.
+        if (cy.animated()) cy.stop(true);
+        if (gliding.has(cy)) cy.elements().stop();
         gliding.delete(cy);
         // A boot that never painted a frame has no picture worth keeping, and its queued
         // element sync, font restyle or first full render would otherwise run inside the
@@ -1311,9 +1332,15 @@ export default function GraphCanvas({
           if (bridge.cache) rememberCamera(bridge.cache, { zoom: cy.zoom(), pan: { ...cy.pan() } });
           cy.destroy();
           persistent = null;
+          fullCanvases.delete(boxed);
           return;
         }
         rememberGraphState(cy, bridge.cache);
+        persistent.appliedSelection = undefined;
+        // Cytoscape's render loop skips drawing and texture/style queue work while
+        // batching. Resume the retained view only when its shell is attached again.
+        cy.startBatch();
+        persistent.suspended = true;
         persistent.shell.remove();
         return;
       }
@@ -1340,7 +1367,7 @@ export default function GraphCanvas({
     const started = performance.now();
     cy.style(buildStyle(palette));
     perfPhase(perfRecord.current, "stylesheet", performance.now() - started);
-  }, [palette]);
+  }, [palette, persistent]);
 
   // Patch elements in place; only a structural change re-runs the layout, and the camera
   // only moves on the first run (local graphs re-fit, they are rebuilt per note).
@@ -1573,7 +1600,7 @@ export default function GraphCanvas({
     });
     perfPhase(perfRecord.current, "search", performance.now() - started);
     if (applied) applied.appliedQuery = query;
-  }, [elements, query, elementsReady]);
+  }, [elements, query, elementsReady, persistent]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: re-apply after the elements sync
   useEffect(() => {
@@ -1608,4 +1635,10 @@ export default function GraphCanvas({
       <GraphHoverTooltip bridge={bridge} palette={palette} />
     </div>
   );
+}
+
+/** Each full-graph mode keeps its renderer, styles, positions and camera across toggles. */
+export default function GraphCanvas(props: GraphCanvasProps) {
+  const key = props.mode === "full" ? (props.grouped === false ? "free" : "grouped") : "local";
+  return <GraphCanvasInstance key={key} {...props} />;
 }
