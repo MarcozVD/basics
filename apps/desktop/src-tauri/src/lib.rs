@@ -25,6 +25,7 @@ use tauri_plugin_opener::OpenerExt;
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
 
+mod cli_path;
 mod settings;
 mod update;
 
@@ -724,6 +725,93 @@ async fn run_connect(app: &AppHandle, vault: &str) -> Result<String, String> {
 "))
 }
 
+/// The bundled Node runtime and the bundled `basics/` folder, as the launchers need them.
+/// The sidecar sits next to the app executable once installed.
+fn bundled_runtime(app: &AppHandle) -> Result<(PathBuf, PathBuf), String> {
+    let exe = std::env::current_exe().map_err(|err| format!("cannot locate the app: {err}"))?;
+    let node = exe
+        .parent()
+        .ok_or("cannot locate the app folder")?
+        .join(if cfg!(windows) { "node.exe" } else { "node" });
+    let resources = app.path().resource_dir().map_err(|err| format!("cannot locate the app resources: {err}"))?;
+    Ok((plain_path(node), plain_path(resources).join("basics")))
+}
+
+/// Write the `basics` and `basics-mcp` launchers and make sure its folder is on the PATH.
+fn install_cli(app: &AppHandle) -> Result<cli_path::Outcome, String> {
+    let (node, bundle) = bundled_runtime(app)?;
+    let local = app.path().app_local_data_dir().map_err(|err| format!("cannot locate the app data folder: {err}"))?;
+    let home = app.path().home_dir().ok();
+    let shim = cli_path::write_all(&cli_path::shim_dir(&local, home.as_deref()), &node, &bundle)?;
+    cli_path::add_to_path(&shim)
+}
+
+fn cli_outcome_text(outcome: &cli_path::Outcome) -> String {
+    match outcome {
+        cli_path::Outcome::Added(dir) => format!(
+            "Done. Open a new terminal and run: basics --help
+
+The commands basics and basics-mcp live in {}.",
+            dir.display()
+        ),
+        cli_path::Outcome::AlreadyThere(dir) => format!("The basics and basics-mcp commands are ready ({}). Open a new terminal and run: basics --help", dir.display()),
+        cli_path::Outcome::NeedsManualPath(dir) => format!(
+            "The basics and basics-mcp commands were installed in {0}, but that folder is not on your PATH yet. Add it in your shell profile, for example:
+
+export PATH=\"{0}:$PATH\"",
+            dir.display()
+        ),
+    }
+}
+
+/// Ask whether to add the `basics` command to the PATH, and do it on yes. `force` is the
+/// tray item: it asks even after an earlier answer. Called off the event loop (dialogs block).
+fn offer_cli_on_path(app: AppHandle, force: bool) {
+    let Ok(dir) = config_dir(&app) else { return };
+    let answer = cli_path::load_answer(&dir);
+    if !force {
+        match answer {
+            // Said yes before: keep the launcher pointing at this install (an update can move it).
+            Some(cli_path::Answer::Yes) => {
+                let _ = install_cli(&app);
+                return;
+            }
+            Some(cli_path::Answer::No) => return,
+            None => {}
+        }
+        // A launch at sign-in must not pop a question; the next normal launch asks.
+        if settings::launched_at_login(std::env::args()) {
+            return;
+        }
+        // An npm install (or an earlier setup) already provides the command.
+        if cli_path::command_on_path(&std::env::var("PATH").unwrap_or_default()) {
+            return;
+        }
+    }
+    let confirmed = app
+        .dialog()
+        .message(
+            "Add the basics and basics-mcp commands to your PATH?
+
+Then you can run `basics` from any terminal (basics --help, basics connect, basics ui) and use `basics-mcp` as an MCP stdio command. They use the Node runtime bundled with this app, so you do not need to install Node.js.",
+        )
+        .title("Basics command line")
+        .buttons(MessageDialogButtons::OkCancelCustom("Add to PATH".into(), "Not now".into()))
+        .blocking_show();
+    if !confirmed {
+        if answer.is_none() {
+            let _ = cli_path::save_answer(&dir, cli_path::Answer::No);
+        }
+        return;
+    }
+    let _ = cli_path::save_answer(&dir, cli_path::Answer::Yes);
+    let (kind, text) = match install_cli(&app) {
+        Ok(outcome) => (MessageDialogKind::Info, cli_outcome_text(&outcome)),
+        Err(err) => (MessageDialogKind::Error, err),
+    };
+    app.dialog().message(text).title("Basics command line").kind(kind).blocking_show();
+}
+
 fn show_main(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
@@ -846,6 +934,7 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     let copy_mcp = MenuItem::with_id(app, "copy-mcp", "Copy MCP URL", true, None::<&str>)?;
     let vault = MenuItem::with_id(app, "open-vault", "Open vault folder", true, None::<&str>)?;
     let connect = MenuItem::with_id(app, "connect", "Connect agents…", true, None::<&str>)?;
+    let cli = MenuItem::with_id(app, "cli-path", "Add basics commands to PATH…", true, None::<&str>)?;
     let settings_item = MenuItem::with_id(app, "settings", "Settings…", true, None::<&str>)?;
     let autostart = CheckMenuItem::with_id(app, "autostart", "Start at login", true, autostart_on, None::<&str>)?;
     let updates = MenuItem::with_id(app, "updates", "Check for updates", true, None::<&str>)?;
@@ -854,7 +943,7 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     let separator_b = PredefinedMenuItem::separator(app)?;
     let menu = Menu::with_items(
         app,
-        &[&open, &copy_mcp, &vault, &connect, &settings_item, &separator_a, &autostart, &updates, &separator_b, &quit],
+        &[&open, &copy_mcp, &vault, &connect, &cli, &settings_item, &separator_a, &autostart, &updates, &separator_b, &quit],
     )?;
 
     // Kept so the Settings page can tick the same checkbox.
@@ -882,6 +971,10 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
             // Dialogs block until answered, so keep them off the event loop.
             let app = app.clone();
             std::thread::spawn(move || connect_agents(app));
+        }
+        "cli-path" => {
+            let app = app.clone();
+            std::thread::spawn(move || offer_cli_on_path(app, true));
         }
         "settings" => {
             show_main(app);
@@ -958,6 +1051,8 @@ pub fn run() {
             *handle.state::<Prefs>().0.lock().unwrap() = prefs;
             build_main_window(&handle, start_hidden)?;
             build_tray(&handle)?;
+            let cli_handle = handle.clone();
+            std::thread::spawn(move || offer_cli_on_path(cli_handle, false));
             std::thread::spawn(move || start(handle));
             Ok(())
         })
