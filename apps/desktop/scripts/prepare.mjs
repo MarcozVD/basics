@@ -86,6 +86,11 @@ function copyDist() {
   fs.mkdirSync(basicsResources, { recursive: true });
   fs.cpSync(path.join(basicsPkg, "dist"), path.join(basicsResources, "dist"), { recursive: true });
   fs.copyFileSync(path.join(basicsPkg, "package.json"), path.join(basicsResources, "package.json"));
+  // npm always adds these to a published package; keep the installed copy identical.
+  for (const name of ["README.md", "LICENSE"]) {
+    const file = path.join(basicsPkg, name);
+    if (fs.existsSync(file)) fs.copyFileSync(file, path.join(basicsResources, name));
+  }
   fs.rmSync(path.join(resourcesDir, "package.json"), { force: true });
   console.log("copied basics dist + package.json → resources/basics");
 }

@@ -114,6 +114,21 @@ browser keys, and the app has no menu to open them. Development builds (`npm run
 F12 opens DevTools there. In development builds, F5, Ctrl+P and Ctrl+R can still act inside WebView2 even though the
 page cancels them where it can. On Linux and macOS the page-level filter is the only guard.
 
+## Command line
+
+The app bundles the CLI, but the installer does not put it on your `PATH`. On the first normal launch the app asks once:
+**Add the basics and basics-mcp commands to your PATH?** Choose **Add to PATH** and you can run `basics` (for example
+`basics --help` or `basics connect`) and `basics-mcp` from any new terminal, without installing Node.js. The commands use
+the Node runtime and CLI inside the app.
+
+- **Windows**: two small launchers (`basics.cmd`, `basics-mcp.cmd`) go in the app's local data folder and that folder is
+  added to your user `PATH`. No administrator rights are needed. Open a new terminal afterwards.
+- **macOS and Linux**: the launchers go in `~/.local/bin`. Shell profiles are not edited; if that folder is not on your
+  `PATH` the app tells you the line to add.
+- The question is skipped when a `basics` command is already on your `PATH` (for example from `npm i -g`), and when the
+  app starts at sign-in. **Not now** is remembered; use the tray item **Add basics commands to PATH…** to do it later.
+- If you said yes, the launchers are refreshed on every start, so updating the app keeps them working.
+
 ## Connecting your agents
 
 The app serves MCP over HTTP at `http://127.0.0.1:<port>/mcp`, exactly like `basics ui`. Use **Copy MCP URL** from the
