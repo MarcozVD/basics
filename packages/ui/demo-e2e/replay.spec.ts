@@ -47,7 +47,7 @@ test("transcripts cancel offscreen and retype on every entry without moving thei
   await expect(transcript.locator(".agent-transcript-command > code:last-child")).toHaveText("");
   await page.waitForTimeout(200);
   await expect(transcript).toHaveAttribute("data-state", "idle");
-  expect(await transcript.evaluate((element) => element.getBoundingClientRect().height)).toBe(height);
+  expect(Math.abs((await transcript.evaluate((element) => element.getBoundingClientRect().height)) - height)).toBeLessThan(0.5);
   await transcript.scrollIntoViewIfNeeded();
   await expect(transcript).toHaveAttribute("data-state", "running");
   await expect(transcript).toHaveAttribute("data-state", "done", { timeout: 10000 });

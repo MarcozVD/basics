@@ -11,6 +11,8 @@ prácticas, checks y perfiles que usas, que tus agentes de código leen y amplí
 normales (frontmatter + `[[wikilinks]]`, compatibles con Obsidian y con git), y todo lo que escribe un agente llega al
 inbox para que lo apruebes.
 
+**Pruébalo:** [demo en vivo](https://marcozvd.github.io/basics/demo/) en tu navegador, sin instalar nada · [sitio web](https://marcozvd.github.io/basics/)
+
 > **Estado: 1.0** — consulta el [contrato de estabilidad](https://marcozvd.github.io/basics/guide/stability.html).
 
 ## Inicio rápido

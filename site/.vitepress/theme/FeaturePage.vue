@@ -175,10 +175,10 @@ h1 { font-size: clamp(34px, 4.4vw, 56px); line-height: 1.08; letter-spacing: -.0
 .feature-demo { margin: 40px 0 64px; }
 .feature-block { margin-top: clamp(64px, 12vh, 128px); }
 h2 { font-size: 25px; line-height: 1.3; letter-spacing: -.025em; font-weight: 550; display: flex; gap: 16px; }
-h2 > span:first-child { color: var(--basics-tech); font: 12px/32px var(--vp-font-family-mono); letter-spacing: 0; }
+h2 > span:first-child { color: var(--vp-c-brand-1); font: 12px/32px var(--vp-font-family-mono); letter-spacing: 0; }
 .feature-block p { margin: 16px 0 20px; line-height: 1.75; color: var(--basics-muted); }
 pre { padding: 20px; background: var(--basics-surface); border: 1px solid var(--basics-border); border-radius: 8px; overflow-x: auto; font: 13px/1.75 var(--vp-font-family-mono); }
-.feature-guide { margin: 48px 0; color: var(--basics-tech); line-height: 1.8; }
+.feature-guide { margin: 48px 0; color: var(--vp-c-brand-1); line-height: 1.8; }
 a:hover { text-decoration: underline; }
 .feature-pagination { border-top: 1px solid var(--basics-border); padding-top: 24px; display: flex; justify-content: space-between; gap: 24px; }
 .feature-pagination a:last-child { text-align: right; }

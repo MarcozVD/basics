@@ -1,10 +1,9 @@
 <script setup lang="ts">
-// biome-ignore lint/correctness/noUnusedImports: used by the Vue template.
 import { withBase } from "vitepress";
 import { nextTick, onBeforeUnmount, ref } from "vue";
 import { useReveal } from "./useReveal";
 
-const release = "https://github.com/MarcozVD/basics/releases/latest";
+const release = withBase("/guide/desktop.html#download");
 const options = [
   {
     id: "desktop",
@@ -59,7 +58,8 @@ async function copy() {
   message.value = "";
   const desktop = selected.value === 0;
   try {
-    await navigator.clipboard.writeText(options[selected.value].value);
+    const value = options[selected.value].value;
+    await navigator.clipboard.writeText(desktop ? new URL(value, window.location.href).href : value);
     if (current !== operation) return;
     copied.value = true;
     message.value = desktop ? "Download link copied." : "Install command copied.";
@@ -102,7 +102,7 @@ useReveal(revealRoot);
 
     <section class="landing-install" aria-labelledby="landing-install-title" data-testid="landing-install">
       <h2 id="landing-install-title" data-reveal="0">Your stack, remembered.</h2>
-      <a class="landing-download" data-reveal="1" :href="release">Download desktop <span aria-hidden="true">↗</span></a>
+      <a class="landing-download" data-reveal="1" :href="release">Download desktop <span aria-hidden="true">→</span></a>
       <div class="landing-install-tabs" role="tablist" aria-label="Install Basics">
         <button :data-reveal="index + 2" v-for="(option, index) in options" :id="`install-tab-${option.id}`" :key="option.id" type="button" role="tab" :aria-selected="selected === index" :aria-controls="`install-panel-${option.id}`" :tabindex="selected === index ? 0 : -1" @click="select(index)" @keydown="moveTab">{{ option.label }}</button>
       </div>
@@ -110,7 +110,7 @@ useReveal(revealRoot);
         <p data-reveal="3">{{ option.description }}</p>
         <div class="landing-install-command" data-reveal="4">
           <code>{{ option.value }}</code>
-          <button type="button" :aria-label="copied ? 'Copied' : selected === 0 ? 'Copy download link' : 'Copy install command'" @click="copy">{{ copied ? 'Copied' : selected === 0 ? 'Copy link' : 'Copy' }}</button>
+          <button type="button" :aria-label="copied ? 'Copied' : selected === 0 ? 'Copy download link' : 'Copy install command'" @click="copy">{{ copied ? 'Copied' : 'Copy' }}</button>
         </div>
       </div>
       <p class="landing-copy-status" role="status" aria-live="polite" aria-atomic="true">{{ message }}</p>

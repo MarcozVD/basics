@@ -7,6 +7,7 @@ import LandingClose from "./landing/LandingClose.vue";
 import LandingHero from "./landing/LandingHero.vue";
 import ReadmeBody from "./landing/ReadmeBody.vue";
 import SiteFooter from "./landing/SiteFooter.vue";
+import { useSearchAccessibility } from "./useSearchAccessibility";
 import "@fontsource-variable/geist";
 import "@fontsource-variable/geist-mono";
 import "./custom.css";
@@ -17,6 +18,7 @@ export default {
   Layout: {
     setup() {
       const { frontmatter, page } = useData();
+      useSearchAccessibility();
       return () =>
         h(DefaultTheme.Layout, null, {
           "page-top": () =>
