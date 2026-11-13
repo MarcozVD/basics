@@ -10,10 +10,11 @@ const props = withDefaults(
     part: "full" | "explore" | "note" | "graph" | "proposal" | "recommend";
     params?: Record<string, string>;
     path?: string;
+    windowed?: boolean;
   }>(),
   { params: () => ({}) },
 );
-const emit = defineEmits<{ state: [state: string] }>();
+const emit = defineEmits<{ state: [state: string]; focus: [id: string] }>();
 const { isDark } = useData();
 const root = ref<HTMLElement>();
 const frame = ref<HTMLIFrameElement>();
@@ -21,6 +22,7 @@ const state = ref("idle");
 const narrow = ref(true);
 const visible = ref(false);
 const scale = ref(1);
+const frameSource = ref("");
 let near = false;
 let mounted = false;
 let observer: IntersectionObserver | undefined;
@@ -34,12 +36,15 @@ let fade: ReturnType<typeof setTimeout> | undefined;
 let firstFrame = 0;
 let secondFrame = 0;
 const source = computed(() => {
-  if (props.part === "full") return props.path || withBase("/demo/explore/");
+  if (props.path) return props.path;
+  if (props.part === "full") return withBase("/demo/explore/");
   const query = new URLSearchParams(Object.entries(props.params).sort(([a], [b]) => a.localeCompare(b)));
   return `${withBase(`/demo/embed/${props.part}/`)}${query.size ? `?${query}` : ""}`;
 });
 // biome-ignore lint/correctness/noUnusedVariables: used by the Vue template.
-const title = computed(() => (props.part === "full" ? "Interactive Basics app demo" : `Interactive Basics ${props.part} demo`));
+const title = computed(() =>
+  props.part === "full" || props.windowed ? "Interactive Basics app demo" : `Interactive Basics ${props.part} demo`,
+);
 // biome-ignore lint/correctness/noUnusedVariables: used by the Vue template; raw noscript avoids browser parsing differences during hydration.
 const noScript = computed(() => `<a class="app-part-nojs" href="${withBase("/demo/")}">Open live demo</a>`);
 function clearTimers() {
@@ -60,14 +65,35 @@ function fail() {
 function start() {
   if (!mounted || state.value !== "idle") return;
   state.value = "queued";
-  cancel = embedQueue.enqueue((done) => {
-    release = done;
-    state.value = "loading";
-    timeout = setTimeout(fail, 15000);
-  });
+  cancel = embedQueue.enqueue(
+    (done) => {
+      release = done;
+      frameSource.value = source.value;
+      state.value = "loading";
+      timeout = setTimeout(fail, 15000);
+    },
+    () => {
+      const rect = root.value?.getBoundingClientRect();
+      if (!rect) return Number.POSITIVE_INFINITY;
+      if (rect.bottom < 0) return -rect.bottom;
+      return rect.top < window.innerHeight ? Math.max(0, rect.top) / window.innerHeight - 1 : rect.top - window.innerHeight;
+    },
+  );
 }
 function ready(event: MessageEvent) {
-  if (state.value !== "loading" || event.origin !== window.location.origin || event.source !== frame.value?.contentWindow) return;
+  if (event.origin !== window.location.origin || event.source !== frame.value?.contentWindow) return;
+  if (
+    event.data?.source === "basics-demo" &&
+    event.data.type === "focus" &&
+    event.data.part === props.part &&
+    (props.part === "note" || props.part === "graph") &&
+    typeof event.data.id === "string" &&
+    event.data.id.length <= 128
+  ) {
+    emit("focus", event.data.id);
+    return;
+  }
+  if (state.value !== "loading") return;
   if (event.data?.source !== "basics-demo" || event.data.type !== "ready" || event.data.part !== props.part) return;
   clearTimeout(timeout);
   sendTheme();
@@ -130,6 +156,13 @@ watch(isDark, sendTheme);
 watch(state, (value) => emit("state", value), { immediate: true });
 watch(source, () => {
   if (!mounted) return;
+  if (!props.path && (state.value === "live" || state.value === "fading") && frame.value?.contentWindow) {
+    const id = props.part === "note" ? props.params.id : props.part === "graph" ? props.params.focus : props.params.scenario;
+    if (id && ["note", "graph", "recommend"].includes(props.part)) {
+      frame.value.contentWindow.postMessage({ type: props.part === "recommend" ? "scenario" : "focus", id }, window.location.origin);
+      return;
+    }
+  }
   clearTimers();
   cancel?.();
   release = undefined;
@@ -150,9 +183,9 @@ defineExpose({ start });
 </script>
 
 <template>
-  <div ref="root" class="app-part" :class="`app-part-${part}`" :data-part="part" :data-state="state" :data-visible="visible" :aria-busy="state === 'loading' || state === 'queued' || state === 'fading'">
+  <div ref="root" class="app-part" :class="[`app-part-${part}`, { 'app-part-windowed': windowed }]" :data-part="part" :data-state="state" :data-visible="visible" :aria-busy="state === 'loading' || state === 'queued' || state === 'fading'">
     <PartSkeleton :part="part" />
-    <iframe v-if="state === 'loading' || state === 'fading' || state === 'live'" ref="frame" :src="source" :title="title" :class="{ 'is-live': state === 'live' }" :style="part === 'full' ? { transform: `scale(${scale})` } : undefined" :inert="state !== 'live'" :aria-hidden="state !== 'live'" :tabindex="state === 'live' ? 0 : -1" @load="sendTheme" @error="fail" />
+    <iframe v-if="state === 'loading' || state === 'fading' || state === 'live'" ref="frame" :src="frameSource" :title="title" :class="{ 'is-live': state === 'live' }" :style="(part === 'full' || windowed) && !narrow ? { transform: `scale(${scale})` } : undefined" :inert="state !== 'live'" :aria-hidden="state !== 'live'" :tabindex="state === 'live' ? 0 : -1" @load="sendTheme" @error="fail" />
     <button v-if="state === 'idle'" class="app-part-try" type="button" @click="start">{{ part === 'full' ? 'Try live demo' : 'Try it' }} <span aria-hidden="true">↗</span></button>
     <span v-if="state === 'loading' || state === 'queued'" class="app-part-status" role="status">{{ state === 'queued' ? 'Waiting to start demo' : 'Starting demo' }}</span>
     <div v-if="state === 'failed'" class="app-part-fallback">

@@ -27,6 +27,11 @@ export function EmbedFrame({ part, children }: { part: Part; children: ReactNode
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const published = useRef(false);
+  useEffect(() => {
+    if (part !== "note" && part !== "graph") return;
+    const id = params.get(part === "note" ? "id" : "focus") || "nextjs";
+    window.parent.postMessage({ source: "basics-demo", type: "focus", part, id }, window.location.origin);
+  }, [params, part]);
   const publish = useCallback(() => {
     if (published.current) return;
     published.current = true;

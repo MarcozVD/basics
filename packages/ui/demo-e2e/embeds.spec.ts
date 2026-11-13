@@ -20,7 +20,7 @@ for (const part of parts) {
     await page.route("**/basics/embed-harness", (route) =>
       route.fulfill({
         contentType: "text/html",
-        body: `<!doctype html><html><body><iframe title="App part" style="width:1000px;height:700px" src="/basics/demo/embed/${part}/?id=${part === "proposal" ? "cli-error-messages" : "nextjs"}&focus=nextjs"></iframe><script>window.ready=[];window.rendered=[];addEventListener('message',e=>{if(e.source===document.querySelector('iframe').contentWindow&&e.origin===location.origin&&e.data.source==='basics-demo'){window.ready.push(e.data);const d=document.querySelector('iframe').contentDocument;window.rendered.push({text:d.body.innerText,rows:d.querySelectorAll('[role=option]').length,canvas:d.querySelectorAll('canvas').length})}});</script></body></html>`,
+        body: `<!doctype html><html><body><iframe title="App part" style="width:1000px;height:700px" src="/basics/demo/embed/${part}/?id=${part === "proposal" ? "cli-error-messages" : "nextjs"}&focus=nextjs"></iframe><script>window.ready=[];window.rendered=[];addEventListener('message',e=>{if(e.source===document.querySelector('iframe').contentWindow&&e.origin===location.origin&&e.data.source==='basics-demo'&&e.data.type==='ready'){window.ready.push(e.data);const d=document.querySelector('iframe').contentDocument;window.rendered.push({text:d.body.innerText,rows:d.querySelectorAll('[role=option]').length,canvas:d.querySelectorAll('canvas').length})}});</script></body></html>`,
       }),
     );
     await page.goto("/basics/embed-harness");

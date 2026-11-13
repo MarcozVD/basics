@@ -26,3 +26,28 @@ it("removes queued work and releases active work on unmount", () => {
   cancel();
   expect(starts).toEqual([1, 3]);
 });
+it("batches eligible requests and starts the visible part before an offscreen part", () => {
+  let tick!: () => void;
+  const queue = createEmbedQueue((task) => {
+    tick = task;
+  });
+  const starts: string[] = [];
+  let finish!: () => void;
+  queue.enqueue(
+    () => starts.push("offscreen"),
+    () => 500,
+  );
+  queue.enqueue(
+    (done) => {
+      starts.push("visible");
+      finish = done;
+    },
+    () => 0,
+  );
+  expect(starts).toEqual([]);
+  tick();
+  expect(starts).toEqual(["visible"]);
+  finish();
+  tick();
+  expect(starts).toEqual(["visible", "offscreen"]);
+});

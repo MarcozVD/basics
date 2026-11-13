@@ -32,6 +32,9 @@ test("AppPart lazy boots are serialized, themed, handshake-gated and keep their 
   await page.evaluate(() => window.postMessage({ source: "basics-demo", type: "ready", part: "explore" }, location.origin));
   await expect(first).toHaveAttribute("data-state", "loading");
   expect(await first.locator(".part-skeleton").evaluate((e) => getComputedStyle(e, "::after").animationDuration)).toBe("1.2s");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  expect(await first.locator(".part-skeleton").evaluate((e) => getComputedStyle(e, "::after").animationName)).toBe("none");
+  await page.emulateMedia({ reducedMotion: "no-preference" });
   unblock();
   await expect(first).toHaveAttribute("data-state", "live");
   await expect(second).toHaveAttribute("data-state", "live");
@@ -138,6 +141,8 @@ test("landing is visible without JavaScript, hero has two lines and section gap 
   await noJS.goto(new URL("/basics/", page.url()).href);
   await expect(noJS.locator("#landing-title")).toHaveCSS("opacity", "1");
   await expect(noJS.locator("[data-reveal].reveal-armed")).toHaveCount(0);
-  await expect(noJS.locator("noscript").getByRole("link", { name: "Open live demo" })).toBeVisible();
+  const fallbackLinks = noJS.locator("noscript").getByRole("link", { name: "Open live demo" });
+  await expect(fallbackLinks).toHaveCount(5);
+  for (const link of await fallbackLinks.all()) await expect(link).toBeVisible();
   await context.close();
 });
