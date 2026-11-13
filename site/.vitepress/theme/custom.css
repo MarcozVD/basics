@@ -87,6 +87,29 @@
   --vp-c-text-2: var(--basics-muted);
 }
 
+/* One navbar surface across VitePress's sidebar and scroll-state variants. */
+.VPNav .VPNavBar,
+.VPNav .VPNavBar :is(.container > .title, .VPNavBarTitle > .title, .container > .content, .content-body, .divider) {
+  /* biome-ignore lint/complexity/noImportantStyles: override scoped VitePress state rules that explicitly restore transparent backgrounds. */
+  background-color: var(--basics-shell) !important;
+}
+.VPNav .VPNavBar,
+.VPNav .VPNavBar :is(.container > .title, .VPNavBarTitle > .title) {
+  /* biome-ignore lint/complexity/noImportantStyles: replace VitePress's separate title and screen-open borders with one full-width divider. */
+  border-bottom: 0 !important;
+}
+.VPNav .VPNavBar .divider {
+  position: absolute;
+  inset: auto 0 0;
+  z-index: 3;
+  /* biome-ignore lint/complexity/noImportantStyles: remove VitePress's breakpoint-dependent sidebar inset from the single bottom edge. */
+  padding: 0 !important;
+}
+.VPNav .VPNavBar .divider-line {
+  /* biome-ignore lint/complexity/noImportantStyles: keep the same edge in home, scrolled and sidebar states. */
+  background-color: var(--basics-border) !important;
+}
+
 .vp-doc h1,
 .vp-doc h2,
 .vp-doc h3 {
@@ -877,6 +900,9 @@
   background-color: var(--basics-elevated);
 }
 .site-footer {
+  position: relative;
+  z-index: calc(var(--vp-z-index-sidebar) + 1);
+  width: 100%;
   padding: 40px 32px;
   border-top: 1px solid var(--basics-border);
   background: var(--basics-shell);
