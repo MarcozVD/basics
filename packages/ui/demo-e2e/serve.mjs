@@ -4,6 +4,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 const root = path.resolve(import.meta.dirname, "../../../site/.vitepress/dist");
+const fixtureRoot = path.resolve(import.meta.dirname, "../../../scripts/demo/generated/motion-fixture");
 const mime = {
   ".html": "text/html",
   ".js": "text/javascript",
@@ -25,8 +26,10 @@ export async function startStaticServer(port = Number(process.env.BASICS_DEMO_TE
         response.writeHead(404).end();
         return;
       }
-      let file = path.resolve(root, decodeURIComponent(url.pathname.slice("/basics/".length)));
-      if (file !== root && !file.startsWith(`${root}${path.sep}`)) {
+      const fixture = url.pathname.startsWith("/basics/__motion/");
+      const directory = fixture ? fixtureRoot : root;
+      let file = path.resolve(directory, decodeURIComponent(url.pathname.slice(fixture ? "/basics/__motion/".length : "/basics/".length)));
+      if (file !== directory && !file.startsWith(`${directory}${path.sep}`)) {
         response.writeHead(404).end();
         return;
       }

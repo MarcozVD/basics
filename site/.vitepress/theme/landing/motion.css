@@ -1,0 +1,374 @@
+/* V19: the proposal arrives as a shaped placeholder, then yields to the real content. */
+:root {
+  --landing-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+[data-reveal] {
+  opacity: 1;
+  transform: none;
+}
+.reveal-armed {
+  transition:
+    opacity 280ms var(--landing-ease),
+    transform 280ms var(--landing-ease);
+  transition-delay: var(--reveal-delay, 0ms);
+}
+.reveal-armed:not(.is-revealed) {
+  opacity: 0;
+  transform: translateY(6px);
+}
+.reveal-focused {
+  transition: none;
+}
+.app-part {
+  position: relative;
+  isolation: isolate;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  border: 1px solid var(--basics-border);
+  border-radius: 12px;
+  background: var(--basics-shell);
+  color: var(--basics-text);
+}
+.app-part-full {
+  border: 0;
+  border-radius: 0;
+}
+.app-part-note,
+.app-part-proposal,
+.app-part-recommend {
+  aspect-ratio: 4 / 3;
+}
+.app-part iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 200ms linear;
+}
+.app-part-full iframe {
+  width: 1280px;
+  height: 800px;
+  transform-origin: top left;
+}
+.app-part:is([data-state="fading"], [data-state="live"]) iframe {
+  opacity: 1;
+}
+.app-part[data-state="live"] iframe {
+  pointer-events: auto;
+}
+.part-skeleton {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  overflow: hidden;
+  background: var(--basics-shell);
+  opacity: 1;
+  pointer-events: none;
+  transition: opacity 200ms linear;
+}
+.app-part:is([data-state="fading"], [data-state="live"]) .part-skeleton {
+  opacity: 0;
+}
+.part-skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 20%, color-mix(in srgb, var(--basics-text) 6%, transparent) 50%, transparent 80%);
+  transform: translateX(-100%);
+}
+.app-part[data-state="loading"][data-visible="true"] .part-skeleton::after {
+  animation: part-shimmer 1.2s linear infinite;
+}
+@keyframes part-shimmer {
+  to {
+    transform: translateX(100%);
+  }
+}
+.skeleton-content {
+  flex: 1;
+  min-width: 0;
+  padding: 5%;
+}
+.skeleton-bar,
+.skeleton-filters i,
+.skeleton-input,
+.skeleton-avatar,
+.skeleton-dot {
+  display: block;
+  background: var(--basics-elevated);
+  border-radius: 5px;
+}
+.skeleton-bar {
+  width: 75%;
+  height: 8px;
+}
+.skeleton-title {
+  width: 42%;
+  height: 14px;
+}
+.skeleton-heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 6%;
+}
+.skeleton-avatar {
+  width: 26px;
+  height: 26px;
+}
+.skeleton-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-block: 5%;
+}
+.skeleton-filters i {
+  width: 16%;
+  height: 22px;
+  border-radius: 999px;
+}
+.skeleton-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 11%;
+  min-height: 24px;
+  border-top: 1px solid var(--basics-border);
+}
+.skeleton-row .skeleton-bar {
+  width: 48%;
+}
+.skeleton-row .skeleton-meta {
+  width: 18%;
+  margin-left: auto;
+}
+.skeleton-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+.skeleton-sidebar {
+  width: 21%;
+  padding: 4% 3%;
+  border-right: 1px solid var(--basics-border);
+}
+.skeleton-sidebar .skeleton-bar {
+  width: 90%;
+  margin-bottom: 24%;
+}
+.skeleton-sidebar .skeleton-logo {
+  height: 16px;
+  margin-bottom: 48%;
+}
+.skeleton-frontmatter,
+.skeleton-diff {
+  display: grid;
+  gap: 12px;
+  padding: 5%;
+  border: 1px solid var(--basics-border);
+  border-radius: 8px;
+}
+.skeleton-frontmatter .skeleton-bar:nth-child(even),
+.skeleton-diff .skeleton-bar:nth-child(even) {
+  width: 55%;
+}
+.skeleton-paragraph {
+  display: grid;
+  gap: 10px;
+  margin-block: 5%;
+}
+.skeleton-paragraph .skeleton-bar:last-child {
+  width: 55%;
+}
+.skeleton-actions {
+  justify-content: end;
+}
+.skeleton-input {
+  height: 30px;
+  border: 1px solid var(--basics-border);
+  background: transparent;
+}
+.skeleton-shortlist {
+  display: grid;
+  gap: 12px;
+  margin-top: 5%;
+}
+.skeleton-shortlist .skeleton-row {
+  height: 30px;
+  border: 0;
+}
+.skeleton-graph {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.app-part-try,
+.app-part-status,
+.app-part-failure-copy,
+.app-part-nojs {
+  position: absolute;
+  z-index: 1;
+  left: 16px;
+  bottom: 16px;
+  border-radius: 8px;
+  background: var(--basics-surface);
+  color: var(--basics-text);
+  font-size: 13px;
+}
+.app-part-try,
+.app-part-nojs {
+  min-height: 44px;
+  padding: 10px 16px;
+  border: 1px solid var(--basics-border);
+}
+.app-part-status {
+  padding: 8px 12px;
+}
+.app-part-try:focus-visible,
+.app-part-failure-copy a:focus-visible {
+  outline: 2px solid var(--basics-accent-ring);
+  outline-offset: 3px;
+}
+.app-part-fallback {
+  position: absolute;
+  inset: 0;
+  background: var(--basics-shell);
+}
+.app-part-failure-copy {
+  right: 16px;
+  padding: 12px;
+}
+.app-part-failure-copy p {
+  margin: 0 0 8px;
+}
+.app-part-failure-copy a {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.landing-hero {
+  padding-bottom: 40px;
+}
+.landing-readme {
+  padding-top: 16px;
+}
+.landing-hero :is(button, .landing-download),
+.landing-close :is(button, .landing-download),
+.app-part-try {
+  transition:
+    transform 120ms var(--landing-ease),
+    color 120ms var(--landing-ease),
+    background-color 120ms var(--landing-ease);
+}
+.landing-hero :is(button, .landing-download):active,
+.landing-close :is(button, .landing-download):active,
+.app-part-try:active {
+  transform: scale(0.97);
+}
+.landing-chip[aria-pressed="true"] {
+  border-color: var(--chip-color);
+}
+.landing-prompts[data-typing="true"] .landing-transcript-line code::after {
+  content: "";
+  display: inline-block;
+  width: 1px;
+  height: 1em;
+  margin-left: 2px;
+  background: currentColor;
+  animation: transcript-caret 600ms step-end infinite;
+}
+@keyframes transcript-caret {
+  50% {
+    opacity: 0;
+  }
+}
+.landing-recorded-answer li {
+  animation: transcript-answer 280ms var(--landing-ease) both;
+  animation-delay: var(--line-delay, 0ms);
+}
+@keyframes transcript-answer {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (min-width: 1280px) {
+  .landing-hero {
+    grid-template-columns: 430px minmax(0, 1fr);
+    gap: 16px;
+    padding-left: 24px;
+  }
+  .landing-copy h1 {
+    max-width: none;
+    font-size: 56px;
+    text-wrap: balance;
+  }
+}
+@media (max-width: 767px) {
+  .landing-hero {
+    padding-bottom: 32px;
+  }
+  .skeleton-content {
+    padding: 6%;
+  }
+  .skeleton-frontmatter,
+  .skeleton-diff {
+    gap: 6px;
+  }
+  .skeleton-paragraph {
+    gap: 6px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .landing-prompts .landing-transcript-line code::after {
+    display: none;
+    animation: none;
+  }
+  .landing-recorded-answer li {
+    animation-name: transcript-answer-still;
+    animation-duration: 1ms;
+    /* biome-ignore lint/complexity/noImportantStyles: VitePress sets a negative important animation delay globally. */
+    animation-delay: 0ms !important;
+  }
+  .reveal-armed {
+    /* biome-ignore lint/complexity/noImportantStyles: VitePress's important global reset would erase the specified 1ms fade. */
+    transition-duration: 1ms !important;
+    transition-delay: 0ms;
+  }
+  .reveal-armed:not(.is-revealed) {
+    transform: none;
+  }
+  .app-part iframe,
+  .part-skeleton {
+    /* biome-ignore lint/complexity/noImportantStyles: VitePress's important global reset would erase the specified 1ms fade. */
+    transition-duration: 1ms !important;
+  }
+  .app-part .part-skeleton::after {
+    animation: none;
+  }
+  .landing-hero :is(button, .landing-download),
+  .landing-close :is(button, .landing-download),
+  .app-part-try {
+    transition-duration: 1ms;
+  }
+  .landing-hero :is(button, .landing-download):active,
+  .landing-close :is(button, .landing-download):active,
+  .app-part-try:active {
+    transform: none;
+  }
+}
+@keyframes transcript-answer-still {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}

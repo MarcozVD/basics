@@ -9,6 +9,7 @@ FORM: Owner-approved V19 design brief, section 3. Composition is pinned; no conc
 import { onBeforeUnmount, ref } from "vue";
 // biome-ignore lint/correctness/noUnusedImports: used by the Vue template.
 import LiveWindow from "./LiveWindow.vue";
+import { useReveal } from "./useReveal";
 
 const command = "npx @marcozvd/basics init";
 const copied = ref(false);
@@ -38,15 +39,17 @@ async function copyCommand() {
   }
 }
 onBeforeUnmount(() => clearTimeout(reset));
+const revealRoot = ref<HTMLElement>();
+useReveal(revealRoot);
 </script>
 
 <template>
-  <section class="landing-hero" aria-labelledby="landing-title" data-testid="landing-hero">
+  <section ref="revealRoot" class="landing-hero" aria-labelledby="landing-title" data-testid="landing-hero">
     <div class="landing-copy">
-      <h1 id="landing-title">Your agents build it your way.</h1>
-      <p class="landing-promise">Teach your stack once.<br /> Every agent uses it.</p>
-      <p class="landing-summary">Basics keeps your tech stack as plain Markdown notes. Your coding agents read it over MCP and propose what they learn. You approve every change.</p>
-      <div class="landing-actions">
+      <h1 id="landing-title" data-reveal="0">Your agents build it your way.</h1>
+      <p class="landing-promise" data-reveal="1">Teach your stack once.<br /> Every agent uses it.</p>
+      <p class="landing-summary" data-reveal="2">Basics keeps your tech stack as plain Markdown notes. Your coding agents read it over MCP and propose what they learn. You approve every change.</p>
+      <div class="landing-actions" data-reveal="3">
         <a class="landing-download" href="https://github.com/MarcozVD/basics/releases/latest">Download desktop <span aria-hidden="true">↗</span></a>
         <div class="landing-command">
           <code ref="commandElement">{{ command }}</code>
@@ -54,7 +57,7 @@ onBeforeUnmount(() => clearTimeout(reset));
         </div>
       </div>
       <span class="landing-sr-only" role="status" aria-live="polite">{{ copied ? 'Install command copied.' : copyError }}</span>
-      <p class="landing-platforms">Windows, macOS, Linux <span aria-hidden="true">·</span> MIT <span aria-hidden="true">·</span> local, no account</p>
+      <p class="landing-platforms" data-reveal="4">Windows, macOS, Linux <span aria-hidden="true">·</span> MIT <span aria-hidden="true">·</span> local, no account</p>
     </div>
     <LiveWindow />
   </section>

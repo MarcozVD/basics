@@ -8,6 +8,7 @@ import SiteFooter from "./landing/SiteFooter.vue";
 import "@fontsource-variable/geist";
 import "@fontsource-variable/geist-mono";
 import "./custom.css";
+import "./landing/motion.css";
 
 export default {
   extends: DefaultTheme,

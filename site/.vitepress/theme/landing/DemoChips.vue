@@ -29,9 +29,12 @@ function choose(entry: (typeof content.choices)[number]) {
   const start = performance.now();
   function tick() {
     if (run !== epoch) return;
-    const progress = Math.min(1, (performance.now() - start) / 400);
-    typed.value = entry.prompt.slice(0, Math.ceil(entry.prompt.length * progress));
-    if (progress === 1) phase.value = "done";
+    const count = Math.floor((performance.now() - start) / 28);
+    typed.value = entry.prompt.slice(0, count);
+    if (count >= entry.prompt.length)
+      timer = setTimeout(() => {
+        if (run === epoch) phase.value = "done";
+      }, 120);
     else timer = setTimeout(tick, 16);
   }
   tick();
@@ -49,7 +52,7 @@ onBeforeUnmount(() => clearTimeout(timer));
 </script>
 
 <template>
-  <div class="landing-prompts" data-testid="landing-prompts" :data-state="phase">
+  <div class="landing-prompts" data-testid="landing-prompts" :data-state="phase" :data-typing="phase === 'running' && typed !== choice?.prompt">
     <div class="landing-chip-row" aria-label="Ask your agent">
       <span class="landing-chip-label">Ask your agent:</span>
       <button v-for="entry in content.choices" :key="entry.id" type="button" :aria-pressed="selected === entry.id" aria-controls="hero-transcript" class="landing-chip" :style="{ '--chip-color': `var(--basics-${entry.type})` }" @click="choose(entry)">
@@ -66,7 +69,7 @@ onBeforeUnmount(() => clearTimeout(timer));
         <div v-if="props.showAnswer && phase === 'done' && choice" class="landing-recorded-answer" data-testid="recorded-answer">
           <p class="landing-answer-label">{{ choice.id === 'agent-proposal' ? 'Pending your review' : 'Simulated shortlist from the demo vault' }}</p>
           <ul>
-            <li v-for="answer in choice.answer" :key="answer.id"><strong>{{ answer.layer }}: {{ answer.title }}</strong><span>{{ answer.reasonLabel }}: {{ answer.reason }}</span></li>
+            <li v-for="(answer, index) in choice.answer" :key="answer.id" :style="{ '--line-delay': `${index * 40}ms` }"><strong>{{ answer.layer }}: {{ answer.title }}</strong><span>{{ answer.reasonLabel }}: {{ answer.reason }}</span></li>
           </ul>
         </div>
         <p v-else-if="phase === 'done'" class="landing-transcript-result">{{ selected === 'agent-proposal' ? 'A proposal is waiting in the Inbox. You decide what gets written.' : 'Simulated shortlist ready in the app. Open each note to read its reasons.' }}</p>

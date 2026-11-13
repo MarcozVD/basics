@@ -9,6 +9,7 @@ import { useDocumentTitle } from "@/lib/page-title";
 import { useTheme } from "@/lib/theme";
 import { HomePage } from "@/pages/home";
 import { demoCopy } from "./copy";
+import { FullBridge } from "./FullBridge";
 
 const Explore = lazy(() => import("@/pages/explore").then((module) => ({ default: module.ExplorePage })));
 const Editor = lazy(() => import("@/pages/editor").then((module) => ({ default: module.EditorPage })));
@@ -81,7 +82,12 @@ const router = createBrowserRouter(
   [
     {
       path: "/",
-      element: <Layout notice={<DemoNotice />} />,
+      element: (
+        <>
+          <FullBridge />
+          <Layout notice={<DemoNotice />} />
+        </>
+      ),
       children: [
         { index: true, element: <HomePage /> },
         { path: "explore", element: deferred(<Explore />) },

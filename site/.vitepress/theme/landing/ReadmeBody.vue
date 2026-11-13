@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import { ref } from "vue";
 // biome-ignore lint/correctness/noUnusedImports: used by the Vue template.
 import content from "../../../../scripts/demo/generated/landing.json";
+import { useReveal } from "./useReveal";
 
 // biome-ignore lint/correctness/noUnusedVariables: iterated by the Vue template.
 const sections = [
@@ -11,21 +13,23 @@ const sections = [
   { id: "your-agents", title: "Locked to one agent", type: "layer" },
   { id: "your-checks", title: "Checks get forgotten", type: "check" },
 ];
+const revealRoot = ref<HTMLElement>();
+useReveal(revealRoot);
 </script>
 
 <template>
-  <div class="landing-readme" data-testid="landing-readme">
+  <div ref="revealRoot" class="landing-readme" data-testid="landing-readme">
     <nav class="landing-toc" aria-label="On this page">
       <ol><li v-for="(section, index) in sections" :key="section.id"><a :href="`#${section.id}`"><span :style="{ color: `var(--basics-${section.type})` }" aria-hidden="true">{{ String(index + 1).padStart(2, '0') }}</span>{{ section.title }}</a></li></ol>
       <a class="landing-toc-faq" href="#landing-faq-title"><span aria-hidden="true">07</span>Questions before you install</a>
     </nav>
     <div class="landing-sections">
       <section v-for="(section, index) in sections" :key="section.id" :aria-labelledby="section.id" class="landing-section" :style="{ '--section-color': `var(--basics-${section.type})` }">
-        <h2 :id="section.id"><span class="landing-section-number" aria-hidden="true">{{ String(index + 1).padStart(2, '0') }}</span>{{ section.title }}</h2>
+        <h2 :id="section.id"><span class="landing-section-number" data-reveal="0" aria-hidden="true">{{ String(index + 1).padStart(2, '0') }}</span><span data-reveal="1">{{ section.title }}</span></h2>
 
         <template v-if="index === 0">
-          <p>Your agent should start with the stack you already trust. Basics ranks technologies from your vault, with the note's own reasons beside each candidate. You choose what fits.</p>
-          <figure class="landing-artifact">
+          <p data-reveal="2">Your agent should start with the stack you already trust. Basics ranks technologies from your vault, with the note's own reasons beside each candidate. You choose what fits.</p>
+          <figure data-reveal="3" class="landing-artifact">
             <pre class="landing-artifact-command"><code>{{ content.choices[0].prompt }}</code></pre>
             <ul class="landing-shortlist"><li v-for="answer in content.choices[0].answer" :key="answer.id"><strong>{{ answer.layer }}: {{ answer.title }}</strong><span>{{ answer.reasonLabel }}: {{ answer.reason }}</span></li></ul>
             <figcaption>Simulated example using the public-packs demo vault. A shortlist to review, not a decision made for you.</figcaption>
@@ -33,8 +37,8 @@ const sections = [
         </template>
 
         <template v-else-if="index === 1">
-          <p>An agent can propose a new note or an update, but it does not apply it. You review the reason and diff in the Inbox, then approve or reject. Approved notes record which agent proposed them.</p>
-          <figure class="landing-artifact landing-review-artifact">
+          <p data-reveal="2">An agent can propose a new note or an update, but it does not apply it. You review the reason and diff in the Inbox, then approve or reject. Approved notes record which agent proposed them.</p>
+          <figure data-reveal="3" class="landing-artifact landing-review-artifact">
             <p class="landing-artifact-caption"><strong>{{ content.proposal.agent }} proposed {{ content.proposal.id }}</strong><span>{{ content.proposal.reason }}</span></p>
             <pre class="landing-diff"><code><span v-for="(line, lineIndex) in content.proposal.diff.split('\n')" :key="lineIndex" :class="{ 'diff-add': line.startsWith('+') && !line.startsWith('+++') }">{{ line }}
 </span></code></pre>
@@ -51,8 +55,8 @@ const sections = [
         </template>
 
         <template v-else-if="index === 2">
-          <p>Keep your practices and checks in the vault instead of rewriting them in every repository. Export the chosen stack to Markdown and the instruction files your agents already read. Text outside Basics' marked blocks stays yours.</p>
-          <figure class="landing-artifact">
+          <p data-reveal="2">Keep your practices and checks in the vault instead of rewriting them in every repository. Export the chosen stack to Markdown and the instruction files your agents already read. Text outside Basics' marked blocks stays yours.</p>
+          <figure data-reveal="3" class="landing-artifact">
             <pre class="landing-artifact-command"><code>&gt; {{ content.exported.command }}</code></pre>
             <pre><code>{{ content.exported.tree }}</code></pre>
             <details class="landing-file-preview" open><summary>Read the generated AGENTS.md excerpt</summary><pre tabindex="0"><code>{{ content.exported.agents }}</code></pre></details>
@@ -61,8 +65,8 @@ const sections = [
         </template>
 
         <template v-else-if="index === 3">
-          <p>Turn a useful decision into a note you can open in any editor. Frontmatter records when a technology fits; links connect it to the rest of your stack. The graph shows those connections without hiding the Markdown underneath.</p>
-          <figure class="landing-artifact landing-note-artifact">
+          <p data-reveal="2">Turn a useful decision into a note you can open in any editor. Frontmatter records when a technology fits; links connect it to the rest of your stack. The graph shows those connections without hiding the Markdown underneath.</p>
+          <figure data-reveal="3" class="landing-artifact landing-note-artifact">
             <pre tabindex="0"><code>{{ content.note.markdown }}</code></pre>
             <svg class="landing-neighborhood" viewBox="0 0 400 280" role="img" aria-labelledby="note-graph-title" aria-describedby="note-graph-description">
               <title id="note-graph-title">{{ content.note.title }} and its connected notes</title><desc id="note-graph-description">{{ content.note.neighbors.map(node => node.title).join(', ') }}</desc>
@@ -75,8 +79,8 @@ const sections = [
         </template>
 
         <template v-else-if="index === 4">
-          <p>Keep the same vault when you switch agents. Basics connects the clients you choose, and can print the registration snippets without changing their settings. Your stack stays in your Markdown files.</p>
-          <figure class="landing-artifact">
+          <p data-reveal="2">Keep the same vault when you switch agents. Basics connects the clients you choose, and can print the registration snippets without changing their settings. Your stack stays in your Markdown files.</p>
+          <figure data-reveal="3" class="landing-artifact">
             <pre><code>&gt; {{ content.connect.command }}</code></pre>
             <p class="landing-artifact-caption">Supported clients</p>
             <ul class="landing-client-list"><li v-for="client in content.connect.clients" :key="client">{{ client }}</li></ul>
@@ -85,8 +89,8 @@ const sections = [
         </template>
 
         <template v-else>
-          <p>Store check commands beside the technologies they validate. Basics runs the checks for your exported stack and records the result on the project note. You can see what failed before calling the work finished.</p>
-          <figure class="landing-artifact">
+          <p data-reveal="2">Store check commands beside the technologies they validate. Basics runs the checks for your exported stack and records the result on the project note. You can see what failed before calling the work finished.</p>
+          <figure data-reveal="3" class="landing-artifact">
             <pre><code>&gt; {{ content.checks.command }}
 {{ content.checks.failed }}</code></pre>
             <p class="landing-check-change">After correcting the TypeScript value:</p>
