@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { defineConfig, devices } from "@playwright/test";
 
 const port = process.env.BASICS_DEMO_TEST_PORT ?? "4860";
@@ -7,6 +8,7 @@ export default defineConfig({
   workers: 1,
   retries: 0,
   reporter: "list",
+  globalSetup: fileURLToPath(new URL("./demo-e2e/build-motion.mjs", import.meta.url)),
   use: {
     ...devices["Desktop Chrome"],
     baseURL: `http://127.0.0.1:${port}/basics/demo/`,

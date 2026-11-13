@@ -1,77 +1,53 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from "vue";
-import content from "../../../../scripts/demo/generated/landing.json";
+import { computed, ref } from "vue";
+import transcripts from "./transcripts";
+import { useTranscript } from "./useTranscript";
 
 // biome-ignore lint/correctness/noUnusedVariables: read by the Vue template.
 const props = defineProps<{ showAnswer: boolean }>();
-const emit = defineEmits<{ select: [path: string]; reset: [] }>();
+const choices = transcripts.entries.filter((entry) => entry.kind === "scenario" || entry.kind === "proposal");
+const emit = defineEmits<{ select: [entry: (typeof choices)[number]]; reset: [] }>();
 const selected = ref<string | null>(null);
-const phase = ref<"idle" | "running" | "done">("idle");
-const typed = ref("");
 // biome-ignore lint/correctness/noUnusedVariables: read by the Vue template.
-const choice = computed(() => content.choices.find((entry) => entry.id === selected.value));
-let timer: ReturnType<typeof setTimeout> | undefined;
-let epoch = 0;
-
-// biome-ignore lint/correctness/noUnusedVariables: called by the chip buttons in the Vue template.
-function choose(entry: (typeof content.choices)[number]) {
-  clearTimeout(timer);
-  const run = ++epoch;
+const choice = computed(() => choices.find((entry) => entry.id === selected.value));
+// biome-ignore lint/correctness/noUnusedVariables: typed and phase are read by the Vue template.
+const { typed, phase, play, reset: resetTranscript } = useTranscript();
+// biome-ignore lint/correctness/noUnusedVariables: called by the Vue template.
+function choose(entry: (typeof choices)[number]) {
   selected.value = entry.id;
-  typed.value = "";
-  phase.value = "running";
-  emit("select", entry.path);
-  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-    typed.value = entry.prompt;
-    phase.value = "done";
-    return;
-  }
-  const start = performance.now();
-  function tick() {
-    if (run !== epoch) return;
-    const progress = Math.min(1, (performance.now() - start) / 400);
-    typed.value = entry.prompt.slice(0, Math.ceil(entry.prompt.length * progress));
-    if (progress === 1) phase.value = "done";
-    else timer = setTimeout(tick, 16);
-  }
-  tick();
+  play(`> ${entry.command.en}`);
+  emit("select", entry);
 }
-// biome-ignore lint/correctness/noUnusedVariables: called by the reset button in the Vue template.
+// biome-ignore lint/correctness/noUnusedVariables: called by the Vue template.
 function reset() {
-  clearTimeout(timer);
-  epoch++;
   selected.value = null;
-  typed.value = "";
-  phase.value = "idle";
+  resetTranscript();
   emit("reset");
 }
-onBeforeUnmount(() => clearTimeout(timer));
+// biome-ignore lint/correctness/noUnusedVariables: presentation metadata read by the Vue template.
+const colors: Record<string, string> = {
+  "nextjs-saas": "profile",
+  "python-api": "tech",
+  "cli-tool": "check",
+  "mobile-app": "tech",
+  "data-pipeline": "practice",
+  "agent-proposal": "project",
+};
 </script>
-
 <template>
-  <div class="landing-prompts" data-testid="landing-prompts" :data-state="phase">
+  <div class="landing-prompts" data-testid="landing-prompts" :data-state="phase" :data-typing="phase === 'running' && typed !== '> ' + choice?.command.en">
     <div class="landing-chip-row" aria-label="Ask your agent">
       <span class="landing-chip-label">Ask your agent:</span>
-      <button v-for="entry in content.choices" :key="entry.id" type="button" :aria-pressed="selected === entry.id" aria-controls="hero-transcript" class="landing-chip" :style="{ '--chip-color': `var(--basics-${entry.type})` }" @click="choose(entry)">
-        <span class="landing-type-dot" aria-hidden="true"></span>{{ entry.label }}
-      </button>
+      <button v-for="entry in choices" :key="entry.id" type="button" :aria-pressed="selected === entry.id" aria-controls="hero-transcript" class="landing-chip" :style="{ '--chip-color': 'var(--basics-' + colors[entry.id] + ')' }" @click="choose(entry)"><span class="landing-type-dot" aria-hidden="true"></span>{{ entry.label.en }}</button>
     </div>
     <div id="hero-transcript" class="landing-transcript" :aria-busy="phase === 'running'">
-      <p v-if="phase === 'idle'" class="landing-transcript-idle">Choose a project or review an agent proposal.</p>
+      <p v-if="phase === 'idle'" class="landing-transcript-idle">Choose a simulated project or review an agent proposal.</p>
       <template v-else>
-        <div class="landing-transcript-line">
-          <code :aria-hidden="phase === 'running'">{{ typed }}</code>
-          <button type="button" class="landing-reset" @click="reset">Reset</button>
-        </div>
-        <div v-if="props.showAnswer && phase === 'done' && choice" class="landing-recorded-answer" data-testid="recorded-answer">
-          <p class="landing-answer-label">{{ choice.id === 'agent-proposal' ? 'Pending your review' : 'Simulated shortlist from the demo vault' }}</p>
-          <ul>
-            <li v-for="answer in choice.answer" :key="answer.id"><strong>{{ answer.layer }}: {{ answer.title }}</strong><span>{{ answer.reasonLabel }}: {{ answer.reason }}</span></li>
-          </ul>
-        </div>
-        <p v-else-if="phase === 'done'" class="landing-transcript-result">{{ selected === 'agent-proposal' ? 'A proposal is waiting in the Inbox. You decide what gets written.' : 'Simulated shortlist ready in the app. Open each note to read its reasons.' }}</p>
+        <div class="landing-transcript-line"><code :aria-hidden="phase === 'running'">{{ typed }}</code><button type="button" class="landing-reset" @click="reset">Reset</button></div>
+        <div v-if="props.showAnswer && phase === 'done' && choice" class="landing-recorded-answer" data-testid="recorded-answer"><p class="landing-answer-label">Simulated agent transcript</p><ul><li v-for="(line, index) in choice.answerLines.en" :key="index" :style="{ '--line-delay': index * 40 + 'ms' }">{{ line }}</li></ul></div>
+        <p v-else-if="phase === 'done'" class="landing-transcript-result">Simulated example ready in the app. You decide what to use.</p>
       </template>
-      <span class="landing-sr-only" role="status" aria-live="polite">{{ phase === 'running' ? 'Running recorded prompt.' : phase === 'done' ? 'Recorded answer ready.' : '' }}</span>
+      <span class="landing-sr-only" role="status" aria-live="polite">{{ phase === 'running' ? 'Typing simulated prompt.' : phase === 'done' ? 'Simulated answer ready.' : '' }}</span>
     </div>
   </div>
 </template>
