@@ -1,13 +1,16 @@
 <script setup lang="ts">
-// biome-ignore lint/correctness/noUnusedImports: used by the Vue template's public asset URLs.
 import { withBase } from "vitepress";
 import { onBeforeUnmount, onMounted, ref } from "vue";
+// biome-ignore lint/correctness/noUnusedImports: used by the Vue template.
+import DemoChips from "./DemoChips.vue";
 
 const viewport = ref<HTMLElement>();
 const frame = ref<HTMLIFrameElement>();
 const state = ref<"poster" | "loading" | "live" | "failed">("poster");
 const narrow = ref(true);
 const scale = ref(1);
+const frameSrc = ref(withBase("/demo/explore/"));
+const navigation = ref(0);
 let visibility: IntersectionObserver | undefined;
 let size: ResizeObserver | undefined;
 let media: MediaQueryList | undefined;
@@ -27,6 +30,17 @@ function start() {
   state.value = "loading";
   visibility?.disconnect();
   deadline = setTimeout(fail, 15000);
+}
+function navigateDemo(path: string) {
+  stopTimers();
+  frameSrc.value = path;
+  navigation.value++;
+  state.value = "poster";
+  start();
+}
+// biome-ignore lint/correctness/noUnusedVariables: receives the chip component's reset event.
+function resetDemo() {
+  navigateDemo(withBase("/demo/explore/"));
 }
 // biome-ignore lint/correctness/noUnusedVariables: used by the iframe's Vue template load handler.
 function checkFrame() {
@@ -97,7 +111,7 @@ onBeforeUnmount(() => {
           <source :srcset="`${withBase('/media/demo-poster-1x.webp')} 1x, ${withBase('/media/demo-poster.webp')} 2x`" type="image/webp" />
           <img :src="withBase('/media/demo-poster-1x.webp')" alt="Basics Explore showing technologies, practices, checks and profiles from the public note packs." width="1280" height="800" fetchpriority="high" decoding="async" />
         </picture>
-        <iframe v-if="!narrow && (state === 'loading' || state === 'live')" ref="frame" src="/basics/demo/explore/" title="Interactive Basics app demo" :style="{ transform: `scale(${scale})` }" :class="{ 'is-live': state === 'live' }" :aria-hidden="state !== 'live'" :tabindex="state === 'live' ? 0 : -1" @load="checkFrame" @error="fail" />
+        <iframe v-if="!narrow && (state === 'loading' || state === 'live')" :key="navigation" ref="frame" :src="frameSrc" title="Interactive Basics app demo" :style="{ transform: `scale(${scale})` }" :class="{ 'is-live': state === 'live' }" :aria-hidden="state !== 'live'" :tabindex="state === 'live' ? 0 : -1" @load="checkFrame" @error="fail" />
         <button v-if="!narrow && state === 'poster'" class="landing-start" type="button" @click="start">Try live demo <span aria-hidden="true">↗</span></button>
         <span v-if="state === 'loading'" class="landing-demo-status" role="status">Starting demo</span>
       </div>
@@ -108,5 +122,6 @@ onBeforeUnmount(() => {
       <a v-else href="/basics/demo/" target="_blank" rel="noopener">Open full screen <span aria-hidden="true">↗</span></a>
     </div>
     <p v-if="state === 'failed'" class="landing-demo-error" role="status">The embedded demo could not start. Open it in a new tab.</p>
+    <DemoChips :show-answer="narrow || state === 'failed'" @select="navigateDemo" @reset="resetDemo" />
   </div>
 </template>

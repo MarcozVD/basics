@@ -1,0 +1,92 @@
+import fs from "node:fs";
+import { expect, test } from "@playwright/test";
+
+const content = JSON.parse(fs.readFileSync(new URL("../../../scripts/demo/generated/landing.json", import.meta.url), "utf8"));
+
+test("desktop chips navigate real recommendations and proposal, then reset the app", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/basics/");
+  const hero = page.getByTestId("landing-hero");
+  const viewport = hero.locator(".landing-window-viewport");
+  expect(await viewport.evaluate((element) => element.clientWidth / 1280)).toBeGreaterThanOrEqual(0.75);
+  await expect(hero.getByText("Real app. Public note packs.", { exact: true })).toBeVisible();
+  for (const choice of content.choices) {
+    await hero.getByRole("button", { name: choice.label, exact: true }).click();
+    await expect(hero.getByTestId("landing-prompts")).toHaveAttribute("data-state", "done");
+    await expect(hero.locator("#hero-transcript code")).toHaveText(choice.prompt);
+    await expect(hero.locator("iframe")).toHaveAttribute("src", choice.path);
+    await expect(hero.getByTestId("landing-window")).toHaveAttribute("data-state", "live", { timeout: 20_000 });
+    const frame = page.frameLocator('iframe[title="Interactive Basics app demo"]');
+    if (choice.id === "agent-proposal")
+      await expect(frame.getByRole("heading", { name: content.proposal.title, exact: true })).toBeVisible();
+    else {
+      await expect(frame.getByRole("heading", { name: "Recommend", exact: true })).toBeVisible();
+      await expect(frame.getByRole("link", { name: `Open ${choice.answer[0].title}`, exact: true })).toBeVisible();
+    }
+  }
+  await hero.getByRole("button", { name: "Reset", exact: true }).click();
+  await expect(hero.getByTestId("landing-prompts")).toHaveAttribute("data-state", "idle");
+  await expect(hero.locator("iframe")).toHaveAttribute("src", "/basics/demo/explore/");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(1440);
+});
+
+test("phone transcripts use recorded names and reasons without mounting the app", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/basics/");
+  const hero = page.getByTestId("landing-hero");
+  for (const choice of content.choices) {
+    const button = hero.getByRole("button", { name: choice.label, exact: true });
+    await button.focus();
+    await page.keyboard.press("Enter");
+    await expect(button).toHaveAttribute("aria-pressed", "true");
+    const answer = hero.getByTestId("recorded-answer");
+    await expect(answer).toBeVisible();
+    for (const row of choice.answer) {
+      await expect(answer).toContainText(row.title);
+      await expect(answer).toContainText(row.reason);
+    }
+    await expect(hero.locator("iframe")).toHaveCount(0);
+  }
+  await hero.getByRole("button", { name: "Reset", exact: true }).click();
+  await expect(hero.getByTestId("recorded-answer")).toHaveCount(0);
+  await expect(hero.locator('button[aria-pressed="true"]')).toHaveCount(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+});
+
+test("typing restarts cleanly and reaches the last requested recorded answer", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.clock.install();
+  await page.goto("/basics/");
+  const hero = page.getByTestId("landing-hero");
+  await hero.getByRole("button", { name: "Next.js SaaS", exact: true }).click();
+  await expect(hero.getByTestId("landing-prompts")).toHaveAttribute("data-state", "running");
+  await page.clock.fastForward(100);
+  await hero.getByRole("button", { name: "CLI tool", exact: true }).click();
+  await page.clock.fastForward(500);
+  await expect(hero.getByTestId("landing-prompts")).toHaveAttribute("data-state", "done");
+  await expect(hero.locator("#hero-transcript code")).toHaveText('> recommend_stack "CLI tool"');
+  await expect(hero.getByRole("button", { name: "CLI tool", exact: true })).toHaveAttribute("aria-pressed", "true");
+});
+
+test("README contains six real artifacts and a sticky linked TOC", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/basics/");
+  const body = page.getByTestId("landing-readme");
+  await expect(body.getByRole("heading", { level: 2 })).toHaveCount(6);
+  await expect(body.getByRole("img", { name: "The Basics review loop", exact: true })).toHaveCount(1);
+  await expect(body).toContainText(content.proposal.diff);
+  await expect(body).toContainText(content.exported.tree);
+  await expect(body.locator(".landing-file-preview")).toHaveAttribute("open", "");
+  await expect(body).toContainText("typescript-typecheck");
+  await expect(body).toContainText("TS2322");
+  await expect(body).toContainText("pass");
+  const toc = body.getByRole("navigation", { name: "On this page", exact: true });
+  expect(await toc.evaluate((element) => getComputedStyle(element).position)).toBe("sticky");
+  await toc.getByRole("link", { name: "Your knowledge is scattered in chats", exact: true }).click();
+  await expect(page).toHaveURL(/#your-notes$/);
+  await expect(page.getByRole("heading", { name: "Your knowledge is scattered in chats", exact: true })).toBeInViewport();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(toc).toBeHidden();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+});

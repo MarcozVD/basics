@@ -2,7 +2,7 @@
 THESIS: A window into the stack control room, with the real app as proof rather than feature cards.
 OWN-WORLD: Inherit Basics Geist, neutral shell and surfaces, blue action, hairline frame, 16px radius.
 STORY: Recognize your agents' workflow, inspect the app, download Basics or copy its install command.
-FIRST VIEWPORT: Approved 40/60 copy/window composition at 1280px; stacked below; poster only on phones.
+FIRST VIEWPORT: Lead-approved wider window bleeding to the right edge; stacked below desktop; poster only on phones.
 FORM: Owner-approved V19 design brief, section 3. Composition is pinned; no concept roll or new identity.
 -->
 <script setup lang="ts">
