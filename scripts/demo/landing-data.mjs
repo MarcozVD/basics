@@ -10,30 +10,27 @@ const snapshot = JSON.parse(fs.readFileSync(new URL("./generated/snapshot.json",
 const read = async (route) => snapshot[await snapshotKey("GET", route)].body;
 const notes = await read("/api/notes");
 const byId = new Map(notes.map((note) => [note.id, note]));
-const presets = JSON.parse(fs.readFileSync(new URL("./presets.json", import.meta.url), "utf8"));
+const scenarios = JSON.parse(fs.readFileSync(new URL("./scenarios.json", import.meta.url), "utf8"));
 const choices = [];
-for (const preset of presets) {
-  const result = snapshot[await snapshotKey("POST", "/api/recommend", preset.request)].body;
+// Keep the existing three landing chips until T4 wires the expanded transcript controls.
+for (const scenario of scenarios.slice(0, 3)) {
   const answer = [];
-  for (const [layer, candidates] of Object.entries(result.layers)) {
-    const candidate = candidates[0];
-    if (!candidate) continue;
-    const detail = await read(`/api/notes/${encodeURIComponent(candidate.id)}`);
-    const matched = [...candidate.matched_use_when, ...candidate.matched_performs_best];
+  for (const layer of scenario.layers) {
+    const candidate = layer.technologies[0];
     answer.push({
       id: candidate.id,
       title: byId.get(candidate.id).title,
-      layer: byId.get(layer)?.title ?? layer,
-      reason: matched[0] ?? detail.data.use_when?.[0] ?? detail.body.split("\n").find((line) => line.trim() && !line.startsWith("#")) ?? "",
-      reasonLabel: matched.length ? "Matches" : "Note says",
+      layer: byId.get(layer.id)?.title ?? layer.id,
+      reason: candidate.reason.en,
+      reasonLabel: "Simulated",
     });
   }
   choices.push({
-    id: preset.id,
-    label: preset.label,
-    type: preset.id === "nextjs-saas" ? "profile" : preset.id === "cli-tool" ? "check" : "tech",
-    prompt: `> recommend_stack "${preset.label}"`,
-    path: `/basics/demo/recommend/?preset=${preset.id}`,
+    id: scenario.id,
+    label: scenario.prompt.en,
+    type: scenario.id === "nextjs-saas" ? "profile" : scenario.id === "cli-tool" ? "check" : "tech",
+    prompt: `> recommend_stack "${scenario.prompt.en}"`,
+    path: `/basics/demo/recommend/?preset=${scenario.id}`,
     answer,
   });
 }

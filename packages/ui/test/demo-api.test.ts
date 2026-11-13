@@ -131,7 +131,7 @@ describe("reload-scoped demo API", () => {
     expect((await api("GET", "/api/unknown")).status).toBe(404);
   });
 
-  it("narrows recorded recommendations and removes deleted candidates even for an exact snapshot hit", async () => {
+  it("does not serve recorded recommendations, even if an old snapshot contains one", async () => {
     const { snapshot } = await fixture();
     const input = { description: "A recorded preset", perLayer: 2 };
     snapshot[await snapshotKey("POST", "/api/recommend", input)] = {
@@ -139,9 +139,8 @@ describe("reload-scoped demo API", () => {
       body: { description: input.description, profiles: [], layers: { backend: [{ id: "testing-note" }] } },
     };
     const api = await createDemoApi(snapshot);
-    expect(await (await api("POST", "/api/recommend", { ...input, layers: ["frontend"] })).json()).toMatchObject({ layers: {} });
-    await api("DELETE", "/api/notes/testing-note");
-    expect(await (await api("POST", "/api/recommend", input)).json()).toMatchObject({ layers: { backend: [] } });
+    expect((await api("POST", "/api/recommend", { ...input, layers: ["frontend"] })).status).toBe(404);
+    expect((await api("POST", "/api/recommend", input)).status).toBe(404);
   });
 
   it("intercepts fetch and EventSource without allowing API requests to reach a server", async () => {

@@ -1,0 +1,19 @@
+/* Embed-only surface, matching the site's shell without changing the normal app. */
+html:has(.demo-embed) {
+  background: #eeeef0;
+}
+html.dark:has(.demo-embed) {
+  background: #0e0e10;
+}
+.demo-embed {
+  min-height: 100dvh;
+  background: #eeeef0;
+  color: var(--foreground);
+}
+.dark .demo-embed {
+  background: #0e0e10;
+}
+.demo-embed pre:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}

@@ -1,0 +1,218 @@
+[
+  {
+    "id": "nextjs-saas",
+    "prompt": { "en": "Next.js SaaS", "es": "SaaS con Next.js" },
+    "keywords": ["next.js", "nextjs", "saas", "subscription", "suscripcion"],
+    "layers": [
+      {
+        "id": "frontend",
+        "technologies": [
+          {
+            "id": "nextjs",
+            "reason": {
+              "en": "Render the subscription app's pages on the server and client.",
+              "es": "Renderiza las páginas de la aplicación en el servidor y el cliente."
+            }
+          },
+          {
+            "id": "typescript",
+            "reason": {
+              "en": "Keep shared request and UI types explicit.",
+              "es": "Mantén explícitos los tipos compartidos de peticiones e interfaz."
+            }
+          }
+        ]
+      },
+      {
+        "id": "data",
+        "technologies": [
+          {
+            "id": "postgresql",
+            "reason": {
+              "en": "Store accounts and subscriptions with relational constraints.",
+              "es": "Guarda cuentas y suscripciones con restricciones relacionales."
+            }
+          }
+        ]
+      },
+      {
+        "id": "testing",
+        "technologies": [
+          {
+            "id": "playwright",
+            "reason": {
+              "en": "Exercise sign-in and subscription flows in a browser.",
+              "es": "Prueba los flujos de acceso y suscripción en un navegador."
+            }
+          }
+        ]
+      }
+    ],
+    "practices": ["typescript-strict", "sql-migrations"],
+    "checks": ["typescript-typecheck", "e2e-critical-flows"]
+  },
+  {
+    "id": "python-api",
+    "prompt": { "en": "Python API", "es": "API de Python" },
+    "keywords": ["python", "api", "fastapi", "rest", "endpoint"],
+    "layers": [
+      {
+        "id": "backend",
+        "technologies": [
+          {
+            "id": "fastapi",
+            "reason": {
+              "en": "Expose typed HTTP endpoints with request validation.",
+              "es": "Expón endpoints HTTP tipados con validación de peticiones."
+            }
+          },
+          {
+            "id": "python",
+            "reason": {
+              "en": "Keep the API and its domain logic in one language.",
+              "es": "Mantén la API y su lógica de dominio en un mismo lenguaje."
+            }
+          }
+        ]
+      },
+      {
+        "id": "data",
+        "technologies": [
+          {
+            "id": "postgresql",
+            "reason": { "en": "Persist API records in transactions.", "es": "Guarda los registros de la API en transacciones." }
+          }
+        ]
+      },
+      {
+        "id": "testing",
+        "technologies": [
+          {
+            "id": "pytest",
+            "reason": { "en": "Test endpoint responses and domain rules.", "es": "Prueba respuestas de endpoints y reglas de dominio." }
+          }
+        ]
+      }
+    ],
+    "practices": ["fastapi-structure", "python-typing"],
+    "checks": ["python-lint-types", "fastapi-endpoint-tests"]
+  },
+  {
+    "id": "cli-tool",
+    "prompt": { "en": "CLI tool", "es": "Herramienta CLI" },
+    "keywords": ["cli", "terminal", "command", "comando", "consola"],
+    "layers": [
+      {
+        "id": "backend",
+        "technologies": [
+          {
+            "id": "python",
+            "reason": {
+              "en": "Build a command-line tool around the standard library.",
+              "es": "Construye una herramienta de línea de comandos con la biblioteca estándar."
+            }
+          }
+        ]
+      },
+      {
+        "id": "testing",
+        "technologies": [
+          {
+            "id": "pytest",
+            "reason": {
+              "en": "Check command output, errors and exit codes.",
+              "es": "Comprueba la salida, los errores y los códigos de salida."
+            }
+          }
+        ]
+      }
+    ],
+    "practices": ["python-typing"],
+    "checks": ["python-lint-types"]
+  },
+  {
+    "id": "mobile-app",
+    "prompt": { "en": "Mobile app", "es": "Aplicación móvil" },
+    "keywords": ["mobile", "movil", "phone", "telefono", "responsive"],
+    "layers": [
+      {
+        "id": "frontend",
+        "technologies": [
+          {
+            "id": "react",
+            "reason": {
+              "en": "Build a responsive mobile web interface with reusable components.",
+              "es": "Construye una interfaz web móvil adaptable con componentes reutilizables."
+            }
+          },
+          {
+            "id": "typescript",
+            "reason": {
+              "en": "Describe component inputs and app state with types.",
+              "es": "Describe las entradas de componentes y el estado con tipos."
+            }
+          }
+        ]
+      },
+      {
+        "id": "testing",
+        "technologies": [
+          {
+            "id": "playwright",
+            "reason": {
+              "en": "Exercise touch-sized browser flows at phone widths.",
+              "es": "Prueba flujos del navegador con controles táctiles a ancho de teléfono."
+            }
+          }
+        ]
+      }
+    ],
+    "practices": ["react-components", "typescript-strict"],
+    "checks": ["typescript-typecheck", "e2e-critical-flows"]
+  },
+  {
+    "id": "data-pipeline",
+    "prompt": { "en": "Data pipeline", "es": "Canal de datos" },
+    "keywords": ["data", "datos", "pipeline", "etl", "batch", "lotes"],
+    "layers": [
+      {
+        "id": "backend",
+        "technologies": [
+          {
+            "id": "python",
+            "reason": {
+              "en": "Transform batch records with small typed functions.",
+              "es": "Transforma registros por lotes con funciones pequeñas y tipadas."
+            }
+          }
+        ]
+      },
+      {
+        "id": "data",
+        "technologies": [
+          {
+            "id": "postgresql",
+            "reason": {
+              "en": "Load validated records in repeatable transactions.",
+              "es": "Carga registros validados en transacciones repetibles."
+            }
+          }
+        ]
+      },
+      {
+        "id": "testing",
+        "technologies": [
+          {
+            "id": "pytest",
+            "reason": {
+              "en": "Test transformations against representative records.",
+              "es": "Prueba las transformaciones con registros representativos."
+            }
+          }
+        ]
+      }
+    ],
+    "practices": ["python-typing", "sql-migrations"],
+    "checks": ["python-lint-types"]
+  }
+]

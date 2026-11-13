@@ -28,7 +28,7 @@ const sections = [
           <figure class="landing-artifact">
             <pre class="landing-artifact-command"><code>{{ content.choices[0].prompt }}</code></pre>
             <ul class="landing-shortlist"><li v-for="answer in content.choices[0].answer" :key="answer.id"><strong>{{ answer.layer }}: {{ answer.title }}</strong><span>{{ answer.reasonLabel }}: {{ answer.reason }}</span></li></ul>
-            <figcaption>Recorded from the public-packs demo vault. A shortlist to review, not a decision made for you.</figcaption>
+            <figcaption>Simulated example using the public-packs demo vault. A shortlist to review, not a decision made for you.</figcaption>
           </figure>
         </template>
 

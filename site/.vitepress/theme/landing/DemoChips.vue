@@ -64,12 +64,12 @@ onBeforeUnmount(() => clearTimeout(timer));
           <button type="button" class="landing-reset" @click="reset">Reset</button>
         </div>
         <div v-if="props.showAnswer && phase === 'done' && choice" class="landing-recorded-answer" data-testid="recorded-answer">
-          <p class="landing-answer-label">{{ choice.id === 'agent-proposal' ? 'Pending your review' : 'Recorded shortlist from the demo vault' }}</p>
+          <p class="landing-answer-label">{{ choice.id === 'agent-proposal' ? 'Pending your review' : 'Simulated shortlist from the demo vault' }}</p>
           <ul>
             <li v-for="answer in choice.answer" :key="answer.id"><strong>{{ answer.layer }}: {{ answer.title }}</strong><span>{{ answer.reasonLabel }}: {{ answer.reason }}</span></li>
           </ul>
         </div>
-        <p v-else-if="phase === 'done'" class="landing-transcript-result">{{ selected === 'agent-proposal' ? 'A proposal is waiting in the Inbox. You decide what gets written.' : 'Recorded shortlist ready in the app. Open each note to read its reasons.' }}</p>
+        <p v-else-if="phase === 'done'" class="landing-transcript-result">{{ selected === 'agent-proposal' ? 'A proposal is waiting in the Inbox. You decide what gets written.' : 'Simulated shortlist ready in the app. Open each note to read its reasons.' }}</p>
       </template>
       <span class="landing-sr-only" role="status" aria-live="polite">{{ phase === 'running' ? 'Running recorded prompt.' : phase === 'done' ? 'Recorded answer ready.' : '' }}</span>
     </div>

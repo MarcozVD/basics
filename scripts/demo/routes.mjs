@@ -17,6 +17,7 @@ const routes = [
   "projects",
   "settings",
   "skills",
+  ...["explore", "note", "graph", "proposal", "recommend"].map((part) => `embed/${part}`),
   ...notes.map((note) => `notes/${note.id}`),
   ...inbox.map((proposal) => `inbox/${proposal.id}`),
 ];

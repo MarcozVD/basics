@@ -5,7 +5,6 @@ import path from "node:path";
 import { buildDemoVault, repoRoot } from "./build-vault.mjs";
 import { snapshotKey } from "./key.mjs";
 
-const presets = JSON.parse(fs.readFileSync(new URL("./presets.json", import.meta.url), "utf8"));
 const output = path.resolve(process.argv[2] === "--worker" ? process.argv[3] : (process.argv[2] ?? "scripts/demo/generated/snapshot.json"));
 
 // A worker ensures config/home are isolated before any server module is imported.
@@ -106,15 +105,10 @@ if (process.argv[2] !== "--worker") {
         if (query.size) await record("GET", `/api/notes?${query}`);
       }
     }
-    for (const preset of presets) {
-      await record("POST", "/api/recommend", preset.request);
-      // The real Recommend page explicitly sends all layer ids; retain both request forms.
-      await record("POST", "/api/recommend", { ...preset.request, layers: layers.map((layer) => layer.id) });
-    }
     fs.mkdirSync(path.dirname(output), { recursive: true });
     fs.writeFileSync(output, `${JSON.stringify(Object.fromEntries(Object.entries(snapshot).sort(([a], [b]) => a.localeCompare(b))))}\n`);
     console.log(
-      `Recorded ${Object.keys(snapshot).length} responses, ${notes.length} notes, ${inbox.length} proposals, ${presets.length} presets: ${fs.statSync(output).size} bytes (${output})`,
+      `Recorded ${Object.keys(snapshot).length} responses, ${notes.length} notes, ${inbox.length} proposals: ${fs.statSync(output).size} bytes (${output})`,
     );
   } finally {
     await server.close();
