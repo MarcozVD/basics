@@ -105,3 +105,5 @@ While the UI runs, the same port serves MCP over HTTP at `http://127.0.0.1:4747/
 
 From the repo, run `basics ui --no-open` for the API and `npm run dev:ui` for Vite with a proxy to it. The end-to-end
 suite runs with `npm run e2e` and needs `npm run build` first.
+
+The static app demo at `/basics/demo/` is built by `npm run demo:build`, which `npm run docs:build` runs after VitePress. Its output goes to `site/.vitepress/dist/demo`. The API snapshot it uses is recorded during that build and is not committed. The demo browser suite runs with `npm run e2e:demo` after the build.

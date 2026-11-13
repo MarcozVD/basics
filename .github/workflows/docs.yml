@@ -6,6 +6,12 @@ on:
     branches: [main]
     paths:
       - "site/**"
+      - "packages/**"
+      - "packs/**"
+      - "scripts/demo/**"
+      - "scripts/copy-*.mjs"
+      - "package*.json"
+      - "tsconfig.base.json"
       - ".github/workflows/docs.yml"
 
 permissions:
@@ -28,6 +34,7 @@ jobs:
           cache: npm
       - run: npm ci
       - uses: actions/configure-pages@v5
+      # docs:build also records and builds the static app demo into dist/demo.
       - run: npm run docs:build
       - uses: actions/upload-pages-artifact@v3
         with:
