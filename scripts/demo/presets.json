@@ -1,0 +1,23 @@
+[
+  {
+    "id": "nextjs-saas",
+    "label": "Next.js SaaS",
+    "request": {
+      "description": "A Next.js SaaS dashboard with React, TypeScript, PostgreSQL, authentication and browser tests",
+      "perLayer": 2
+    }
+  },
+  {
+    "id": "python-api",
+    "label": "Python API",
+    "request": { "description": "A Python REST API with FastAPI, PostgreSQL, typed models and pytest tests", "perLayer": 2 }
+  },
+  {
+    "id": "cli-tool",
+    "label": "CLI tool",
+    "request": {
+      "description": "A command line tool in TypeScript with strict types, automated unit tests and no web interface",
+      "perLayer": 2
+    }
+  }
+]

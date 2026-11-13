@@ -13,3 +13,4 @@ packages/ui/e2e/.vault-path-*
 
 # Local design-tool state (impeccable critiques, snapshots)
 .impeccable/
+scripts/demo/generated/
