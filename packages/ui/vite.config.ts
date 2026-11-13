@@ -5,12 +5,25 @@ import { defineConfig } from "vite";
 
 const pkg = (names: string) => new RegExp(`node_modules[\\/](?:${names})[\\/]`);
 
-export default defineConfig({
-  plugins: [react(), tailwindcss()],
+export default defineConfig(({ mode }) => ({
+  base: mode === "demo" ? "/basics/demo/" : "/",
+  plugins: [
+    react(),
+    tailwindcss(),
+    ...(mode === "demo"
+      ? [
+          {
+            name: "basics-demo-entry",
+            transformIndexHtml: { order: "pre" as const, handler: (html: string) => html.replace("/src/main.tsx", "/src/demo/main.tsx") },
+          },
+        ]
+      : []),
+  ],
   resolve: {
     alias: { "@": path.resolve(import.meta.dirname, "src") },
   },
   build: {
+    ...(mode === "demo" ? { outDir: path.resolve(import.meta.dirname, "../../site/.vitepress/dist/demo"), emptyOutDir: true } : {}),
     // CodeMirror and Cytoscape are single route-level vendor chunks (~210/170 kB gzip) that load only with the editor and graph.
     chunkSizeWarningLimit: 650,
     rolldownOptions: {
@@ -34,4 +47,4 @@ export default defineConfig({
       "/mcp": { target: "http://127.0.0.1:4747", changeOrigin: true },
     },
   },
-});
+}));

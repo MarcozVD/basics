@@ -30,7 +30,7 @@ function warn(action: string, error: unknown) {
 
 /** True only inside the Basics desktop app; false in every browser, worker and test without Tauri. */
 export function isDesktop(): boolean {
-  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+  return import.meta.env.MODE !== "demo" && typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
 
 /** macOS keeps its native traffic lights, so its header reserves room on the left. */

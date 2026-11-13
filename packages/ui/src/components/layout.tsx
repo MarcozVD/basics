@@ -117,7 +117,7 @@ function useMedia(query: string): boolean {
   return matches;
 }
 
-export function Layout() {
+export function Layout({ notice }: { notice?: ReactNode } = {}) {
   const { t } = useI18n();
   const location = useLocation();
   const navigate = useIntentNavigate();
@@ -341,6 +341,7 @@ export function Layout() {
             </div>
           ) : null}
 
+          {notice}
           <div
             ref={panelRef}
             data-testid="content-panel"

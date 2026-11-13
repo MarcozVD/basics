@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:demo": "vite build --mode demo",
+    "e2e:demo": "playwright test --config playwright.demo.config.ts",
     "preview": "vite preview",
     "e2e": "playwright test"
   },
