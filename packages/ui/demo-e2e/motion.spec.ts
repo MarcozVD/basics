@@ -98,7 +98,7 @@ test("failure and active unmount release queued work", async ({ page }) => {
   await expect(second).toHaveAttribute("data-state", "live");
 });
 
-test("reveal matches exact spec once and reduced motion disables movement and shimmer", async ({ page }) => {
+test("reveal matches exact spec on every entry and reduced motion disables movement and shimmer", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.emulateMedia({ reducedMotion: "no-preference" });
   await page.goto("/basics/__motion/?parts=explore&distance=300");
@@ -112,6 +112,8 @@ test("reveal matches exact spec once and reduced motion disables movement and sh
   await expect(heading).toHaveClass(/is-revealed/);
   await expect(heading).toHaveCSS("opacity", "1");
   await page.evaluate(() => window.scrollTo(0, 0));
+  await expect(heading).not.toHaveClass(/is-revealed/);
+  await heading.scrollIntoViewIfNeeded();
   await expect(heading).toHaveClass(/is-revealed/);
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.setViewportSize({ width: 390, height: 844 });
@@ -122,7 +124,7 @@ test("reveal matches exact spec once and reduced motion disables movement and sh
   expect(await page.locator(".part-skeleton").evaluate((e) => getComputedStyle(e, "::after").animationName)).toBe("none");
 });
 
-test("landing is visible without JavaScript, hero has two lines and section gap stays tight", async ({ page, browser }) => {
+test("landing is visible without JavaScript, hero has two lines and owns the first viewport", async ({ page, browser }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/basics/");
   await page.evaluate(() => document.fonts.ready);
@@ -131,7 +133,7 @@ test("landing is visible without JavaScript, hero has two lines and section gap 
     .evaluate((e) => e.getBoundingClientRect().height / Number.parseFloat(getComputedStyle(e).lineHeight));
   expect(lines).toBeCloseTo(2, 1);
   expect(await page.locator(".landing-window-viewport").evaluate((e) => e.clientWidth / 1280)).toBeGreaterThanOrEqual(0.75);
-  expect(await page.locator(".landing-hero").evaluate((e) => Number.parseFloat(getComputedStyle(e).paddingBottom))).toBeLessThanOrEqual(40);
+  expect(await page.locator("#your-stack").evaluate((e) => e.getBoundingClientRect().top)).toBeGreaterThanOrEqual(900);
   for (const section of await page.locator(".landing-section").all())
     expect(await section.locator("[data-reveal]").count()).toBeGreaterThanOrEqual(4);
   await page.emulateMedia({ reducedMotion: "reduce" });

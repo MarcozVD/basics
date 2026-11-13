@@ -25,6 +25,11 @@
   --vp-c-bg-soft: #f4f4f5;
   --vp-c-text-1: #111113;
   --vp-c-text-2: #6b6b72;
+  --vp-c-text-3: var(--basics-muted);
+  --vp-sidebar-bg-color: var(--basics-background);
+  --vp-code-block-bg: var(--basics-surface);
+  --vp-code-color: var(--basics-text);
+  --vp-code-bg: var(--basics-elevated);
   --vp-c-divider: rgba(0, 0, 0, 0.08);
   --vp-c-border: rgba(0, 0, 0, 0.08);
   --vp-c-gutter: rgba(0, 0, 0, 0.08);
@@ -57,6 +62,7 @@
   --vp-c-bg-soft: #1c1c1e;
   --vp-c-text-1: #f2f2f2;
   --vp-c-text-2: #9a9aa0;
+  --vp-c-text-3: var(--basics-muted);
   --vp-c-divider: rgba(255, 255, 255, 0.08);
   --vp-c-border: rgba(255, 255, 255, 0.08);
   --vp-c-gutter: rgba(255, 255, 255, 0.08);
@@ -87,12 +93,36 @@
   letter-spacing: -0.02em;
 }
 
+.VPDoc .content-container {
+  max-width: 720px;
+}
+.vp-doc {
+  color: var(--basics-text);
+  line-height: 1.75;
+}
+.vp-doc :is(h1, h2, h3, h4) {
+  color: var(--basics-text);
+}
+.vp-doc :is(th, td) {
+  border-color: var(--basics-border);
+}
+/* GitHub syntax comments need the site's muted text contrast on dark surfaces. */
+.dark .vp-doc div[class*="language-"] span[style*="--shiki-dark:#6A737D"] {
+  /* biome-ignore lint/complexity/noImportantStyles: override Shiki's inline theme token, preserving other syntax colors. */
+  --shiki-dark: var(--basics-muted) !important;
+}
+:where(.vp-doc, .VPNav, .VPSidebar, .VPDocFooter, .feature-page, .site-footer) :is(a, button, summary, [tabindex="0"]):focus-visible {
+  outline: 2px solid var(--basics-accent-ring);
+  outline-offset: 3px;
+}
+
 .vp-doc div[class*="language-"],
 .vp-doc .custom-block {
   border-radius: 12px;
 }
 
 .vp-doc a {
+  --vp-code-bg: transparent;
   text-underline-offset: 2px;
 }
 
@@ -351,6 +381,10 @@
   }
 }
 @media (max-width: 767px) {
+  /* Reserve text-dependent controls before Geist loads; font swaps must not move their siblings. */
+  .VPNavBar .container > .title {
+    flex-basis: 88px;
+  }
   .landing-hero {
     grid-template-columns: minmax(0, 1fr);
     gap: 40px;
@@ -373,8 +407,17 @@
     margin-top: 24px;
     gap: 12px;
   }
+  .landing-download {
+    width: 212px;
+    justify-content: space-between;
+  }
   .landing-command {
+    width: 288px;
+    max-width: 100%;
     padding-left: 12px;
+  }
+  .landing-command code {
+    flex: 1;
   }
   .landing-command button {
     min-width: 60px;

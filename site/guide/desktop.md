@@ -1,3 +1,7 @@
+<script setup>
+import DemoVideo from '../.vitepress/theme/DemoVideo.vue'
+</script>
+
 # Desktop app
 
 The Basics desktop app is a small, standalone window that runs the **exact same server and UI** as
@@ -8,7 +12,9 @@ any command line to use Basics.
 Behind the scenes the app starts `basics ui` (bundled) on `http://127.0.0.1:4747` and shows that page in the window.
 Your vault, packs and notes are managed exactly as with the CLI and the web UI.
 
-## Install
+<h2 id="download">Download desktop<a class="header-anchor" href="#download" aria-label="Permalink to &quot;Download desktop&quot;">&#8203;</a></h2>
+
+<span id="install" aria-hidden="true"></span>
 
 Installers are not code-signed by Windows or macOS, so the system warns when you open them (see the table below). Each
 installer is signed for the in-app updater, which only installs updates that match that signature. The installers are
@@ -25,6 +31,10 @@ your OS (`<version>` is the release number, such as `1.4.1`):
 
 On GNOME, the tray icon needs the AppIndicator/KStatusNotifierItem extension (for example `gnome-shell-extension-appindicator`). Without it
 the app still runs and serves MCP; only the tray menu is missing.
+
+## Demo tour
+
+<DemoVideo />
 
 ## First run
 

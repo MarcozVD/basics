@@ -41,7 +41,9 @@ for (const width of [1440, 390]) {
       await expect(install.getByRole("tab", { name: "Desktop", exact: true })).toBeFocused();
       await expect(install.getByRole("status")).toBeEmpty();
       await install.getByRole("button", { name: "Copy download link", exact: true }).click();
-      expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("https://github.com/MarcozVD/basics/releases/latest");
+      expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
+        new URL("/basics/guide/desktop.html#download", page.url()).href,
+      );
       await expect(install.getByRole("link", { name: "All install options" })).toHaveAttribute(
         "href",
         "/basics/guide/getting-started.html#install",

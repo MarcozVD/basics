@@ -19,6 +19,31 @@
 .reveal-focused {
   transition: none;
 }
+/* Owner amendment: reserve the opening viewport for the hero, then separate entries. */
+@media (min-width: 768px) {
+  .landing-hero {
+    min-height: calc(100svh - var(--vp-nav-height));
+  }
+  .landing-sections {
+    gap: max(160px, 24vh);
+  }
+  .landing-section > p {
+    margin-bottom: 48px;
+  }
+}
+.hero-command {
+  display: grid;
+  min-width: 0;
+}
+.hero-command > code {
+  grid-area: 1 / 1;
+}
+.hero-command-measure {
+  visibility: hidden;
+}
+.landing-prompts:not([data-state="done"]) :is(.landing-recorded-answer, .landing-transcript-result) {
+  visibility: hidden;
+}
 .app-part {
   position: relative;
   isolation: isolate;
@@ -355,6 +380,9 @@
 .landing-recorded-answer li {
   animation: transcript-answer 280ms var(--landing-ease) both;
   animation-delay: var(--line-delay, 0ms);
+}
+.landing-prompts:not([data-state="done"]) .landing-recorded-answer li {
+  animation: none;
 }
 @keyframes transcript-answer {
   from {

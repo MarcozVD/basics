@@ -15,7 +15,7 @@ test("six generated chips navigate matching embeds and proposal, then reset the 
   for (const choice of choices) {
     await hero.getByRole("button", { name: choice.label.en, exact: true }).click();
     await expect(hero.getByTestId("landing-prompts")).toHaveAttribute("data-state", "done");
-    await expect(hero.locator("#hero-transcript code")).toHaveText(`> ${choice.command.en}`);
+    await expect(hero.locator("#hero-transcript .hero-command > code:last-child")).toHaveText(`> ${choice.command.en}`);
     await expect(hero.locator("iframe")).toHaveAttribute("src", choice.path);
     await expect(hero.getByTestId("landing-window")).toHaveAttribute("data-state", "live", { timeout: 20_000 });
     const frame = page.frameLocator('iframe[title="Interactive Basics app demo"]');
@@ -57,16 +57,16 @@ test("phone transcripts use generated answer lines without mounting the app", as
 test("typing restarts cleanly and reaches the last requested simulated answer", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.emulateMedia({ reducedMotion: "no-preference" });
-  await page.clock.install();
   await page.goto("/basics/");
   const hero = page.getByTestId("landing-hero");
   await hero.getByRole("button", { name: "Next.js SaaS", exact: true }).click();
+  await hero.locator("#hero-transcript").scrollIntoViewIfNeeded();
   await expect(hero.getByTestId("landing-prompts")).toHaveAttribute("data-state", "running");
-  await page.clock.fastForward(100);
   await hero.getByRole("button", { name: "CLI tool", exact: true }).click();
-  await page.clock.fastForward(2000);
-  await expect(hero.getByTestId("landing-prompts")).toHaveAttribute("data-state", "done");
-  await expect(hero.locator("#hero-transcript code")).toHaveText('> recommend_stack "CLI tool"');
+  // Clicking a chip can scroll the phone transcript out of view. Re-entry restarts it.
+  await hero.locator("#hero-transcript").scrollIntoViewIfNeeded();
+  await expect(hero.getByTestId("landing-prompts")).toHaveAttribute("data-state", "done", { timeout: 10000 });
+  await expect(hero.locator("#hero-transcript .hero-command > code:last-child")).toHaveText('> recommend_stack "CLI tool"');
   await expect(hero.getByRole("button", { name: "CLI tool", exact: true })).toHaveAttribute("aria-pressed", "true");
 });
 

@@ -6,6 +6,8 @@ FIRST VIEWPORT: Lead-approved wider window bleeding to the right edge; stacked b
 FORM: Owner-approved V19 design brief, section 3. Composition is pinned; no concept roll or new identity.
 -->
 <script setup lang="ts">
+// biome-ignore lint/correctness/noUnusedImports: used by the Vue template.
+import { withBase } from "vitepress";
 import { onBeforeUnmount, ref } from "vue";
 // biome-ignore lint/correctness/noUnusedImports: used by the Vue template.
 import LiveWindow from "./LiveWindow.vue";
@@ -49,15 +51,15 @@ useReveal(revealRoot);
       <h1 id="landing-title" data-reveal="0">Your agents build it your way.</h1>
       <p class="landing-promise" data-reveal="1">Teach your stack once.<br /> Every agent uses it.</p>
       <p class="landing-summary" data-reveal="2">Basics keeps your tech stack as plain Markdown notes. Your coding agents read it over MCP and propose what they learn. You approve every change.</p>
-      <div class="landing-actions" data-reveal="3">
-        <a class="landing-download" href="https://github.com/MarcozVD/basics/releases/latest">Download desktop <span aria-hidden="true">↗</span></a>
-        <div class="landing-command">
+      <div class="landing-actions">
+        <a class="landing-download" data-reveal="3" :href="withBase('/guide/desktop.html#download')">Download desktop <span aria-hidden="true">→</span></a>
+        <div class="landing-command" data-reveal="4">
           <code ref="commandElement">{{ command }}</code>
           <button type="button" :aria-label="copied ? 'Copied install command' : 'Copy install command'" @click="copyCommand">{{ copied ? "Copied" : "Copy" }}</button>
         </div>
       </div>
       <span class="landing-sr-only" role="status" aria-live="polite">{{ copied ? 'Install command copied.' : copyError }}</span>
-      <p class="landing-platforms" data-reveal="4">Windows, macOS, Linux <span aria-hidden="true">·</span> MIT <span aria-hidden="true">·</span> local, no account</p>
+      <p class="landing-platforms" data-reveal="5">Windows, macOS, Linux <span aria-hidden="true">·</span> MIT <span aria-hidden="true">·</span> local, no account</p>
     </div>
     <LiveWindow />
   </section>

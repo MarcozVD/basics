@@ -10,6 +10,8 @@ Basics is a personal tech-stack vault: a folder of Markdown notes about the laye
 profiles you use, which your coding agents read and extend over MCP. Notes are plain files (frontmatter +
 `[[wikilinks]]`, Obsidian- and git-friendly), and every agent write lands in an inbox for you to approve.
 
+**Try it:** [live demo](https://marcozvd.github.io/basics/demo/) in your browser, no install · [website](https://marcozvd.github.io/basics/)
+
 > **Status: 1.0** — see the [stability contract](https://marcozvd.github.io/basics/guide/stability.html).
 
 ## Quick start

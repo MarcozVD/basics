@@ -9,10 +9,22 @@ export default defineConfig({
   lang: "en-US",
   appearance: "dark",
   lastUpdated: true,
+  transformHead({ assets }) {
+    // Request the two reading fonts with the HTML, before CSS discovery can cause a late swap.
+    return assets
+      .filter((asset) => /\/geist(?:-mono)?-latin-wght-normal\.[^/]+\.woff2$/.test(asset))
+      .map((href) => ["link", { rel: "preload", href, as: "font", type: "font/woff2", crossorigin: "" }]);
+  },
   cleanUrls: false,
   markdown: {
     // The generated reference tables contain <name>, <lang>, ... as literal values.
     html: false,
+    config(md) {
+      // Only this authored guide embeds a Vue player. Keep literal <name> values in generated references.
+      md.core.ruler.before("block", "desktop-guide-html", (state) => {
+        state.md.options.html = state.env.relativePath === "guide/desktop.md";
+      });
+    },
   },
   head: [
     ["link", { rel: "icon", type: "image/svg+xml", href: "/basics/favicon.svg" }],
@@ -28,8 +40,18 @@ export default defineConfig({
     ],
   ],
   themeConfig: {
-    logo: "/logo.svg",
+    logo: { src: "/logo.svg", width: 24, height: 24 },
     nav: [
+      {
+        text: "Product",
+        activeMatch: "/features/",
+        items: [
+          { text: "Recommend", link: "/features/recommend/" },
+          { text: "Inbox", link: "/features/inbox/" },
+          { text: "Graph & notes", link: "/features/graph/" },
+          { text: "Export & connect", link: "/features/export-connect/" },
+        ],
+      },
       { text: "Guide", link: "/guide/getting-started", activeMatch: "/guide/" },
       { text: "Reference", link: "/reference/cli", activeMatch: "/reference/" },
       { text: "GitHub", link: REPO },
@@ -79,6 +101,12 @@ export default defineConfig({
     },
     search: {
       provider: "local",
+      options: {
+        translations: {
+          // Keep a word boundary before VitePress's adjacent visible K hint.
+          button: { buttonText: "Search ", buttonAriaLabel: "Search K" },
+        },
+      },
     },
     editLink: {
       pattern: `${REPO}/edit/main/site/:path`,
