@@ -30,6 +30,16 @@ export default defineConfig({
   themeConfig: {
     logo: "/logo.svg",
     nav: [
+      {
+        text: "Product",
+        activeMatch: "/features/",
+        items: [
+          { text: "Recommend", link: "/features/recommend/" },
+          { text: "Inbox", link: "/features/inbox/" },
+          { text: "Graph & notes", link: "/features/graph/" },
+          { text: "Export & connect", link: "/features/export-connect/" },
+        ],
+      },
       { text: "Guide", link: "/guide/getting-started", activeMatch: "/guide/" },
       { text: "Reference", link: "/reference/cli", activeMatch: "/reference/" },
       { text: "GitHub", link: REPO },

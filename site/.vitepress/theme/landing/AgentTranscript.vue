@@ -1,28 +1,11 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from "vue";
-import { useTranscript } from "./useTranscript";
+import { ref } from "vue";
+import { useTranscriptReplay } from "./useTranscript";
 
 const props = defineProps<{ command: string; answerLines: string[] }>();
 const root = ref<HTMLElement>();
-const active = ref(false);
 // biome-ignore lint/correctness/noUnusedVariables: typed and phase are read by the Vue template.
-const { typed, phase, play } = useTranscript();
-let observer: IntersectionObserver | undefined;
-onMounted(() => {
-  if (!("IntersectionObserver" in window)) return;
-  active.value = true;
-  observer = new IntersectionObserver(
-    (entries) => {
-      if (entries.some((entry) => entry.isIntersecting && entry.intersectionRatio >= 0.2)) {
-        play(`> ${props.command}`);
-        observer?.disconnect();
-      }
-    },
-    { threshold: 0.2 },
-  );
-  if (root.value) observer.observe(root.value);
-});
-onBeforeUnmount(() => observer?.disconnect());
+const { typed, phase, active } = useTranscriptReplay(root, () => `> ${props.command}`);
 </script>
 <template>
   <div ref="root" class="agent-transcript" :data-state="active ? phase : 'static'" :data-typing="active && phase === 'running' && typed !== `> ${command}`">

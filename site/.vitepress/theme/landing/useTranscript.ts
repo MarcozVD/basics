@@ -1,4 +1,26 @@
-import { onBeforeUnmount, ref } from "vue";
+import { onBeforeUnmount, onMounted, type Ref, ref } from "vue";
+import { observeReplay } from "./useReveal";
+
+/** Transcript replay never touches the app embed or its loading state. */
+export function useTranscriptReplay(root: Ref<HTMLElement | undefined>, command: () => string | null) {
+  const transcript = useTranscript();
+  const active = ref(false);
+  let observer: IntersectionObserver | undefined;
+  onMounted(() => {
+    if (!root.value || !("IntersectionObserver" in window)) return;
+    active.value = true;
+    observer = observeReplay(
+      [root.value],
+      () => {
+        const text = command();
+        if (text) transcript.play(text);
+      },
+      transcript.reset,
+    );
+  });
+  onBeforeUnmount(() => observer?.disconnect());
+  return { ...transcript, active };
+}
 
 /** One interruptible prompt, with the motion spec shared by hero and text artifacts. */
 export function useTranscript() {

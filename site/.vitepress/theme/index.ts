@@ -1,6 +1,8 @@
 import { useData } from "vitepress";
 import DefaultTheme from "vitepress/theme";
 import { h } from "vue";
+import FeaturePage from "./FeaturePage.vue";
+import GuideReveal from "./GuideReveal.vue";
 import LandingClose from "./landing/LandingClose.vue";
 import LandingHero from "./landing/LandingHero.vue";
 import ReadmeBody from "./landing/ReadmeBody.vue";
@@ -14,11 +16,17 @@ export default {
   extends: DefaultTheme,
   Layout: {
     setup() {
-      const { frontmatter } = useData();
+      const { frontmatter, page } = useData();
       return () =>
         h(DefaultTheme.Layout, null, {
-          "page-top": () => (frontmatter.value.landing ? [h(LandingHero), h(ReadmeBody), h(LandingClose)] : null),
-          "layout-bottom": () => h(SiteFooter),
+          "page-top": () =>
+            frontmatter.value.landing
+              ? [h(LandingHero), h(ReadmeBody), h(LandingClose)]
+              : frontmatter.value.feature
+                ? h(FeaturePage, { key: frontmatter.value.feature })
+                : null,
+          "layout-bottom": () => h(SiteFooter, { key: page.value.relativePath }),
+          "doc-before": () => h(GuideReveal, { key: page.value.relativePath }),
         });
     },
   },

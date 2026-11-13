@@ -37,8 +37,8 @@ onBeforeUnmount(() => media?.removeEventListener("change", resize));
 </script>
 
 <template>
-  <div class="landing-demo" data-reveal="3">
-    <div class="landing-window" data-ui data-testid="landing-window" :data-state="state">
+  <div class="landing-demo">
+    <div class="landing-window" data-reveal="3" data-ui data-testid="landing-window" :data-state="state">
       <div class="landing-window-titlebar"><span class="landing-window-name">Basics <span>demo vault</span></span><div class="landing-window-controls" aria-hidden="true"><span>&#8722;</span><span>&#9633;</span><span>&#215;</span></div></div>
       <div class="landing-window-viewport">
         <AppPart :key="navigation" :part="framePart" windowed :path="frameSrc" @state="state = $event">
@@ -46,7 +46,7 @@ onBeforeUnmount(() => media?.removeEventListener("change", resize));
         </AppPart>
       </div>
     </div>
-    <div class="landing-window-links"><span>Real app. Public note packs.</span><a v-if="narrow || state === 'failed'" href="/basics/demo/" target="_blank" rel="noopener">Open live demo <span aria-hidden="true">&#8599;</span></a><a v-else href="/basics/demo/" target="_blank" rel="noopener">Open full screen <span aria-hidden="true">&#8599;</span></a></div>
+    <div class="landing-window-links" data-reveal="4"><span>Real app. Public note packs.</span><a v-if="narrow || state === 'failed'" href="/basics/demo/" target="_blank" rel="noopener">Open live demo <span aria-hidden="true">&#8599;</span></a><a v-else href="/basics/demo/" target="_blank" rel="noopener">Open full screen <span aria-hidden="true">&#8599;</span></a></div>
     <DemoChips :show-answer="narrow || state === 'failed'" @select="navigateDemo" @reset="resetDemo" />
   </div>
 </template>
