@@ -93,10 +93,6 @@ export default defineConfig({
       label: "On this page",
     },
     socialLinks: [{ icon: "github", link: REPO }],
-    footer: {
-      message: "Released under the MIT license.",
-      copyright: "© 2026 MarcozVD",
-    },
     docFooter: {
       prev: "Previous",
       next: "Next",

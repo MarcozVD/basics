@@ -17,6 +17,7 @@ const sections = [
   <div class="landing-readme" data-testid="landing-readme">
     <nav class="landing-toc" aria-label="On this page">
       <ol><li v-for="(section, index) in sections" :key="section.id"><a :href="`#${section.id}`"><span :style="{ color: `var(--basics-${section.type})` }" aria-hidden="true">{{ String(index + 1).padStart(2, '0') }}</span>{{ section.title }}</a></li></ol>
+      <a class="landing-toc-faq" href="#landing-faq-title"><span aria-hidden="true">07</span>Questions before you install</a>
     </nav>
     <div class="landing-sections">
       <section v-for="(section, index) in sections" :key="section.id" :aria-labelledby="section.id" class="landing-section" :style="{ '--section-color': `var(--basics-${section.type})` }">
