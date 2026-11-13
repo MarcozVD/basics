@@ -1,13 +1,4 @@
-import type {
-  ActivityEvent,
-  GraphData,
-  NoteData,
-  NoteDetail,
-  NoteSummary,
-  ProposalDetail,
-  Recommendation,
-  VaultStats,
-} from "@marcozvd/basics-core";
+import type { ActivityEvent, GraphData, NoteData, NoteDetail, NoteSummary, ProposalDetail, VaultStats } from "@marcozvd/basics-core";
 import { snapshotKey } from "../../../../scripts/demo/key.mjs";
 
 export interface RecordedResponse {
@@ -350,25 +341,7 @@ export async function createDemoApi(snapshot: Snapshot, onChange: () => void = (
       return new Response(null, { status: 204 });
     }
     const recorded = snapshot[await snapshotKey(method, route, body)];
-    if (recorded && !(changed && path === "/api/recommend")) return json(recorded.body, recorded.status);
-    if (method === "POST" && path === "/api/recommend") {
-      // Preset descriptions are fixed recordings; layer/per-layer controls only narrow their result.
-      const result = Object.entries(snapshot).find(
-        ([key, value]) =>
-          key.startsWith("POST /api/recommend ") &&
-          (value.body as Recommendation).description?.trim().toLowerCase() === input.description?.trim().toLowerCase(),
-      );
-      if (result) {
-        const recommendation = structuredClone(result[1].body as Recommendation);
-        recommendation.layers = Object.fromEntries(
-          Object.entries(recommendation.layers)
-            .filter(([layer]) => !input.layers || input.layers.includes(layer))
-            .map(([layer, candidates]) => [layer, candidates.filter((candidate) => notes.has(candidate.id)).slice(0, input.perLayer ?? 3)]),
-        );
-        recommendation.profiles = recommendation.profiles.filter((profile) => notes.has(profile.id));
-        return json(recommendation);
-      }
-    }
+    if (path !== "/api/recommend" && recorded) return json(recorded.body, recorded.status);
     return missing();
   };
 }

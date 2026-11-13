@@ -1,0 +1,233 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "id": "nextjs-saas",
+      "kind": "scenario",
+      "label": {
+        "en": "Next.js SaaS",
+        "es": "SaaS con Next.js"
+      },
+      "command": {
+        "en": "recommend_stack \"Next.js SaaS\"",
+        "es": "recommend_stack \"SaaS con Next.js\""
+      },
+      "answerLines": {
+        "en": [
+          "Frontend: Next.js - Render the subscription app's pages on the server and client.",
+          "Frontend: TypeScript - Keep shared request and UI types explicit.",
+          "Data: PostgreSQL - Store accounts and subscriptions with relational constraints.",
+          "Testing: Playwright - Exercise sign-in and subscription flows in a browser.",
+          "Practices: Strict TypeScript, SQL migrations",
+          "Checks: TypeScript typecheck, Critical E2E flows"
+        ],
+        "es": [
+          "Frontend: Next.js - Renderiza las páginas de la aplicación en el servidor y el cliente.",
+          "Frontend: TypeScript - Mantén explícitos los tipos compartidos de peticiones e interfaz.",
+          "Data: PostgreSQL - Guarda cuentas y suscripciones con restricciones relacionales.",
+          "Testing: Playwright - Prueba los flujos de acceso y suscripción en un navegador.",
+          "Prácticas: Strict TypeScript, SQL migrations",
+          "Checks: TypeScript typecheck, Critical E2E flows"
+        ]
+      },
+      "path": "/basics/demo/embed/recommend/?scenario=nextjs-saas",
+      "simulated": true
+    },
+    {
+      "id": "python-api",
+      "kind": "scenario",
+      "label": {
+        "en": "Python API",
+        "es": "API de Python"
+      },
+      "command": {
+        "en": "recommend_stack \"Python API\"",
+        "es": "recommend_stack \"API de Python\""
+      },
+      "answerLines": {
+        "en": [
+          "Backend: FastAPI - Expose typed HTTP endpoints with request validation.",
+          "Backend: Python - Keep the API and its domain logic in one language.",
+          "Data: PostgreSQL - Persist API records in transactions.",
+          "Testing: pytest - Test endpoint responses and domain rules.",
+          "Practices: FastAPI project structure, Python typing",
+          "Checks: Python lint and types, FastAPI endpoint tests"
+        ],
+        "es": [
+          "Backend: FastAPI - Expón endpoints HTTP tipados con validación de peticiones.",
+          "Backend: Python - Mantén la API y su lógica de dominio en un mismo lenguaje.",
+          "Data: PostgreSQL - Guarda los registros de la API en transacciones.",
+          "Testing: pytest - Prueba respuestas de endpoints y reglas de dominio.",
+          "Prácticas: FastAPI project structure, Python typing",
+          "Checks: Python lint and types, FastAPI endpoint tests"
+        ]
+      },
+      "path": "/basics/demo/embed/recommend/?scenario=python-api",
+      "simulated": true
+    },
+    {
+      "id": "cli-tool",
+      "kind": "scenario",
+      "label": {
+        "en": "CLI tool",
+        "es": "Herramienta CLI"
+      },
+      "command": {
+        "en": "recommend_stack \"CLI tool\"",
+        "es": "recommend_stack \"Herramienta CLI\""
+      },
+      "answerLines": {
+        "en": [
+          "Backend: Python - Build a command-line tool around the standard library.",
+          "Testing: pytest - Check command output, errors and exit codes.",
+          "Practices: Python typing",
+          "Checks: Python lint and types"
+        ],
+        "es": [
+          "Backend: Python - Construye una herramienta de línea de comandos con la biblioteca estándar.",
+          "Testing: pytest - Comprueba la salida, los errores y los códigos de salida.",
+          "Prácticas: Python typing",
+          "Checks: Python lint and types"
+        ]
+      },
+      "path": "/basics/demo/embed/recommend/?scenario=cli-tool",
+      "simulated": true
+    },
+    {
+      "id": "mobile-app",
+      "kind": "scenario",
+      "label": {
+        "en": "Mobile app",
+        "es": "Aplicación móvil"
+      },
+      "command": {
+        "en": "recommend_stack \"Mobile app\"",
+        "es": "recommend_stack \"Aplicación móvil\""
+      },
+      "answerLines": {
+        "en": [
+          "Frontend: React - Build a responsive mobile web interface with reusable components.",
+          "Frontend: TypeScript - Describe component inputs and app state with types.",
+          "Testing: Playwright - Exercise touch-sized browser flows at phone widths.",
+          "Practices: React components, Strict TypeScript",
+          "Checks: TypeScript typecheck, Critical E2E flows"
+        ],
+        "es": [
+          "Frontend: React - Construye una interfaz web móvil adaptable con componentes reutilizables.",
+          "Frontend: TypeScript - Describe las entradas de componentes y el estado con tipos.",
+          "Testing: Playwright - Prueba flujos del navegador con controles táctiles a ancho de teléfono.",
+          "Prácticas: React components, Strict TypeScript",
+          "Checks: TypeScript typecheck, Critical E2E flows"
+        ]
+      },
+      "path": "/basics/demo/embed/recommend/?scenario=mobile-app",
+      "simulated": true
+    },
+    {
+      "id": "data-pipeline",
+      "kind": "scenario",
+      "label": {
+        "en": "Data pipeline",
+        "es": "Canal de datos"
+      },
+      "command": {
+        "en": "recommend_stack \"Data pipeline\"",
+        "es": "recommend_stack \"Canal de datos\""
+      },
+      "answerLines": {
+        "en": [
+          "Backend: Python - Transform batch records with small typed functions.",
+          "Data: PostgreSQL - Load validated records in repeatable transactions.",
+          "Testing: pytest - Test transformations against representative records.",
+          "Practices: Python typing, SQL migrations",
+          "Checks: Python lint and types"
+        ],
+        "es": [
+          "Backend: Python - Transforma registros por lotes con funciones pequeñas y tipadas.",
+          "Data: PostgreSQL - Carga registros validados en transacciones repetibles.",
+          "Testing: pytest - Prueba las transformaciones con registros representativos.",
+          "Prácticas: Python typing, SQL migrations",
+          "Checks: Python lint and types"
+        ]
+      },
+      "path": "/basics/demo/embed/recommend/?scenario=data-pipeline",
+      "simulated": true
+    },
+    {
+      "id": "agent-proposal",
+      "kind": "proposal",
+      "label": {
+        "en": "Agent proposes a note",
+        "es": "El agente propone una nota"
+      },
+      "command": {
+        "en": "propose_note \"cli-error-messages\"",
+        "es": "propose_note \"cli-error-messages\""
+      },
+      "answerLines": {
+        "en": [
+          "Actionable CLI errors (cli-error-messages)",
+          "Proposed by: opencode",
+          "Reason: The CLI tool preset needs predictable failures for shell scripts and useful recovery instructions for people.",
+          "Pending your approval in the Inbox."
+        ],
+        "es": [
+          "Actionable CLI errors (cli-error-messages)",
+          "Propuesto por: opencode",
+          "Motivo: The CLI tool preset needs predictable failures for shell scripts and useful recovery instructions for people.",
+          "Pendiente de tu aprobación en la bandeja."
+        ]
+      },
+      "path": "/basics/demo/embed/proposal/?id=cli-error-messages",
+      "simulated": false
+    },
+    {
+      "id": "basics-connect",
+      "kind": "connect",
+      "label": {
+        "en": "Connect your agent",
+        "es": "Conecta tu agente"
+      },
+      "command": {
+        "en": "basics connect --print",
+        "es": "basics connect --print"
+      },
+      "answerLines": {
+        "en": [
+          "Supported clients: claude-code, opencode, codex, cursor, claude-desktop, oh-my-pi, gemini-cli, qwen-code, kimi-cli, goose, amp",
+          "Snippet formats: json, toml, http, command"
+        ],
+        "es": [
+          "Clientes compatibles: claude-code, opencode, codex, cursor, claude-desktop, oh-my-pi, gemini-cli, qwen-code, kimi-cli, goose, amp",
+          "Formatos de configuración: json, toml, http, command"
+        ]
+      },
+      "path": null,
+      "simulated": false
+    },
+    {
+      "id": "basics-check",
+      "kind": "check",
+      "label": {
+        "en": "List your stack checks",
+        "es": "Lista los checks de tu stack"
+      },
+      "command": {
+        "en": "basics check ./sample-app --only typescript-typecheck --list",
+        "es": "basics check ./sample-app --only typescript-typecheck --list"
+      },
+      "answerLines": {
+        "en": [
+          "CHECK                 COMMAND           TRUSTED",
+          "typescript-typecheck  npx tsc --noEmit  no"
+        ],
+        "es": [
+          "CHECK                 COMMAND           TRUSTED",
+          "typescript-typecheck  npx tsc --noEmit  no"
+        ]
+      },
+      "path": null,
+      "simulated": false
+    }
+  ]
+}

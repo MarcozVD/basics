@@ -64,6 +64,8 @@ export interface GraphCanvasProps {
   navigationEpoch?: number;
   onNodeClick?: (id: string) => void;
   onBackgroundClick?: () => void;
+  /** Optional embed handshake, after the graph's first painted layout. */
+  onReady?: () => void;
   className?: string;
   ref?: Ref<GraphCanvasHandle>;
 }
@@ -1030,6 +1032,7 @@ function GraphCanvasInstance({
   navigationEpoch,
   onNodeClick,
   onBackgroundClick,
+  onReady,
   className,
   ref,
 }: GraphCanvasProps) {
@@ -1038,6 +1041,9 @@ function GraphCanvasInstance({
   const containerRef = useRef<HTMLDivElement>(null);
   const cyRef = useRef<Core | null>(null);
   const firstRun = useRef(true);
+  const readyCallback = useRef(onReady);
+  readyCallback.current = onReady;
+  const readyReported = useRef(false);
   /** The navigation this mount belongs to; deferred boot steps bail if the shell has moved on. */
   const mountEpoch = useRef(navigationEpoch ?? currentNavigationEpoch());
   /** The bridge this mount writes into; shared with the kept instance on a return. */
@@ -1089,6 +1095,10 @@ function GraphCanvasInstance({
   const markPainted = () => {
     painted.current = true;
     perfFirstFrame(perfRecord.current);
+    if (!readyReported.current) {
+      readyReported.current = true;
+      readyCallback.current?.();
+    }
   };
 
   useImperativeHandle(ref, () => ({

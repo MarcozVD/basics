@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { useLocation, useSearchParams } from "react-router";
+import { useHref, useLocation, useSearchParams } from "react-router";
 
 type SetSearchParams = ReturnType<typeof useSearchParams>[1];
 
@@ -20,12 +20,14 @@ export function useRouteSearchParams(): [URLSearchParams, SetSearchParams] {
   const [params, setParams] = useSearchParams();
   const { pathname } = useLocation();
   const [route] = useState(pathname);
+  // useLocation strips the router basename; compare against its browser-facing href.
+  const routeHref = useHref(route);
   const setIfCurrent = useCallback<SetSearchParams>(
     (next, options) => {
-      if (typeof window !== "undefined" && window.location.pathname !== route) return;
+      if (typeof window !== "undefined" && window.location.pathname !== new URL(routeHref, window.location.href).pathname) return;
       setParams(next, options);
     },
-    [route, setParams],
+    [routeHref, setParams],
   );
   return [params, setIfCurrent];
 }

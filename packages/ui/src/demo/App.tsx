@@ -1,16 +1,13 @@
-import { lazy, type ReactNode, Suspense, useEffect } from "react";
-import { createBrowserRouter, RouterProvider, useSearchParams } from "react-router";
+import { lazy, type ReactNode, Suspense } from "react";
+import { createBrowserRouter, RouterProvider } from "react-router";
 import { Layout } from "@/components/layout";
-import { PAGE_GUTTERS, Page } from "@/components/page";
+import { Page } from "@/components/page";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/i18n";
-import { recommend } from "@/lib/api";
 import { useDocumentTitle } from "@/lib/page-title";
-import { updateRecommend } from "@/lib/recommend-store";
 import { useTheme } from "@/lib/theme";
 import { HomePage } from "@/pages/home";
-import presetsJSON from "../../../../scripts/demo/presets.json?raw";
 import { demoCopy } from "./copy";
 
 const Explore = lazy(() => import("@/pages/explore").then((module) => ({ default: module.ExplorePage })));
@@ -18,9 +15,7 @@ const Editor = lazy(() => import("@/pages/editor").then((module) => ({ default: 
 const Graph = lazy(() => import("@/pages/graph").then((module) => ({ default: module.GraphPage })));
 const Inbox = lazy(() => import("@/pages/inbox").then((module) => ({ default: module.InboxPage })));
 const Proposal = lazy(() => import("@/pages/proposal").then((module) => ({ default: module.ProposalPage })));
-const Recommend = lazy(() => import("@/pages/recommend").then((module) => ({ default: module.RecommendPage })));
-const presets = JSON.parse(presetsJSON) as { id: keyof typeof demoCopy.en.presets; request: { description: string; perLayer: number } }[];
-
+const Recommend = lazy(() => import("./recommend"));
 function DemoNotice() {
   const { language, setLanguage, t } = useI18n();
   const { resolvedTheme, setTheme } = useTheme();
@@ -71,42 +66,6 @@ function Unavailable() {
   );
 }
 
-async function runPreset(id: string) {
-  const preset = presets.find((entry) => entry.id === id);
-  if (!preset) return;
-  const result = await recommend(preset.request);
-  updateRecommend({
-    description: preset.request.description,
-    perLayer: preset.request.perLayer,
-    selectedLayers: null,
-    recommendation: result,
-    selected: [],
-    fromProfile: null,
-  });
-}
-
-function DemoRecommend() {
-  const { language } = useI18n();
-  const [params] = useSearchParams();
-  const presetId = params.get("preset");
-  useEffect(() => {
-    if (presetId) void runPreset(presetId);
-  }, [presetId]);
-  return (
-    <>
-      <div className={`${PAGE_GUTTERS} flex flex-wrap items-center gap-2 pt-4`}>
-        <span className="text-xs text-muted-foreground">{demoCopy[language].try}</span>
-        {presets.map((preset) => (
-          <Button key={preset.id} variant="outline" size="sm" onClick={() => void runPreset(preset.id)}>
-            {demoCopy[language].presets[preset.id]}
-          </Button>
-        ))}
-      </div>
-      <Recommend />
-    </>
-  );
-}
-
 function Loading() {
   const { t } = useI18n();
   return (
@@ -130,7 +89,7 @@ const router = createBrowserRouter(
         { path: "graph", element: deferred(<Graph />) },
         { path: "inbox", element: deferred(<Inbox />) },
         { path: "inbox/:id", element: deferred(<Proposal />) },
-        { path: "recommend", element: deferred(<DemoRecommend />) },
+        { path: "recommend", element: deferred(<Recommend />) },
         { path: "*", element: <Unavailable /> },
       ],
     },

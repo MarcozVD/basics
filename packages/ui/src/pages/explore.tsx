@@ -143,7 +143,7 @@ function sortRows(rows: Row[], sort: Sort): Row[] {
   return sorted.sort((a, b) => TYPE_ORDER.indexOf(a.type) - TYPE_ORDER.indexOf(b.type) || byTitle(a, b));
 }
 
-export function ExplorePage() {
+export function ExplorePage({ allowCreate = true }: { allowCreate?: boolean } = {}) {
   const t = useT();
   const navigate = useIntentNavigate();
   const { pathname } = useLocation();
@@ -540,15 +540,17 @@ export function ExplorePage() {
               </TabsList>
             </Tabs>
 
-            <Button
-              size="sm"
-              onClick={() => window.dispatchEvent(new CustomEvent("basics:new-note", { detail: { type } }))}
-              pressScale={0.97}
-              className="shrink-0 whitespace-nowrap min-[1280px]:ml-auto"
-            >
-              <Plus className="size-3.5" aria-hidden="true" />
-              {t("explore.newNote")}
-            </Button>
+            {allowCreate && (
+              <Button
+                size="sm"
+                onClick={() => window.dispatchEvent(new CustomEvent("basics:new-note", { detail: { type } }))}
+                pressScale={0.97}
+                className="shrink-0 whitespace-nowrap min-[1280px]:ml-auto"
+              >
+                <Plus className="size-3.5" aria-hidden="true" />
+                {t("explore.newNote")}
+              </Button>
+            )}
           </fieldset>
 
           {view === "list" && rows.length > 0 ? (
@@ -577,15 +579,17 @@ export function ExplorePage() {
                 <LinkButton asChild size="sm">
                   <Link to="/?packs=1">{t("explore.emptyVault.packs")}</Link>
                 </LinkButton>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  pressScale={0.97}
-                  onClick={() => window.dispatchEvent(new CustomEvent("basics:new-note", { detail: { type } }))}
-                >
-                  <Plus className="size-3.5" aria-hidden="true" />
-                  {t("explore.emptyVault.newNote")}
-                </Button>
+                {allowCreate && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    pressScale={0.97}
+                    onClick={() => window.dispatchEvent(new CustomEvent("basics:new-note", { detail: { type } }))}
+                  >
+                    <Plus className="size-3.5" aria-hidden="true" />
+                    {t("explore.emptyVault.newNote")}
+                  </Button>
+                )}
               </div>
             </motion.div>
           ) : (
@@ -598,7 +602,7 @@ export function ExplorePage() {
               <SearchX className="mb-1 size-5 text-muted-foreground" aria-hidden="true" />
               <p className="text-sm font-medium">{t("explore.empty.title")}</p>
               <p className="text-sm text-muted-foreground">{t("explore.empty.description")}</p>
-              {query.trim() ? (
+              {allowCreate && query.trim() ? (
                 <Button
                   variant="secondary"
                   size="sm"
