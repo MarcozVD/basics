@@ -462,10 +462,6 @@ export function scaleKeywords(scores: number[], reference = KEYWORD_REFERENCE): 
   return scores.map((score) => clamp01(score / top));
 }
 
-function techLayers(d: TechData): string[] {
-  return [d.layer].flat().map(toId);
-}
-
 export interface RecommendOptions {
   layers?: string[];
   perLayer?: number;
@@ -491,6 +487,52 @@ function scoreProfiles(vault: Vault, description: string): { id: string; score: 
       return { id: n.id, score: score.direct + score.synonyms, stack: d.stack };
     })
     .sort((a, b) => b.score - a.score);
+}
+
+/** Explicit language requests constrain layers with matching implementations, including tests.
+ * Language notes supply the vocabulary, so new packs do not need a scorer allowlist.
+ * Neutral tools and explicitly named integrations remain eligible in mixed stacks.
+ */
+function languageAdjustment(vault: Vault, positive: string): (note: Note, signal: number, layer: string) => number {
+  const query = new Set(tokens(positive));
+  const mentioned = new Set(
+    vault
+      .byType("tech")
+      .filter((note) => note.data.type === "tech" && note.data.kind === "language")
+      .filter((note) => [...tokens(note.id), ...tokens(title(note))].some((token) => query.has(token)))
+      .map((note) => note.id),
+  );
+  const coveredLayers = new Set<string>();
+  for (const note of vault.byType("tech")) {
+    const data = note.data as TechData;
+    const language = data.kind === "language" ? note.id : data.language && toId(data.language);
+    if (language && mentioned.has(language)) {
+      for (const layer of [data.layer].flat()) coveredLayers.add(toId(layer));
+    }
+  }
+  const words = ` ${nameParts(positive).join(" ")} `;
+  return (note, signal, layer) => {
+    const data = note.data as TechData;
+    const language = data.kind === "language" ? note.id : data.language && toId(data.language);
+    if (!mentioned.size || !language) return 0;
+    if (mentioned.has(language)) return data.kind === "language" ? 0 : 3;
+    if (!coveredLayers.has(toId(layer))) return 0;
+    const named = [note.id, title(note)].some((name) => words.includes(` ${nameParts(name).join(" ")} `));
+    if (named) return 0;
+    // Cancel the positive signal rather than letting a fixed -2 lose to arbitrarily large
+    // keyword scores. Keep a negative component even at zero signal for hybrid filtering.
+    return -Math.max(1, signal);
+  };
+}
+
+function withoutLanguagePenalty<T extends Candidate>(candidate: T): T {
+  if (candidate.language_boost >= 0) return candidate;
+  return {
+    ...candidate,
+    score: candidate.score - candidate.language_boost,
+    language_boost: 0,
+    score_breakdown: { ...candidate.score_breakdown, language: 0 },
+  };
 }
 
 /**
@@ -531,80 +573,69 @@ export function recommend(vault: Vault, description: string, opts: RecommendOpti
     return { same: [...same], opposite: [...opposite] };
   };
 
-  // Language techs named in the positive text: their implementation techs get a boost.
-  const mentionedLanguages = vault.byType("tech").filter((n) => {
-    const d = n.data as TechData;
-    if (d.kind !== "language") return false;
-    return [...tokens(n.id), ...tokens(title(n))].some((t) => q.has(t) || syn.has(t));
-  });
-  const languageBoost = (d: TechData): number => {
-    const layers = techLayers(d);
-    let boost = 0;
-    for (const language of mentionedLanguages) {
-      const same = d.language !== undefined && toId(d.language) === language.id;
-      if (same) boost += 3;
-      else if (d.language !== undefined && techLayers(language.data as TechData).some((l) => layers.includes(l))) boost -= 2;
-    }
-    return boost;
-  };
+  const languageFit = languageAdjustment(vault, positive);
 
   const layers: Record<string, Candidate[]> = {};
   for (const layer of layerIds) {
-    layers[layer] = vault
-      .techInLayer(layer)
-      .map((n) => {
-        const d = n.data as TechData;
-        const use = hits(d.use_when);
-        const best = hits(d.performs_best);
-        const avoid = directHits(d.avoid_when);
-        const negUse = negatedHits(d.use_when);
-        const negAvoid = negatedHits(d.avoid_when);
-        const packages = Object.values(d.packages ?? {}).flat();
-        // Naming the tech is strong evidence, but a language is never a candidate just because it is
-        // named: its boost only breaks ties among techs that already match on `use_when`/`tags`.
-        const nameSig =
-          d.kind === "language"
-            ? { direct: 0, synonyms: 0 }
-            : nameScore(q, syn, [n.id, title(n), packages.join(" ")].join(" "), idfWeights, NAME_W);
-        // A negated tail describes a property the user wants, not an affirmative claim ("API pura
-        // sin interfaz" is not "interfaz"), so every field reads only its affirmative part.
-        const useSig = fieldScore(q, syn, affirmative(d.use_when), idfWeights, USE_W);
-        const bestSig = fieldScore(q, syn, affirmative(d.performs_best), idfWeights, BEST_W);
-        const tagSig = fieldScore(q, syn, d.tags.join(" "), idfWeights, TAG_W);
-        const bodySig = fieldScore(q, syn, firstParagraph(n.body), idfWeights, BODY_W);
-        const avoidSig = fieldScore(q, new Set(), affirmative(d.avoid_when), idfWeights, AVOID_W);
-        const keywords = nameSig.direct + useSig.direct + bestSig.direct;
-        const text = tagSig.direct + bodySig.direct;
-        const synonyms = nameSig.synonyms + useSig.synonyms + bestSig.synonyms + tagSig.synonyms + bodySig.synonyms;
-        // Same polarity: a negated query span meets the note's own negation ("sin contraseña" ~
-        // "… sin contraseña") — a strong match. Opposite polarity: it meets the note's affirmative
-        // text ("sin login" vs "login") — a penalty. `avoid_when` is excluded: a negated phrase
-        // there ("pure API without a UI") marks a situation to avoid, not a positive property.
-        const negatedTexts = [...d.use_when.map((p) => phraseParts(p).negated), ...d.tags.map((t) => phraseParts(t).negated)].filter(
-          (part): part is string => Boolean(part),
-        );
-        const negation = Math.round(
-          NEG_W *
-            (negatedOverlap(negatedTexts, negatedTokenSets, idfWeights) -
-              negatedOverlap([affirmative(d.use_when)], negatedTokenSets, idfWeights)),
-        );
-        const language = languageBoost(d);
-        // There must be a positive signal before the language boost or negation can rank a tech.
-        const signal = keywords + text + synonyms + negation;
-        return {
-          id: n.id,
-          kind: d.kind,
-          score: signal + language - avoidSig.direct,
-          hasSignal: signal > 0,
-          matched_performs_best: best,
-          matched_use_when: [...new Set([...use, ...negUse.same])],
-          matched_avoid_when: [...new Set([...avoid, ...negAvoid.same])],
-          negated_use_when: negUse.opposite,
-          negated_avoid_when: negAvoid.opposite,
-          language_boost: language,
-          score_breakdown: { keywords, text, synonyms, negation, language },
-        };
-      })
+    let candidates = vault.techInLayer(layer).map((n) => {
+      const d = n.data as TechData;
+      const use = hits(d.use_when);
+      const best = hits(d.performs_best);
+      const avoid = directHits(d.avoid_when);
+      const negUse = negatedHits(d.use_when);
+      const negAvoid = negatedHits(d.avoid_when);
+      const packages = Object.values(d.packages ?? {}).flat();
+      // Naming the tech is strong evidence, but a language is never a candidate just because it is
+      // named: its boost only breaks ties among techs that already match on `use_when`/`tags`.
+      const nameSig =
+        d.kind === "language"
+          ? { direct: 0, synonyms: 0 }
+          : nameScore(q, syn, [n.id, title(n), packages.join(" ")].join(" "), idfWeights, NAME_W);
+      // A negated tail describes a property the user wants, not an affirmative claim ("API pura
+      // sin interfaz" is not "interfaz"), so every field reads only its affirmative part.
+      const useSig = fieldScore(q, syn, affirmative(d.use_when), idfWeights, USE_W);
+      const bestSig = fieldScore(q, syn, affirmative(d.performs_best), idfWeights, BEST_W);
+      const tagSig = fieldScore(q, syn, d.tags.join(" "), idfWeights, TAG_W);
+      const bodySig = fieldScore(q, syn, firstParagraph(n.body), idfWeights, BODY_W);
+      const avoidSig = fieldScore(q, new Set(), affirmative(d.avoid_when), idfWeights, AVOID_W);
+      const keywords = nameSig.direct + useSig.direct + bestSig.direct;
+      const text = tagSig.direct + bodySig.direct;
+      const synonyms = nameSig.synonyms + useSig.synonyms + bestSig.synonyms + tagSig.synonyms + bodySig.synonyms;
+      // Same polarity: a negated query span meets the note's own negation ("sin contraseña" ~
+      // "… sin contraseña") — a strong match. Opposite polarity: it meets the note's affirmative
+      // text ("sin login" vs "login") — a penalty. `avoid_when` is excluded: a negated phrase
+      // there ("pure API without a UI") marks a situation to avoid, not a positive property.
+      const negatedTexts = [...d.use_when.map((p) => phraseParts(p).negated), ...d.tags.map((t) => phraseParts(t).negated)].filter(
+        (part): part is string => Boolean(part),
+      );
+      const negation = Math.round(
+        NEG_W *
+          (negatedOverlap(negatedTexts, negatedTokenSets, idfWeights) -
+            negatedOverlap([affirmative(d.use_when)], negatedTokenSets, idfWeights)),
+      );
+      // There must be a positive signal before the language boost or negation can rank a tech.
+      const signal = keywords + text + synonyms + negation;
+      const language = languageFit(n, signal, layer);
+      return {
+        id: n.id,
+        kind: d.kind,
+        score: signal + language - avoidSig.direct,
+        hasSignal: signal > 0,
+        matched_performs_best: best,
+        matched_use_when: [...new Set([...use, ...negUse.same])],
+        matched_avoid_when: [...new Set([...avoid, ...negAvoid.same])],
+        negated_use_when: negUse.opposite,
+        negated_avoid_when: negAvoid.opposite,
+        language_boost: language,
+        score_breakdown: { keywords, text, synonyms, negation, language },
+      };
+    });
+    // Coverage alone does not guarantee a matching recommendation. Do not empty a layer
+    // solely because its native implementations have no positive signal for this request.
+    if (!candidates.some((candidate) => candidate.hasSignal && candidate.score > 0)) {
+      candidates = candidates.map(withoutLanguagePenalty);
+    }
+    layers[layer] = candidates
       .filter((candidate) => opts.includeUnscored || (candidate.hasSignal && candidate.score > 0))
       .sort((a, b) => b.score - a.score || a.id.localeCompare(b.id))
       .map(({ hasSignal, ...candidate }) => candidate)
@@ -698,27 +729,37 @@ export async function recommendHybrid(
   const [queryVector, ...negatedVectors] = await embedder.embed([queryText, ...negated], "query");
 
   const layers: Record<string, Candidate[]> = {};
-  for (const [layer, candidates] of Object.entries(keyword.layers)) {
-    const semantic = candidates.map((candidate) => {
-      const pos = index.get(candidate.id, "pos");
-      const neg = index.get(candidate.id, "neg");
-      const negatedPenalty = mu * negatedVectors.reduce((max, span) => Math.max(max, cosine(span, pos)), 0);
-      const avoidPenalty = lambda * Math.max(0, cosine(queryVector, neg) - theta);
-      return cosine(queryVector, pos) - avoidPenalty - negatedPenalty;
-    });
-    const keywords = scaleKeywords(candidates.map((candidate) => Math.max(0, candidate.score)));
-    const semantics = semantic.map(semantic01);
-    layers[layer] = candidates
-      .map((candidate, i) => ({
-        ...candidate,
-        hybrid: round3(weight * keywords[i] + (1 - weight) * semantics[i]),
-        score_breakdown: { ...candidate.score_breakdown, semantic: round3(semantics[i]) },
-      }))
-      // Keep a candidate with keyword signal, or one whose similarity alone is clearly relevant.
-      .filter((candidate) => candidate.score > 0 || semantics[candidates.indexOf(candidate)] >= HYBRID_SEMANTIC_ONLY)
-      .filter((candidate) => (candidate.hybrid ?? 0) > HYBRID_SCORE_FLOOR)
-      .sort((a, b) => (b.hybrid ?? 0) - (a.hybrid ?? 0) || b.score - a.score || a.id.localeCompare(b.id))
-      .slice(0, opts.perLayer ?? 3);
+  for (const [layer, allCandidates] of Object.entries(keyword.layers)) {
+    // Semantic similarity must not reintroduce an incompatible implementation language.
+    const fuse = (candidates: Candidate[]): Candidate[] => {
+      const semantic = candidates.map((candidate) => {
+        const pos = index.get(candidate.id, "pos");
+        const neg = index.get(candidate.id, "neg");
+        const negatedPenalty = mu * negatedVectors.reduce((max, span) => Math.max(max, cosine(span, pos)), 0);
+        const avoidPenalty = lambda * Math.max(0, cosine(queryVector, neg) - theta);
+        return cosine(queryVector, pos) - avoidPenalty - negatedPenalty;
+      });
+      const keywords = scaleKeywords(candidates.map((candidate) => Math.max(0, candidate.score)));
+      const semantics = semantic.map(semantic01);
+      return (
+        candidates
+          .map((candidate, i) => ({
+            ...candidate,
+            hybrid: round3(weight * keywords[i] + (1 - weight) * semantics[i]),
+            score_breakdown: { ...candidate.score_breakdown, semantic: round3(semantics[i]) },
+          }))
+          // Keep a candidate with keyword signal, or one whose similarity alone is clearly relevant.
+          .filter((candidate, index) => candidate.score > 0 || semantics[index] >= HYBRID_SEMANTIC_ONLY)
+          .filter((candidate) => (candidate.hybrid ?? 0) > HYBRID_SCORE_FLOOR)
+          .sort((a, b) => (b.hybrid ?? 0) - (a.hybrid ?? 0) || b.score - a.score || a.id.localeCompare(b.id))
+          .slice(0, opts.perLayer ?? 3)
+      );
+    };
+    const compatible = allCandidates.filter((candidate) => candidate.language_boost >= 0);
+    layers[layer] = fuse(compatible);
+    if (!layers[layer].length && compatible.length < allCandidates.length) {
+      layers[layer] = fuse(allCandidates.map(withoutLanguagePenalty));
+    }
   }
 
   // Profiles keep the same rule: keyword signal or a clearly relevant semantic match.
