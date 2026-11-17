@@ -73,8 +73,11 @@ Basics only passes the agent the description, the chosen layers and the `plan-st
 - Negations are understood in English and Spanish: `without SSR`, `no UI`, `avoid SSR`, `sin SEO`, `no UI`,
   `evitar SSR`. The negated clause adds nothing for its positive terms, a matching `use_when` subtracts points, and a
   matching `avoid_when` adds them.
-- Naming a language (`in TypeScript`, `en TypeScript`) boosts techs written in that language and lowers same-layer
-  techs written in another one.
+- Naming a language (`in TypeScript`, `en TypeScript`, `in Rust`) boosts the techs written in that language. In each layer
+  that has techs in that language, techs written in another language lose their positive score. Layers with no tech in
+  that language, such as the frontend when no frontend tech is written in Rust, keep their normal ranking. Techs you name
+  in the description (such as `with FastAPI`) and techs without a language, such as SQLite, stay eligible. If the rule
+  would leave a layer with no match at all, that layer keeps its matches without the penalty.
 
 Scores are relative to your own notes; exact values are not part of the stable API (see [Stability](./stability.md)). The Recommend screen shows them only under each card's **Why**.
 

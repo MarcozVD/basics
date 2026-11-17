@@ -16,10 +16,57 @@ basics pack install web-typescript --lang es  # Spanish notes
 | `core-layers` | the five base layers (frontend, backend, data, infra, testing) | — |
 | `web-typescript` | TypeScript, React, Next.js, Vitest, Playwright + practices and checks | `core-layers` |
 | `python-api` | Python, FastAPI, pytest, PostgreSQL + practices and checks | `core-layers` |
+| `rust-api` | Rust HTTP APIs: web frameworks, SQL libraries, Cargo test tools + practices and checks | `python-api` |
 | `profiles` | the `ml-api` and `saas-web` profiles | `web-typescript`, `python-api` |
 
 Each pack ships the same note ids in every language it declares (`notes/en` and `notes/es`). Installing notes whose ids
 already exist in the vault skips them, so a pack never overwrites your edits.
+
+## The rust-api pack
+
+`rust-api` holds notes for Rust HTTP services. It requires `python-api`, which brings PostgreSQL and the core layers with
+it, so one command is enough:
+
+```bash
+basics pack install rust-api            # installs python-api and core-layers too
+basics pack install rust-api --lang es  # Spanish notes
+```
+
+It holds:
+
+- **19 techs**: the Rust language, the Cargo test tools `cargo-test` and `cargo-nextest`, the web frameworks axum,
+  actix-web, rocket, poem and warp, the data libraries sqlx, diesel, sea-orm, rusqlite and SQLite, and serde, tokio,
+  tracing, insta, proptest and wiremock-rs.
+- **4 practices**: project layout, error handling, async runtime and data access.
+- **3 checks**: `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings` and
+  `cargo test --workspace`.
+- **The `rust-api` profile** (Rust HTTP API): axum on tokio with serde and tracing, sqlx on PostgreSQL, and cargo-test
+  with proptest. It is a starting choice, not a requirement. When a description matches its use cases, the recommend step
+  lists it first.
+
+The pack can also ship sample compare tasks in an optional `tasks.json`. This pack has four: a login API, an inventory
+API, a webhook inbox and a local notes service. Each task has a title and a prompt in every language the pack declares,
+plus the layers it should touch. Installing the pack never runs them.
+
+The file format, in short:
+
+- `schema_version` is `1`. Unknown keys are rejected.
+- Each task has an `id` (lowercase letters, digits and dashes, unique in the file), a `title` and a `prompt` with one
+  text per pack language, and `expected_layers` (one or more layer ids, no repeats).
+
+```json
+{
+  "schema_version": 1,
+  "tasks": [
+    {
+      "id": "login-api",
+      "title": { "en": "Rust login API", "es": "API de inicio de sesión en Rust" },
+      "prompt": { "en": "Build a small Rust HTTP API ...", "es": "Crea una API HTTP pequeña en Rust ..." },
+      "expected_layers": ["backend", "data", "testing"]
+    }
+  ]
+}
+```
 
 ## Update
 
