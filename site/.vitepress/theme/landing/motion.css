@@ -1,4 +1,13 @@
 /* V19: the proposal arrives as a shaped placeholder, then yields to the real content. */
+/* Inline definitions remain recognizable and keyboard reachable in both themes. */
+:where(.landing-section p, .landing-transcript-idle) a {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+:where(.landing-section p, .landing-transcript-idle) a:focus-visible {
+  outline: 2px solid var(--basics-accent-ring);
+  outline-offset: 3px;
+}
 :root {
   --landing-ease: cubic-bezier(0.22, 1, 0.36, 1);
 }

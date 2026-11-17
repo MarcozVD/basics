@@ -1,4 +1,6 @@
 <script setup lang="ts">
+// biome-ignore lint/correctness/noUnusedImports: used by the Vue template.
+import { withBase } from "vitepress";
 import { ref } from "vue";
 import content from "../../../../scripts/demo/generated/landing.json";
 // biome-ignore lint/correctness/noUnusedImports: used by the Vue template.
@@ -10,7 +12,7 @@ import { useReveal } from "./useReveal";
 
 // biome-ignore lint/correctness/noUnusedVariables: iterated by the Vue template.
 const sections = [
-  { id: "your-stack", title: "Your agent guesses your stack", type: "tech" },
+  { id: "your-stack", title: "Your agent picks tools from scratch", type: "tech" },
   { id: "your-review", title: "Agents rewrite your notes behind your back", type: "project" },
   { id: "your-rules", title: "You paste the same rules every project", type: "practice" },
   { id: "your-notes", title: "Your knowledge is scattered in chats", type: "profile" },
@@ -38,12 +40,12 @@ useReveal(revealRoot);
         <h2 :id="section.id"><span class="landing-section-number" data-reveal="0" aria-hidden="true">{{ String(index + 1).padStart(2, '0') }}</span><span data-reveal="1">{{ section.title }}</span></h2>
 
         <template v-if="index === 0">
-          <p data-reveal="2">Your agent should start with the stack you already trust. Basics ranks technologies from your vault, with the note's own reasons beside each candidate. You choose what fits.</p>
+          <p data-reveal="2">Without your past choices, an agent picks tools from scratch. Basics suggests tools from your <a :href="withBase('/guide/glossary.html#vault')">vault</a>, a folder of notes about how you build. A <a :href="withBase('/guide/glossary.html#profile')">profile</a> saves a set of tools for a type of project. You choose what fits.</p>
           <figure class="landing-part-figure"><AppPart data-reveal="3" part="recommend" :params="{ scenario: 'nextjs-saas' }" /><figcaption data-reveal="5">Five simulated examples from the demo vault. Try a scenario or describe your project.</figcaption></figure>
         </template>
 
         <template v-else-if="index === 1">
-          <p data-reveal="2">An agent can propose a new note or an update, but it does not apply it. You review the reason and diff in the Inbox, then approve or reject. Approved notes record which agent proposed them.</p>
+          <p data-reveal="2">Useful changes are easy to miss in a chat. In Basics, a <a :href="withBase('/guide/glossary.html#proposal')">proposal</a> is a suggested note change. It waits in your <a :href="withBase('/guide/glossary.html#inbox')">Inbox</a>, the place where you review changes, until you approve or reject it.</p>
           <figure class="landing-part-figure landing-review-artifact">
             <AppPart data-reveal="3" part="proposal" :params="{ id: 'cli-error-messages' }" />
             <svg data-reveal="4" class="landing-loop" viewBox="0 0 360 220" role="img" aria-labelledby="review-loop-title" aria-describedby="review-loop-description">
@@ -58,7 +60,7 @@ useReveal(revealRoot);
         </template>
 
         <template v-else-if="index === 2">
-          <p data-reveal="2">Keep your practices and checks in the vault instead of rewriting them in every repository. Export the chosen stack to Markdown and the instruction files your agents already read. Text outside Basics' marked blocks stays yours.</p>
+          <p data-reveal="2">Repeating the same rules in every project wastes time. Keep your working rules and <a :href="withBase('/guide/glossary.html#check')">checks</a>, commands that verify the work, beside your notes. Export them to the instruction files your agents already read. Text outside Basics' marked blocks stays yours.</p>
           <figure class="landing-artifact">
             <AgentTranscript data-reveal="3" :command="content.exported.command" :answer-lines="content.exported.tree.split('\n')" />
             <details data-reveal="4" class="landing-file-preview" open><summary>Read the generated AGENTS.md excerpt</summary><pre tabindex="0"><code>{{ content.exported.agents }}</code></pre></details>
@@ -67,17 +69,17 @@ useReveal(revealRoot);
         </template>
 
         <template v-else-if="index === 3">
-          <p data-reveal="2">Turn a useful decision into a note you can open in any editor. Frontmatter records when a technology fits; links connect it to the rest of your stack. The graph shows those connections without hiding the Markdown underneath.</p>
+          <p data-reveal="2">Decisions disappear into old chats. Keep each one in a plain text note you can open in any editor. Links connect related notes, and the graph helps you follow those connections.</p>
           <figure class="landing-part-figure"><div class="landing-note-parts" data-testid="note-parts"><AppPart data-reveal="3" part="note" :params="{ id: noteFocus }" @focus="noteFocus = $event" /><AppPart data-reveal="3" part="graph" :params="{ focus: noteFocus }" @focus="noteFocus = $event" /></div><figcaption data-reveal="5">Plain Markdown and its connected notes. Both views follow the same note.</figcaption></figure>
         </template>
 
         <template v-else-if="index === 4">
-          <p data-reveal="2">Keep the same vault when you switch agents. Basics connects the clients you choose, and can print the registration snippets without changing their settings. Your stack stays in your Markdown files.</p>
+          <p data-reveal="2">Switching agents should not mean copying your instructions again. Connect each agent to the same notes over <a :href="withBase('/guide/glossary.html#mcp')">MCP</a>, a standard that lets agents use outside tools. A <a :href="withBase('/guide/glossary.html#skill')">skill</a> is a short guide that tells an agent when to use Basics.</p>
           <figure class="landing-artifact"><AgentTranscript data-reveal="3" :command="connect.command.en" :answer-lines="connect.answerLines.en" /><figcaption data-reveal="5">Simulated transcript. Supported clients and snippet formats come from Basics; no client is registered here.</figcaption></figure>
         </template>
 
         <template v-else>
-          <p data-reveal="2">Store check commands beside the technologies they validate. Basics runs the checks for your exported stack and records the result on the project note. You can see what failed before calling the work finished.</p>
+          <p data-reveal="2">An agent can finish a task without testing its work. Keep the commands that verify each tool beside its note. Basics can run these checks for a project and record the results, so you can see what failed.</p>
           <figure class="landing-artifact"><AgentTranscript data-reveal="3" :command="check.command.en" :answer-lines="check.answerLines.en" /><figcaption data-reveal="5">Simulated transcript of the demo stack's check list. Commands are listed, not run in your browser.</figcaption></figure>
         </template>
       </section>
