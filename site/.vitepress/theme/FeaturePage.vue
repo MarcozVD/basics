@@ -135,7 +135,8 @@ useReveal(root);
     <header class="feature-intro">
       <p class="feature-eyebrow" data-reveal="0">Product / {{ feature.label }}</p>
       <h1 :id="`feature-${feature.id}`" data-reveal="1">{{ feature.title }}</h1>
-      <p class="feature-answer" data-reveal="2">{{ feature.answer }}</p>
+      <!-- Recommend's LCP summary stays visible through hydration. -->
+      <p class="feature-answer" :data-reveal="feature.id === 'recommend' ? undefined : 2">{{ feature.answer }}</p>
     </header>
     <figure class="landing-part-figure feature-demo">
       <AppPart data-reveal="3" v-if="feature.id === 'recommend'" part="recommend" :params="{ scenario: 'nextjs-saas' }" />

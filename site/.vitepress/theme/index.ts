@@ -1,5 +1,6 @@
 import { useData } from "vitepress";
-import DefaultTheme from "vitepress/theme";
+// Basics supplies Geist below; avoid shipping and preloading the unused Inter font.
+import DefaultTheme from "vitepress/theme-without-fonts";
 import { h } from "vue";
 import FeaturePage from "./FeaturePage.vue";
 import GuideReveal from "./GuideReveal.vue";
