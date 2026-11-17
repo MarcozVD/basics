@@ -1,0 +1,10 @@
+{
+  "name": "mobile",
+  "version": "1.0.0",
+  "description": {
+    "en": "Native mobile frameworks, client state, persistence and device testing.",
+    "es": "Frameworks móviles nativos, estado cliente, persistencia y pruebas en dispositivos."
+  },
+  "requires": ["databases", "typescript"],
+  "languages": ["en", "es"]
+}
