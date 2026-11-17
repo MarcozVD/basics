@@ -31,8 +31,8 @@ for (const part of parts) {
     const rendered = await page.evaluate(
       () => (window as unknown as { rendered: { text: string; rows: number; canvas: number }[] }).rendered[0],
     );
-    // Closed select lists also retain hidden option nodes; rendered note rows add 25.
-    if (part === "explore") expect(rendered.rows).toBeGreaterThanOrEqual(25);
+    // Closed select lists also retain hidden option nodes; rendered note rows add 27.
+    if (part === "explore") expect(rendered.rows).toBeGreaterThanOrEqual(27);
     if (part === "note") expect(rendered.text).toContain("Backlinks");
     if (part === "proposal") expect(rendered.text).toContain("Actionable CLI errors");
     if (part === "recommend") expect(rendered.text).toContain("Describe your project");
@@ -40,7 +40,7 @@ for (const part of parts) {
     await expect(frame.locator("[data-embed-part]")).toHaveAttribute("data-embed-part", part);
     await expect(frame.getByRole("navigation", { name: "Primary" })).toHaveCount(0);
     await expect(frame.getByTestId("demo-notice")).toHaveCount(0);
-    if (part === "explore") await expect(frame.getByRole("listbox").first().getByRole("option")).toHaveCount(26);
+    if (part === "explore") await expect(frame.getByRole("listbox").first().getByRole("option")).toHaveCount(27);
     if (part === "note") {
       await expect(frame.getByRole("heading", { name: "Next.js", exact: true }).first()).toBeVisible();
       await expect(frame.locator("pre")).toContainText('type: "tech"');

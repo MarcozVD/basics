@@ -1,0 +1,10 @@
+{
+  "name": "typescript",
+  "version": "1.0.0",
+  "description": {
+    "en": "Shared TypeScript language, strictness and typecheck notes.",
+    "es": "Notas compartidas del lenguaje TypeScript, modo estricto y comprobación de tipos."
+  },
+  "requires": ["core-layers"],
+  "languages": ["en", "es"]
+}

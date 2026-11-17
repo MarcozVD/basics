@@ -20,4 +20,4 @@ tags: [javascript, node, static-typing]
 ---
 # TypeScript
 
-Foundation of [[react]] and [[nextjs]]. Tests with [[vitest]].
+Foundation of react and nextjs. Tests with vitest.
