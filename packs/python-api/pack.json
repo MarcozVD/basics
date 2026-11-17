@@ -1,10 +1,19 @@
 {
   "name": "python-api",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": {
     "en": "Python API stack: FastAPI, pytest and PostgreSQL.",
     "es": "Stack de API Python: FastAPI, pytest y PostgreSQL."
   },
-  "requires": ["core-layers"],
-  "languages": ["en", "es"]
+  "requires": ["databases"],
+  "languages": ["en", "es"],
+  "note_moves": [
+    {
+      "version": "1.2.0",
+      "notes": {
+        "postgresql": "databases",
+        "sql-migrations": "databases"
+      }
+    }
+  ]
 }

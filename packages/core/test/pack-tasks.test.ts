@@ -63,16 +63,16 @@ test("Rust profile installs a closed bilingual graph with real competition in ea
       installPack(vault, PACKS, "rust-api", { lang });
       assert.deepEqual(vault.issues, []);
       assert.equal(vault.get("rust-api")?.data.type, "profile");
-      assert.equal(vault.get("rust-api")?.data.source, "pack:rust-api@1.0.0");
-      assert.equal(vault.get("postgresql")?.data.source, "pack:python-api@1.1.0");
+      assert.equal(vault.get("rust-api")?.data.source, "pack:rust-api@1.1.0");
+      assert.equal(vault.get("postgresql")?.data.source, "pack:databases@1.0.0");
       const notes = packNotes(PACKS, "rust-api", lang);
-      assert.equal(notes.length, 27);
+      assert.equal(notes.length, 26);
       assert.equal(
         notes.some((note) => note.id === "postgresql"),
         false,
       );
       for (const layer of ["backend", "data", "testing"]) {
-        assert.ok(notes.filter((note) => note.data.type === "tech" && note.data.layer === layer).length >= 5);
+        assert.ok(notes.filter((note) => note.data.type === "tech" && note.data.layer === layer).length >= (layer === "data" ? 4 : 5));
       }
       for (const note of notes) {
         if (note.data.type !== "tech") continue;

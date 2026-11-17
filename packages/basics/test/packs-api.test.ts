@@ -24,7 +24,7 @@ test("packs and approve-all routes", async () => {
     const packs = (await list.json()) as { name: string; installed: string | null }[];
     assert.deepEqual(
       packs.map((pack) => pack.name),
-      ["core-layers", "profiles", "python-api", "rust-api", "web-typescript"],
+      ["core-layers", "databases", "go-api", "profiles", "python-api", "rust-api", "web-typescript"],
     );
     assert.ok(packs.every((p) => p.installed === null));
 

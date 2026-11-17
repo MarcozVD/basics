@@ -15,7 +15,7 @@ test("listPacks returns official packs with nothing installed on an empty vault"
   const packs = listPacks(PACKS, emptyVault());
   assert.deepEqual(
     packs.map((p) => p.name),
-    ["core-layers", "profiles", "python-api", "rust-api", "web-typescript"],
+    ["core-layers", "databases", "go-api", "profiles", "python-api", "rust-api", "web-typescript"],
   );
   assert.ok(packs.every((p) => p.installed === null));
   assert.ok(packs.every((p) => p.notes > 0));
@@ -26,7 +26,7 @@ test("installPack installs required packs first and stamps the source", () => {
   const result = installPack(v, PACKS, "python-api");
   assert.ok(result.installed.includes("python"));
   assert.ok(result.installed.includes("backend"));
-  assert.equal(v.get("python")?.data.source, "pack:python-api@1.1.0");
+  assert.equal(v.get("python")?.data.source, "pack:python-api@1.2.0");
   assert.equal(v.get("backend")?.data.source, "pack:core-layers@1.0.0");
   assert.equal(v.get("python")?.data.pack_lang, "en");
   assert.deepEqual(v.issues, []);
@@ -52,8 +52,9 @@ test("installedPacks reports every pack with its version", () => {
   installPack(v, PACKS, "profiles");
   assert.deepEqual(installedPacks(v), {
     "core-layers": "1.0.0",
+    databases: "1.0.0",
     profiles: "1.0.0",
-    "python-api": "1.1.0",
+    "python-api": "1.2.0",
     "web-typescript": "1.1.0",
   });
 });
