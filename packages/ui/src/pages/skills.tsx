@@ -3,6 +3,7 @@ import { ArrowUpRight, Check, ChevronDown, Copy, Puzzle, RotateCcw, Search, Sear
 import { motion, useReducedMotion } from "motion/react";
 import { type ReactNode, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
+import { GlossaryLink } from "@/components/glossary-link";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/motion/collapsible";
 import { Input } from "@/components/motion/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/motion/select";
@@ -356,6 +357,7 @@ function EmptyState({ icon, title, description, children }: { icon: ReactNode; t
       </span>
       <p className="text-sm font-medium">{title}</p>
       <p className="max-w-[56ch] text-sm text-muted-foreground">{description}</p>
+      <GlossaryLink />
       {children ? <div className="mt-2 flex flex-wrap items-center justify-center gap-2">{children}</div> : null}
     </div>
   );

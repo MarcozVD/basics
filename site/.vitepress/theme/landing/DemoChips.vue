@@ -1,4 +1,6 @@
 <script setup lang="ts">
+// biome-ignore lint/correctness/noUnusedImports: used by the Vue template.
+import { withBase } from "vitepress";
 import { computed, ref } from "vue";
 import transcripts from "./transcripts";
 import { useTranscriptReplay } from "./useTranscript";
@@ -47,7 +49,7 @@ const colors: Record<string, string> = {
       <button v-for="(entry, index) in choices" :key="entry.id" :data-reveal="index + 1" type="button" :aria-pressed="selected === entry.id" aria-controls="hero-transcript" class="landing-chip" :style="{ '--chip-color': 'var(--basics-' + colors[entry.id] + ')' }" @click="choose(entry)"><span class="landing-type-dot" aria-hidden="true"></span>{{ entry.label.en }}</button>
     </div>
     <div id="hero-transcript" ref="transcriptRoot" class="landing-transcript" data-reveal="2" :aria-busy="phase === 'running'">
-      <p v-if="!choice" class="landing-transcript-idle">Choose a simulated project or review an agent proposal.</p>
+      <p v-if="!choice" class="landing-transcript-idle">Try a project, or review a <a :href="withBase('/guide/glossary.html#proposal')">proposal</a>: a suggested note change.</p>
       <template v-else>
         <div class="landing-transcript-line"><span class="hero-command"><code class="hero-command-measure" aria-hidden="true">&gt; {{ choice.command.en }}</code><code :aria-hidden="phase !== 'done'">{{ typed }}</code></span><button type="button" class="landing-reset" @click="reset">Reset</button></div>
         <div v-if="props.showAnswer" class="landing-recorded-answer" :aria-hidden="phase !== 'done'" data-testid="recorded-answer"><p class="landing-answer-label">Simulated agent transcript</p><ul><li v-for="(line, index) in choice.answerLines.en" :key="index" :style="{ '--line-delay': index * 40 + 'ms' }">{{ line }}</li></ul></div>

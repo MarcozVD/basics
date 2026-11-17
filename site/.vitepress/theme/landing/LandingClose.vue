@@ -15,13 +15,13 @@ const options = [
     id: "npm",
     label: "npm",
     value: "npm install -g @marcozvd/basics",
-    description: "Requires Node.js 20.11 or newer. Install globally, then run basics init to create your vault.",
+    description: "Requires Node.js 20.11 or newer. Install globally, then run basics init to create your notes folder.",
   },
   {
     id: "pnpm",
     label: "pnpm",
     value: "pnpm add -g @marcozvd/basics",
-    description: "Requires Node.js 20.11 or newer. Install globally, then run basics init to create your vault.",
+    description: "Requires Node.js 20.11 or newer. Install globally, then run basics init to create your notes folder.",
   },
 ];
 const selected = ref(0);
@@ -92,16 +92,17 @@ useReveal(revealRoot);
   <div ref="revealRoot" class="landing-close">
     <section class="landing-faq" aria-labelledby="landing-faq-title">
       <h2 id="landing-faq-title"><span class="landing-section-number" data-reveal="0" aria-hidden="true">07</span><span data-reveal="1">Questions before you install</span></h2>
-      <details data-reveal="2"><summary>What is Basics?</summary><p>A folder of Markdown notes about your stack, with a CLI, a local UI and an MCP server over the same files. You record the technologies, practices and checks you trust; your agents read them when they work. <a :href="withBase('/guide/concepts.html')">How the vault works</a>.</p></details>
-      <details data-reveal="3"><summary>Which coding agents can use it?</summary><p>Claude Code, Codex, Cursor, OpenCode, Gemini CLI and other MCP clients can connect. Run <code>basics connect</code> for supported client setup, or <code>basics connect --print</code> for copyable snippets. <a :href="withBase('/guide/mcp-clients.html')">See the client instructions</a>.</p></details>
-      <details data-reveal="4"><summary>Can an agent change my files?</summary><p>Through Basics, agent writes create proposals in your Inbox. Your notes stay unchanged until you approve a diff. The CLI can export instruction files into a project directory you choose; the MCP export tool returns content without writing files. <a :href="withBase('/guide/security.html')">Read the write boundaries</a>.</p></details>
-      <details data-reveal="5"><summary>Does it work offline? Where does my data go?</summary><p>Your vault stays on your machine, with no account, telemetry or remote sync. Local reading, editing and keyword recommendations work offline; package installs, semantic search model downloads and desktop update checks need a connection. A connected coding agent follows its own data and network settings. <a :href="withBase('/guide/security.html')">Read about local state</a>.</p></details>
-      <details data-reveal="6"><summary>Is it free and open source?</summary><p>Yes. Basics is released under the MIT license. You can read, modify and redistribute the source under that license; your notes remain plain files you control. <a href="https://github.com/MarcozVD/basics/blob/main/LICENSE">Read the license</a>.</p></details>
-      <details data-reveal="7"><summary>Should I use Desktop or npm?</summary><p>Desktop bundles Node.js and runs the same local server and UI in a window that stays in the tray. Choose npm or pnpm if you want the CLI in your terminal and already have Node.js 20.11 or newer. Both use the same vault format. <a :href="withBase('/guide/desktop.html')">Read the desktop guide</a>.</p></details>
+      <details data-reveal="2"><summary>What problem does Basics solve?</summary><p>Your coding agent does not know the choices you made in earlier projects, so it guesses and you explain them again. Basics keeps those choices in reusable notes for your agents to read. You decide which suggested changes to keep. <a :href="withBase('/guide/glossary.html')">Learn the terms</a> or <a :href="withBase('/guide/concepts.html')">see how the notes fit together</a>.</p></details>
+      <details data-reveal="3"><summary>How is it different from Cursor rules or an AGENTS.md file?</summary><p>Rules files give an agent instructions. Basics adds a shared set of notes you can reuse across projects, suggestions for which tools fit, and a place to review suggested changes. It can export instructions to those files. If you only need rules for one project, a plain file may be enough. <a :href="withBase('/guide/comparison.html')">Compare the options</a>.</p></details>
+      <details data-reveal="4"><summary>Which coding agents can use it?</summary><p>Basics works with Claude Code, Codex, Cursor, OpenCode, Gemini CLI and other agents that support <a :href="withBase('/guide/glossary.html#mcp')">MCP</a>, a standard for connecting agents to outside tools. Run <code>basics connect</code> to set up a supported client, or <code>basics connect --print</code> for instructions you can copy. For agents that support them, <a :href="withBase('/guide/glossary.html#skill')">skills</a> are guides that explain when to use Basics. <a :href="withBase('/guide/mcp-clients.html')">Connect your coding agent</a>.</p></details>
+      <details data-reveal="5"><summary>Can an agent change my files?</summary><p>Through Basics, agent changes arrive as <a :href="withBase('/guide/glossary.html#proposal')">proposals</a>, suggested edits waiting in the <a :href="withBase('/guide/glossary.html#inbox')">Inbox</a> for your review. Your notes stay unchanged until you approve. The terminal export command can write instruction files to a project folder you choose; the <a :href="withBase('/guide/glossary.html#mcp')">MCP</a> export tool returns text without writing files. <a :href="withBase('/guide/security.html')">Read what Basics can change</a>.</p></details>
+      <details data-reveal="6"><summary>Does it work offline? Where does my data go?</summary><p>Your <a :href="withBase('/guide/glossary.html#vault')">vault</a>, the folder of notes, stays on your computer, with no account, telemetry or remote sync. Reading and editing notes and keyword-based suggestions work offline. Downloading <a :href="withBase('/guide/glossary.html#pack')">packs</a> (bundles of notes), the optional search model or desktop updates needs a connection. A connected coding agent follows its own data and network settings. <a :href="withBase('/guide/security.html')">Read about local state</a>.</p></details>
+      <details data-reveal="7"><summary>Is it free and open source?</summary><p>Yes. Basics is released under the MIT license. You can read, modify and redistribute the source under that license; your notes remain plain files you control. <a href="https://github.com/MarcozVD/basics/blob/main/LICENSE">Read the license</a>.</p></details>
+      <details data-reveal="8"><summary>Should I use Desktop or npm?</summary><p>Choose Desktop if you want an app window and a tray icon, with Node.js included. Choose npm or pnpm if you prefer terminal commands and already have Node.js 20.11 or newer. Both read and write the same folder of notes, your <a :href="withBase('/guide/glossary.html#vault')">vault</a>. <a :href="withBase('/guide/desktop.html')">Read the desktop guide</a>.</p></details>
     </section>
 
     <section class="landing-install" aria-labelledby="landing-install-title" data-testid="landing-install">
-      <h2 id="landing-install-title" data-reveal="0">Your stack, remembered.</h2>
+      <h2 id="landing-install-title" data-reveal="0">Start with what you know.</h2>
       <a class="landing-download" data-reveal="1" :href="release">Download desktop <span aria-hidden="true">→</span></a>
       <div class="landing-install-tabs" role="tablist" aria-label="Install Basics">
         <button :data-reveal="index + 2" v-for="(option, index) in options" :id="`install-tab-${option.id}`" :key="option.id" type="button" role="tab" :aria-selected="selected === index" :aria-controls="`install-panel-${option.id}`" :tabindex="selected === index ? 0 : -1" @click="select(index)" @keydown="moveTab">{{ option.label }}</button>

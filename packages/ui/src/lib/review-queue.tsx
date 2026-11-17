@@ -5,6 +5,8 @@ import { useI18n } from "@/i18n";
 import { ApiRequestError, approveAllProposals, approveProposal, rejectAllProposals, rejectProposal } from "@/lib/api";
 import { issuesToErrors } from "@/lib/field-errors";
 import { useIntentNavigate } from "@/lib/intent-navigate";
+import { useHealth } from "@/lib/queries";
+import { writeSetupFlag } from "@/lib/setup-progress";
 import { toast } from "@/lib/toast";
 
 /**
@@ -103,6 +105,7 @@ export function ReviewQueueProvider({ children }: { children: ReactNode }) {
   const { t } = useI18n();
   const navigate = useIntentNavigate();
   const queryClient = useQueryClient();
+  const health = useHealth();
   const [pending, setPending] = useState<PendingReview[]>([]);
   const [editRecovery, setEditRecovery] = useState<EditRecovery | null>(null);
   const pendingRef = useRef<PendingReview[]>([]);
@@ -199,6 +202,7 @@ export function ReviewQueueProvider({ children }: { children: ReactNode }) {
       try {
         if (action.kind === "approve") {
           const note = await approveProposal(action.ids[0], action.override);
+          if (health.data?.vault) writeSetupFlag(health.data.vault, "approved");
           finish(action);
           invalidate();
           toast.update(action.toastId, {
@@ -231,6 +235,7 @@ export function ReviewQueueProvider({ children }: { children: ReactNode }) {
 
         if (action.kind === "approve-all") {
           const data = await approveAllProposals(action.request ?? {});
+          if (data.approved.length > 0 && health.data?.vault) writeSetupFlag(health.data.vault, "approved");
           finish(action);
           invalidate();
           const message =
@@ -304,7 +309,7 @@ export function ReviewQueueProvider({ children }: { children: ReactNode }) {
         action.callbacks?.onError?.(error);
       }
     },
-    [errorMessage, finish, invalidate, navigate, t],
+    [errorMessage, finish, health.data?.vault, invalidate, navigate, t],
   );
 
   const sendRef = useRef(send);

@@ -106,6 +106,8 @@ export default defineConfig({
           items: [
             { text: "Getting started", link: "/guide/getting-started" },
             { text: "Concepts", link: "/guide/concepts" },
+            { text: "Glossary", link: "/guide/glossary" },
+            { text: "Comparison", link: "/guide/comparison" },
           ],
         },
         {

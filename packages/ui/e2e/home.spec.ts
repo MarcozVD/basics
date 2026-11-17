@@ -79,27 +79,28 @@ test("home shows the agent loop and reviews from the queue", async ({ page }) =>
   }
 });
 
-test("the get-set-up checklist leaves once notes, an agent and a project are in place", async ({ page, request }) => {
-  const file = path.join(vaultPath(), "projects", "e2e-setup-project.md");
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, ["---", "type: project", "title: E2E Setup", "status: active", "---", "", "# E2E Setup", ""].join("\n"));
-
+test("the checklist hides after a pack, a connected agent and an approved proposal", async ({ page, request }) => {
+  const packs = await (await request.get("/api/packs")).json();
+  await page.route("**/api/packs", (route) =>
+    route.fulfill({ json: packs.map((pack: { version: string }) => ({ ...pack, installed: pack.version })) }),
+  );
+  writeProposal("setup-approved", "Setup approval", "A first real approval.");
+  expect((await request.post("/api/inbox/setup-approved/approve", { data: {} })).ok()).toBe(true);
   expect((await request.post("/api/connect", { data: { clients: ["cursor"] } })).ok()).toBe(true);
   try {
-    // Preconditions on the fixture: the temp vault has notes, and now a project and a connected agent too.
-    await expect.poll(async () => (await (await request.get("/api/stats")).json()).counts.project).toBeGreaterThan(0);
+    await page.goto("/");
+    await expect(page.getByTestId("health-line")).toBeVisible();
     await expect
       .poll(async () =>
-        (await (await request.get("/api/connect/status")).json()).clients.some((client: { connected: boolean }) => client.connected),
+        (await page.request.get("/api/connect/status"))
+          .json()
+          .then((data) => data.clients.some((client: { connected: boolean }) => client.connected)),
       )
       .toBe(true);
-
-    await page.goto("/");
-    // Home rendered with stats before we check the checklist took itself off the page.
-    await expect(page.getByTestId("health-line")).toBeVisible();
     await expect(page.getByTestId("home-getting-started")).toHaveCount(0);
   } finally {
-    fs.rmSync(file, { force: true });
+    fs.rmSync(path.join(vaultPath(), "tech", "setup-approved.md"), { force: true });
+    fs.rmSync(path.join(vaultPath(), "inbox", "setup-approved.md"), { force: true });
     await request.post("/api/disconnect", { data: { clients: ["cursor"] } });
   }
 });
@@ -111,10 +112,13 @@ function seedActivity(count: number): () => void {
   fs.mkdirSync(dir, { recursive: true });
   const previous = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : null;
   const now = Date.now();
+  const today = new Date(now);
+  today.setHours(0, 0, 0, 0);
   const lines = Array.from({ length: count }, (_, index) =>
     JSON.stringify({
       // Alternating agents keep every event its own row instead of collapsing into groups.
-      ts: new Date(now - index * 60_000).toISOString(),
+      // The fixture promises today's events, including runs just after midnight.
+      ts: new Date(Math.max(today.getTime(), now - index * 60_000)).toISOString(),
       agent: index % 2 === 0 ? "claude-code" : "opencode",
       tool: "get_note",
       noteIds: ["fastapi"],

@@ -3,6 +3,7 @@ import { Crosshair, FilePlus2, Layers, Scan, Search, SquareArrowOutUpRight, Wayp
 import { motion, useReducedMotion } from "motion/react";
 import { lazy, type KeyboardEvent as ReactKeyboardEvent, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
+import { GlossaryLink } from "@/components/glossary-link";
 import { type GraphCacheScope, type GraphLayoutMode, graphCacheKey } from "@/components/graph/graph-cache";
 import type { GraphCanvasHandle, Insets } from "@/components/graph/graph-canvas";
 import { GRAPH_TYPES, layerSlice, matchNodes, neighborhood } from "@/components/graph/graph-model";
@@ -540,6 +541,7 @@ function EmptyGraph({ vaultEmpty }: { vaultEmpty: boolean }) {
         <Waypoints className="mb-1 size-5 text-muted-foreground" aria-hidden="true" />
         <p className="text-sm font-medium">{t(vaultEmpty ? "graph.emptyVault.title" : "graph.empty")}</p>
         <p className="text-sm text-muted-foreground">{t(vaultEmpty ? "graph.emptyVault.description" : "graph.emptyDescription")}</p>
+        <GlossaryLink />
         <LinkButton asChild size="sm" className="mt-2">
           <Link to={vaultEmpty ? "/?packs=1" : "/explore"}>{t(vaultEmpty ? "graph.emptyVault.action" : "graph.emptyAction")}</Link>
         </LinkButton>

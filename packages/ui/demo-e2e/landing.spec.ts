@@ -19,8 +19,8 @@ test("landing hero shows its skeleton and starts the real app after interaction"
   });
   await page.goto("/basics/");
   const hero = page.getByTestId("landing-hero");
-  await expect(hero.getByRole("heading", { level: 1 })).toHaveText("Your agents build it your way.");
-  await expect(hero).toContainText("Teach your stack once.");
+  await expect(hero.getByRole("heading", { level: 1 })).toHaveText("Your agent is guessing.");
+  await expect(hero).toContainText("Keep what works.");
   await expect(hero.getByRole("link", { name: /Download desktop/ })).toHaveAttribute("href", "/basics/guide/desktop.html#download");
   await expect(hero.locator('[data-skeleton="full"]')).toBeVisible();
   await expect(hero.locator("iframe")).toHaveCount(0);

@@ -14,6 +14,7 @@ import {
 } from "react";
 import { Link } from "react-router";
 import { EXPORT_TARGETS, ExportModal } from "@/components/export-modal";
+import { GlossaryLink } from "@/components/glossary-link";
 import { Button } from "@/components/motion/button/base";
 import { Input } from "@/components/motion/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/motion/select";
@@ -602,6 +603,7 @@ function ProjectDetail({
                 <div className="mt-2 rounded-xl border border-dashed border-border px-3 py-3">
                   <p className="text-sm font-medium">{t("projects.noChecks")}</p>
                   <p className="mt-0.5 text-xs text-muted-foreground">{t("projects.noChecksHint")}</p>
+                  <GlossaryLink />
                 </div>
               )}
 
@@ -1027,6 +1029,7 @@ export function ProjectsPage() {
                 {t("projects.empty.exportAfter")}
               </p>
               <p className="mx-auto mt-3 max-w-md text-xs leading-5 text-muted-foreground">{t("projects.empty.hint")}</p>
+              <GlossaryLink />
               <div className="mt-5 flex flex-col items-center gap-2">
                 <NewProjectButton />
                 <p className="text-xs text-muted-foreground">{t("projects.empty.manual")}</p>

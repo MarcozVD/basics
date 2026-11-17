@@ -3,6 +3,7 @@ import { ArrowDownUp, Layers, LayoutGrid, LayoutList, Package, Plus, Search, Sea
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "react-router";
+import { GlossaryLink } from "@/components/glossary-link";
 import { AnimatedNumber } from "@/components/motion/animated-number";
 import { Button } from "@/components/motion/button/base";
 import { CARD_TARGET_CLASS, Card, CardContent, CardFooter, CardHeader } from "@/components/motion/card";
@@ -456,7 +457,7 @@ export function ExplorePage({ allowCreate = true }: { allowCreate?: boolean } = 
               className="w-[calc(50%-0.25rem)] min-w-0 sm:w-36 sm:flex-none"
             >
               <SelectTrigger
-                aria-label={t("explore.typeFilter")}
+                aria-label={`${t("explore.typeFilter")}: ${type ? typeLabel(type) : t("explore.allTypes")}`}
                 title={type ? t(`type.${type}.hint` as TranslationKey) : undefined}
                 className="h-8 rounded-full border-border bg-muted/60 px-3 py-0 text-[13px]"
               >
@@ -575,6 +576,7 @@ export function ExplorePage({ allowCreate = true }: { allowCreate?: boolean } = 
               <Package className="mb-1 size-5 text-muted-foreground" aria-hidden="true" />
               <p className="text-sm font-medium">{t("explore.emptyVault.title")}</p>
               <p className="max-w-[52ch] text-sm text-muted-foreground">{t("explore.emptyVault.description")}</p>
+              <GlossaryLink />
               <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
                 <LinkButton asChild size="sm">
                   <Link to="/?packs=1">{t("explore.emptyVault.packs")}</Link>
@@ -602,6 +604,7 @@ export function ExplorePage({ allowCreate = true }: { allowCreate?: boolean } = 
               <SearchX className="mb-1 size-5 text-muted-foreground" aria-hidden="true" />
               <p className="text-sm font-medium">{t("explore.empty.title")}</p>
               <p className="text-sm text-muted-foreground">{t("explore.empty.description")}</p>
+              <GlossaryLink />
               {allowCreate && query.trim() ? (
                 <Button
                   variant="secondary"
