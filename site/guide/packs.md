@@ -13,21 +13,34 @@ basics pack install web-typescript --lang es  # Spanish notes
 
 | Pack | Content | Requires |
 | --- | --- | --- |
-| `core-layers` | the five base layers (frontend, backend, data, infra, testing) | — |
-| `web-typescript` | TypeScript, React, Next.js, Vitest, Playwright + practices and checks | `core-layers` |
+| `core-layers` | the six base layers (frontend, backend, data, infra, testing and mobile) | none |
+| `typescript` | TypeScript language, strict mode and typecheck + practice and check | `core-layers` |
+| `web-typescript` | React, Next.js, Vitest and Playwright + practice and check | `typescript` |
 | `python-api` | Python, FastAPI and pytest + practices and checks | `databases` |
-| `databases` | PostgreSQL, SQLite and SQL migrations, shared by the API packs | `core-layers` |
+| `databases` | PostgreSQL, SQLite and SQL migrations, shared by the API and mobile packs | `core-layers` |
 | `rust-api` | Rust HTTP APIs: web frameworks, SQL libraries, Cargo test tools + practices and checks | `databases` |
 | `go-api` | Go HTTP APIs: routers, SQL access, Go test tools + practices and checks | `databases` |
+| `mobile` | React Native with Expo, Flutter, native Swift and Kotlin, state, storage and device testing + practices, checks and two profiles | `databases`, `typescript` |
 | `profiles` | the `ml-api` and `saas-web` profiles | `web-typescript`, `python-api` |
 
 Each pack ships the same note ids in every language it declares (`notes/en` and `notes/es`). Installing notes whose ids
 already exist in the vault skips them, so a pack never overwrites your edits.
 
+## The typescript pack
+
+`typescript` holds the TypeScript language note, its strict-mode practice and its typecheck check. `web-typescript` and
+`mobile` require it, so installing either one also installs `typescript` and `core-layers`:
+
+```bash
+basics pack install typescript   # TypeScript notes, with core-layers
+```
+
+The language note covers the frontend and backend layers, and the typecheck check runs `npx tsc --noEmit`.
+
 ## The databases pack
 
-`databases` holds the notes that the API packs share: PostgreSQL, SQLite and SQL migrations. `python-api`, `rust-api` and
-`go-api` all require it, so installing any of them also installs `databases` and `core-layers`:
+`databases` holds the notes that the API and mobile packs share: PostgreSQL, SQLite and SQL migrations. `python-api`, `rust-api`,
+`go-api` and `mobile` all require it, so installing any of them also installs `databases` and `core-layers`:
 
 ```bash
 basics pack install databases   # PostgreSQL, SQLite and SQL migrations, with core-layers
@@ -103,6 +116,34 @@ The pack can also ship sample compare tasks in an optional `tasks.json`. This pa
 a webhook inbox and a local notes API. Each task uses the same format as the rust-api pack's tasks, shown above. Installing
 the pack never runs them.
 
+## The mobile pack
+
+`mobile` holds notes for mobile apps: React Native with Expo, Flutter, and the native Swift and Kotlin stacks as
+alternatives. It requires `databases` and `typescript`, which bring PostgreSQL, SQLite, TypeScript and the core layers with
+them, so one command is enough:
+
+```bash
+basics pack install mobile            # installs databases, typescript and core-layers too
+basics pack install mobile --lang es  # Spanish notes
+```
+
+It holds:
+
+- **21 techs**: React Native, Expo, Flutter and Dart, the native alternatives Swift with SwiftUI and Kotlin with Jetpack
+  Compose, the state, storage and data libraries TanStack Query, AsyncStorage, react-native-mmkv, Riverpod, BLoC, Drift and
+  Hive CE, and the testing tools Jest, React Native Testing Library, Detox, Maestro, Flutter test and Flutter integration test.
+- **4 practices**: accessibility, offline use, app signing, and state and navigation.
+- **5 checks**: `flutter analyze`, `flutter test`, `flutter test integration_test`, `npx --no-install eslint .` and
+  `npx --no-install jest --runInBand`.
+- **Two profiles**: the React Native mobile app (React Native and Expo, AsyncStorage and TanStack Query, Jest and React
+  Native Testing Library) and the Flutter mobile app (Flutter and Dart, Drift on SQLite with Riverpod, and Flutter's unit and
+  integration tests). They are starting choices, not requirements. When a description matches a profile's use cases, the
+  recommend step lists it first.
+
+The pack can also ship sample compare tasks in an optional `tasks.json`. This pack has four: an offline notes app, a React
+Native catalog, a Flutter expense log and an offline task queue. Each uses the same format as the rust-api tasks, shown
+above. Installing the pack never runs them.
+
 ## Update
 
 ```bash
@@ -126,12 +167,14 @@ an **Approve all** button.
 
 ## Updating from older packs
 
-Some notes moved between packs in this release: PostgreSQL and SQL migrations moved from `python-api` to `databases`, and
-SQLite moved from `rust-api` to `databases`. After you upgrade, `basics pack update` proposes the moved notes under
-`databases`, along with the `databases` notes that the API packs now require. Expect a one-time batch of these proposals.
-A moved note's proposal only changes where the note comes from. Your edits to the note stay as they are, and nothing
-changes until you approve it. Review the batch like any other pack proposal, or approve it with
-`basics inbox approve-all --pack databases`.
+Some notes moved between packs in this release: PostgreSQL and SQL migrations moved from `python-api` to `databases`, SQLite
+moved from `rust-api` to `databases`, and TypeScript, its strict practice and its typecheck check moved from
+`web-typescript` to `typescript`. After you upgrade, `basics pack update` proposes the moved notes under their new packs,
+along with the shared notes that the packs now require. Expect a one-time batch of these proposals. A moved note's proposal
+only changes where the note comes from. Your edits to the note stay as they are, and nothing changes until you approve it.
+Review each batch like any other pack proposal, or approve it with `basics inbox approve-all --pack databases` or
+`basics inbox approve-all --pack typescript`. The `core-layers` update adds the mobile layer as new notes, which arrive as
+ordinary proposals.
 
 ## Community packs
 
