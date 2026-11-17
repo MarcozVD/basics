@@ -11,11 +11,11 @@ function emptyVault(): Vault {
   return Vault.load(fs.mkdtempSync(path.join(os.tmpdir(), "basics-packs-")));
 }
 
-test("listPacks returns the four packs with nothing installed on an empty vault", () => {
+test("listPacks returns official packs with nothing installed on an empty vault", () => {
   const packs = listPacks(PACKS, emptyVault());
   assert.deepEqual(
     packs.map((p) => p.name),
-    ["core-layers", "profiles", "python-api", "web-typescript"],
+    ["core-layers", "profiles", "python-api", "rust-api", "web-typescript"],
   );
   assert.ok(packs.every((p) => p.installed === null));
   assert.ok(packs.every((p) => p.notes > 0));

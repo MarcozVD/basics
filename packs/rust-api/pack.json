@@ -1,0 +1,10 @@
+{
+  "name": "rust-api",
+  "version": "1.0.0",
+  "description": {
+    "en": "Rust HTTP APIs: framework choices, SQL access, testing and Cargo checks.",
+    "es": "APIs HTTP Rust: frameworks, acceso SQL, pruebas y comprobaciones Cargo."
+  },
+  "requires": ["python-api"],
+  "languages": ["en", "es"]
+}

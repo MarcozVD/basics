@@ -33,11 +33,15 @@ test("splitNegations parses English cues and conjunctions", () => {
 });
 
 test("recommend boosts the language named in the description", () => {
-  // fastapi matches on "API REST async", so its negative language boost cannot drop it.
   const result = recommend(Vault.load(SEED), "React dashboard en TypeScript con API REST async", { perLayer: 10 });
   const react = result.layers.frontend.find((candidate) => candidate.id === "react");
   const fastapi = result.layers.backend.find((candidate) => candidate.id === "fastapi");
   assert.equal(react?.language_boost, 3);
   assert.equal(react?.score_breakdown.language, 3);
-  assert.equal(fastapi?.language_boost, -2);
+  assert.equal(fastapi, undefined);
+  const unscored = recommend(Vault.load(SEED), "React dashboard en TypeScript con API REST async", {
+    perLayer: 10,
+    includeUnscored: true,
+  }).layers.backend.find((candidate) => candidate.id === "fastapi");
+  assert.ok(unscored && unscored.language_boost < 0 && unscored.score <= 0);
 });

@@ -22,7 +22,10 @@ test("packs and approve-all routes", async () => {
     const list = await request("/api/packs");
     assert.equal(list.status, 200);
     const packs = (await list.json()) as { name: string; installed: string | null }[];
-    assert.equal(packs.length, 4);
+    assert.deepEqual(
+      packs.map((pack) => pack.name),
+      ["core-layers", "profiles", "python-api", "rust-api", "web-typescript"],
+    );
     assert.ok(packs.every((p) => p.installed === null));
 
     const installRes = await request("/api/packs/core-layers/install", {
