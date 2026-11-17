@@ -9,6 +9,7 @@ export * from "./frontmatter.js";
 export * from "./fsutil.js";
 export * from "./negation.js";
 export * from "./outcome.js";
+export * from "./pack-tasks.js";
 export * from "./packs.js";
 export * from "./query.js";
 export * from "./schema.js";

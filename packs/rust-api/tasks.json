@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "tasks": [
+    {
+      "id": "login-api",
+      "title": {
+        "en": "Rust login API",
+        "es": "API de inicio de sesión en Rust"
+      },
+      "prompt": {
+        "en": "Build a small Rust HTTP API with POST /register, POST /login and GET /me. Store users in PostgreSQL, hash passwords with an established library and keep credentials out of logs. Test duplicate emails, invalid passwords and unauthenticated requests. Include versioned SQL migrations, environment configuration and run/test instructions. Do not deploy or contact external services.",
+        "es": "Crea una API HTTP pequeña en Rust con POST /register, POST /login y GET /me. Guarda usuarios en PostgreSQL, aplica hashing de contraseñas con una biblioteca establecida y no registres credenciales. Prueba correos duplicados, contraseñas inválidas y peticiones sin autenticar. Incluye migraciones SQL versionadas, configuración por entorno e instrucciones de ejecución y pruebas. No despliegues ni contactes servicios externos."
+      },
+      "expected_layers": ["backend", "data", "testing"]
+    },
+    {
+      "id": "inventory-api",
+      "title": {
+        "en": "Rust inventory API",
+        "es": "API de inventario en Rust"
+      },
+      "prompt": {
+        "en": "Build a Rust HTTP API to create, read and update inventory items in PostgreSQL. Each item has a unique SKU, a name and a nonnegative quantity. Add bounded pagination with a stable order. Test invalid quantities, duplicate SKUs, missing items and pagination boundaries. Include migrations and local run/test instructions. Do not deploy or contact external services.",
+        "es": "Crea una API HTTP Rust para crear, leer y actualizar artículos en PostgreSQL. Cada artículo tiene SKU único, nombre y cantidad no negativa. Añade paginación acotada con orden estable. Prueba cantidades inválidas, SKU duplicados, artículos ausentes y límites de paginación. Incluye migraciones e instrucciones locales de ejecución y pruebas. No despliegues ni contactes servicios externos."
+      },
+      "expected_layers": ["backend", "data", "testing"]
+    },
+    {
+      "id": "webhook-inbox",
+      "title": {
+        "en": "Rust webhook inbox",
+        "es": "Bandeja de webhooks en Rust"
+      },
+      "prompt": {
+        "en": "Build a Rust HTTP endpoint POST /events that accepts a bounded JSON body and requires a configured shared token. Store events in PostgreSQL with a unique X-Event-ID so repeated deliveries do not create duplicates. Return explicit status codes and omit tokens and payloads from diagnostic logs. Test missing authentication, malformed JSON and duplicate delivery. Include migrations and local run/test instructions. Do not deploy or call real webhook providers.",
+        "es": "Crea una ruta HTTP Rust POST /events que acepte un cuerpo JSON acotado y requiera un token compartido configurable. Guarda eventos en PostgreSQL con X-Event-ID único para evitar duplicados. Devuelve estados explícitos y omite tokens y cuerpos en los registros. Prueba autenticación ausente, JSON inválido y entregas duplicadas. Incluye migraciones e instrucciones locales de ejecución y pruebas. No despliegues ni llames proveedores reales de webhooks."
+      },
+      "expected_layers": ["backend", "data", "testing"]
+    },
+    {
+      "id": "local-notes",
+      "title": {
+        "en": "Rust local notes service",
+        "es": "Servicio local de notas en Rust"
+      },
+      "prompt": {
+        "en": "Build a Rust HTTP CRUD service for notes stored in a local SQLite file. Require a nonempty title, return explicit not-found responses and document how the database file is configured. Test validation, create/update/delete behavior and persistence after reopening the database. Isolate test database files in temporary directories. Include migrations and local run/test instructions. Do not deploy or contact external services.",
+        "es": "Crea un servicio HTTP CRUD Rust para notas guardadas en un archivo SQLite local. Exige título no vacío, devuelve respuestas explícitas para notas ausentes y documenta la configuración del archivo. Prueba validación, creación, actualización, eliminación y persistencia al reabrir la base. Aísla los archivos de pruebas en directorios temporales. Incluye migraciones e instrucciones locales de ejecución y pruebas. No despliegues ni contactes servicios externos."
+      },
+      "expected_layers": ["backend", "data", "testing"]
+    }
+  ]
+}
