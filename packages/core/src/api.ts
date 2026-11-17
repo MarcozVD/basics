@@ -96,7 +96,7 @@ export interface PackInstallResult {
 export interface PackUpdateResult {
   proposed: string[];
   unchanged: string[];
-  /** Installed notes the pack no longer owns (their source belongs to something else). */
+  /** Notes owned elsewhere or protected by an incompatible pending proposal. */
   skipped: string[];
   upToDate: boolean;
 }
