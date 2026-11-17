@@ -20,7 +20,7 @@ describe("simulated demo scenarios", () => {
   });
   it("uses existing layer, technology, practice and check notes with localized reasons", () => {
     const packs = fileURLToPath(new URL("../../../packs/", import.meta.url));
-    const notes = ["core-layers", "web-typescript", "python-api", "profiles"].flatMap((name) => packNotes(packs, name, "en"));
+    const notes = ["core-layers", "databases", "web-typescript", "python-api", "profiles"].flatMap((name) => packNotes(packs, name, "en"));
     const types = new Map(notes.map((note) => [note.id, note.type]));
     expect(scenarios).toHaveLength(5);
     for (const scenario of scenarios) {

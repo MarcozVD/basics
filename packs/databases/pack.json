@@ -1,0 +1,10 @@
+{
+  "name": "databases",
+  "version": "1.0.0",
+  "description": {
+    "en": "Shared PostgreSQL, SQLite and SQL migration notes.",
+    "es": "Notas compartidas de PostgreSQL, SQLite y migraciones SQL."
+  },
+  "requires": ["core-layers"],
+  "languages": ["en", "es"]
+}

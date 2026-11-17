@@ -13,6 +13,8 @@ export interface PackManifest {
   description: Record<string, string>;
   requires: string[];
   languages: string[];
+  /** Versioned ownership handoffs to required packs; accepted notes still require review. */
+  note_moves?: { version: string; notes: Record<string, string> }[];
 }
 
 export interface PackInfo extends PackManifest {
@@ -33,6 +35,14 @@ const packManifestSchema = z.object({
   description: z.record(z.string(), z.string()),
   requires: z.array(z.string()).default([]),
   languages: z.array(z.string()).min(1),
+  note_moves: z
+    .array(
+      z.object({
+        version: z.string().min(1),
+        notes: z.record(z.string().regex(/^[a-z0-9][a-z0-9-]*$/), z.string().regex(/^[a-z0-9][a-z0-9-]*$/)),
+      }),
+    )
+    .optional(),
 });
 
 const PACK_NAME = /^[a-z0-9][a-z0-9-]*$/;
@@ -183,14 +193,26 @@ function sortKeys(value: unknown): unknown {
   return value;
 }
 
-function sameNote(current: Note, next: { data: NoteData; body: string }): boolean {
+function sameNote(current: Pick<Note, "data" | "body">, next: { data: NoteData; body: string }): boolean {
   return current.body.trim() === next.body.trim() && canonicalNote(current.data) === canonicalNote(next.data);
 }
 
-export function updatePack(vault: Vault, packsDir: string, name: string): PackUpdateResult {
+function canMoveNote(packsDir: string, target: string, id: string, current: Note): boolean {
+  const source = /^pack:([a-z0-9][a-z0-9-]*)@(.+)$/.exec(current.data.source);
+  if (!source || source[1] === target || !fs.existsSync(path.join(packsDir, source[1], "pack.json"))) return false;
+  const owner = readPack(packsDir, source[1]);
+  return (
+    owner.requires.includes(target) &&
+    (owner.note_moves ?? []).some(
+      (move) =>
+        move.notes[id] === target && compareVersions(source[2], move.version) < 0 && compareVersions(owner.version, move.version) >= 0,
+    )
+  );
+}
+
+function updateOnePack(vault: Vault, packsDir: string, name: string, preferredLang?: string): PackUpdateResult {
   const installed = installedPacks(vault);
   const oldVersion = installed[name];
-  if (!oldVersion) throw new Error(`pack not installed: ${name}`);
   const manifest = readPack(packsDir, name);
   const installedNotes = [...vault.notes.values()].filter((note) => note.data.source.startsWith(`pack:${name}@`));
   const langOf = (note: Note): string => {
@@ -201,7 +223,9 @@ export function updatePack(vault: Vault, packsDir: string, name: string): PackUp
 
   const counts = new Map<string, number>();
   for (const note of installedNotes) counts.set(langOf(note), (counts.get(langOf(note)) ?? 0) + 1);
-  const majority = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? manifest.languages[0];
+  const majority =
+    [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ??
+    (preferredLang && manifest.languages.includes(preferredLang) ? preferredLang : manifest.languages[0]);
 
   const byLang = new Map<string, Map<string, PackNote>>();
   const notesFor = (lang: string): Map<string, PackNote> => {
@@ -218,14 +242,35 @@ export function updatePack(vault: Vault, packsDir: string, name: string): PackUp
     for (const id of notesFor(lang).keys()) if (!ids.includes(id)) ids.push(id);
   }
 
-  if (compareVersions(manifest.version, oldVersion) <= 0) {
+  const movingIn = ids.some((id) => {
+    const current = vault.get(id);
+    return current && canMoveNote(packsDir, name, id, current);
+  });
+  if (
+    oldVersion &&
+    (compareVersions(manifest.version, oldVersion) < 0 || (compareVersions(manifest.version, oldVersion) === 0 && !movingIn))
+  ) {
     return { proposed: [], unchanged: ids, skipped: [], upToDate: true };
   }
 
   const proposed: string[] = [];
   const unchanged: string[] = [];
   const skipped: string[] = [];
-  const meta = { proposed_by: `pack:${name}@${manifest.version}`, reason: `Pack ${name} ${oldVersion} → ${manifest.version}` };
+  const meta = {
+    proposed_by: `pack:${name}@${manifest.version}`,
+    reason: movingIn
+      ? `Ownership handoff to ${name}@${manifest.version}`
+      : oldVersion
+        ? `Pack ${name} ${oldVersion} → ${manifest.version}`
+        : `New dependency pack ${name}@${manifest.version}`,
+  };
+  const refreshSource = Boolean(
+    oldVersion &&
+      (manifest.note_moves ?? []).some(
+        (move) => compareVersions(oldVersion, move.version) < 0 && compareVersions(manifest.version, move.version) >= 0,
+      ),
+  );
+  const pendingById = new Map(vault.listProposals().map((proposal) => [proposal.id, proposal]));
 
   for (const id of ids) {
     const current = vault.get(id);
@@ -237,19 +282,72 @@ export function updatePack(vault: Vault, packsDir: string, name: string): PackUp
     const note = notesFor(lang).get(id);
     if (!note) continue;
     if (current) {
-      if (!current.data.source.startsWith(`pack:${name}@`)) {
+      const moving = canMoveNote(packsDir, name, id, current);
+      if (!current.data.source.startsWith(`pack:${name}@`) && !moving) {
         skipped.push(id);
         continue;
       }
-      if (sameNote(current, note)) {
+      if (sameNote(current, note) && !moving && !refreshSource) {
         unchanged.push(id);
         continue;
       }
     }
-    vault.propose(note.id, { ...note.data, pack_lang: lang }, note.body, meta);
+    // Migration updates ownership/version, not content. No historical bundle hash is
+    // stored, so preserve every accepted field/body rather than guessing which were edited.
+    const next =
+      current && (refreshSource || canMoveNote(packsDir, name, id, current))
+        ? current
+        : { data: { ...note.data, pack_lang: lang }, body: note.body };
+    const pending = pendingById.get(id);
+    if (pending) {
+      if (
+        pending.meta.proposed_by === meta.proposed_by &&
+        sameNote(pending, next) &&
+        pending.data.pack_lang === next.data.pack_lang &&
+        pending.meta.base_hash === current?.hash
+      )
+        proposed.push(id);
+      else skipped.push(id);
+      continue;
+    }
+    vault.propose(note.id, next.data, next.body, meta);
     proposed.push(id);
   }
   return { proposed, unchanged, skipped, upToDate: false };
+}
+
+/** Update required packs through the same review queue, without overwriting accepted notes. */
+export function updatePack(vault: Vault, packsDir: string, name: string): PackUpdateResult {
+  if (!installedPacks(vault)[name]) throw new Error(`pack not installed: ${name}`);
+  const manifest = readPack(packsDir, name);
+  const counts = new Map<string, number>();
+  for (const note of vault.notes.values()) {
+    if (!note.data.source.startsWith(`pack:${name}@`)) continue;
+    const lang = typeof note.data.pack_lang === "string" ? note.data.pack_lang : manifest.languages[0];
+    counts.set(lang, (counts.get(lang) ?? 0) + 1);
+  }
+  const lang = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? manifest.languages[0];
+  const order: string[] = [];
+  const active = new Set<string>();
+  const done = new Set<string>();
+  const visit = (pack: string): void => {
+    if (active.has(pack)) throw new Error(`pack dependency cycle: ${pack}`);
+    if (done.has(pack)) return;
+    active.add(pack);
+    for (const dependency of readPack(packsDir, pack).requires) visit(dependency);
+    active.delete(pack);
+    done.add(pack);
+    order.push(pack);
+  };
+  visit(name);
+  const results = order.map((pack) => updateOnePack(vault, packsDir, pack, lang));
+  const root = results.at(-1) as PackUpdateResult;
+  return {
+    proposed: [...new Set(results.flatMap((result) => result.proposed))],
+    unchanged: root.unchanged,
+    skipped: [...new Set(results.flatMap((result) => result.skipped))],
+    upToDate: results.every((result) => result.upToDate),
+  };
 }
 
 /** Installed packs derived from note sources, keeping the highest version per pack. */

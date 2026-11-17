@@ -15,28 +15,39 @@ basics pack install web-typescript --lang es  # Spanish notes
 | --- | --- | --- |
 | `core-layers` | the five base layers (frontend, backend, data, infra, testing) | — |
 | `web-typescript` | TypeScript, React, Next.js, Vitest, Playwright + practices and checks | `core-layers` |
-| `python-api` | Python, FastAPI, pytest, PostgreSQL + practices and checks | `core-layers` |
-| `rust-api` | Rust HTTP APIs: web frameworks, SQL libraries, Cargo test tools + practices and checks | `python-api` |
+| `python-api` | Python, FastAPI and pytest + practices and checks | `databases` |
+| `databases` | PostgreSQL, SQLite and SQL migrations, shared by the API packs | `core-layers` |
+| `rust-api` | Rust HTTP APIs: web frameworks, SQL libraries, Cargo test tools + practices and checks | `databases` |
+| `go-api` | Go HTTP APIs: routers, SQL access, Go test tools + practices and checks | `databases` |
 | `profiles` | the `ml-api` and `saas-web` profiles | `web-typescript`, `python-api` |
 
 Each pack ships the same note ids in every language it declares (`notes/en` and `notes/es`). Installing notes whose ids
 already exist in the vault skips them, so a pack never overwrites your edits.
 
-## The rust-api pack
+## The databases pack
 
-`rust-api` holds notes for Rust HTTP services. It requires `python-api`, which brings PostgreSQL and the core layers with
-it, so one command is enough:
+`databases` holds the notes that the API packs share: PostgreSQL, SQLite and SQL migrations. `python-api`, `rust-api` and
+`go-api` all require it, so installing any of them also installs `databases` and `core-layers`:
 
 ```bash
-basics pack install rust-api            # installs python-api and core-layers too
+basics pack install databases   # PostgreSQL, SQLite and SQL migrations, with core-layers
+```
+
+## The rust-api pack
+
+`rust-api` holds notes for Rust HTTP services. It requires `databases`, which brings PostgreSQL, SQLite and the core layers
+with it, so one command is enough:
+
+```bash
+basics pack install rust-api            # installs databases and core-layers too
 basics pack install rust-api --lang es  # Spanish notes
 ```
 
 It holds:
 
-- **19 techs**: the Rust language, the Cargo test tools `cargo-test` and `cargo-nextest`, the web frameworks axum,
-  actix-web, rocket, poem and warp, the data libraries sqlx, diesel, sea-orm, rusqlite and SQLite, and serde, tokio,
-  tracing, insta, proptest and wiremock-rs.
+- **18 techs**: the Rust language, the Cargo test tools `cargo-test` and `cargo-nextest`, the web frameworks axum,
+  actix-web, rocket, poem and warp, the data libraries sqlx, diesel, sea-orm and rusqlite, and serde, tokio, tracing,
+  insta, proptest and wiremock-rs.
 - **4 practices**: project layout, error handling, async runtime and data access.
 - **3 checks**: `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings` and
   `cargo test --workspace`.
@@ -68,6 +79,30 @@ The file format, in short:
 }
 ```
 
+## The go-api pack
+
+`go-api` holds notes for Go HTTP services. It requires `databases`, which brings PostgreSQL, SQLite and the core layers
+with it, so one command is enough:
+
+```bash
+basics pack install go-api            # installs databases and core-layers too
+basics pack install go-api --lang es  # Spanish notes
+```
+
+It holds:
+
+- **19 techs**: the Go language, the Go test tools `go-test` and `go-fuzzing`, the HTTP routers and frameworks net/http,
+  chi, echo, fiber and gin, the data libraries and tools database/sql, pgx, sqlc, ent and gorm, and slog, zap, zerolog,
+  testify, gomock and httptest.
+- **4 practices**: project layout, error handling, context and concurrency.
+- **3 checks**: `go vet ./...`, `golangci-lint run` and `go test -race ./...`.
+- **The `go-api` profile** (Go HTTP API): net/http with slog, pgx on PostgreSQL, and go test with httptest. It is a starting
+  choice, not a requirement. When a description matches its use cases, the recommend step lists it first.
+
+The pack can also ship sample compare tasks in an optional `tasks.json`. This pack has four: a login API, an inventory API,
+a webhook inbox and a local notes API. Each task uses the same format as the rust-api pack's tasks, shown above. Installing
+the pack never runs them.
+
 ## Update
 
 ```bash
@@ -88,6 +123,15 @@ basics inbox approve-all --pack python-api --version 1.1.0
 
 `--pack` is required; `--version` limits the batch to one pack version. In the UI, proposals from a pack are grouped with
 an **Approve all** button.
+
+## Updating from older packs
+
+Some notes moved between packs in this release: PostgreSQL and SQL migrations moved from `python-api` to `databases`, and
+SQLite moved from `rust-api` to `databases`. After you upgrade, `basics pack update` proposes the moved notes under
+`databases`, along with the `databases` notes that the API packs now require. Expect a one-time batch of these proposals.
+A moved note's proposal only changes where the note comes from. Your edits to the note stay as they are, and nothing
+changes until you approve it. Review the batch like any other pack proposal, or approve it with
+`basics inbox approve-all --pack databases`.
 
 ## Community packs
 

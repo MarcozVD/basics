@@ -40,7 +40,7 @@ for (const part of parts) {
     await expect(frame.locator("[data-embed-part]")).toHaveAttribute("data-embed-part", part);
     await expect(frame.getByRole("navigation", { name: "Primary" })).toHaveCount(0);
     await expect(frame.getByTestId("demo-notice")).toHaveCount(0);
-    if (part === "explore") await expect(frame.getByRole("listbox").first().getByRole("option")).toHaveCount(25);
+    if (part === "explore") await expect(frame.getByRole("listbox").first().getByRole("option")).toHaveCount(26);
     if (part === "note") {
       await expect(frame.getByRole("heading", { name: "Next.js", exact: true }).first()).toBeVisible();
       await expect(frame.locator("pre")).toContainText('type: "tech"');
