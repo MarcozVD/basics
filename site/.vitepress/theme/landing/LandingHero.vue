@@ -50,7 +50,8 @@ useReveal(revealRoot);
     <div class="landing-copy">
       <h1 id="landing-title" data-reveal="0">Your agents build it your way.</h1>
       <p class="landing-promise" data-reveal="1">Teach your stack once.<br /> Every agent uses it.</p>
-      <p class="landing-summary" data-reveal="2">Basics keeps your tech stack as plain Markdown notes. Your coding agents read it over MCP and propose what they learn. You approve every change.</p>
+      <!-- Keep the LCP summary visible through hydration; other elements retain their entrances. -->
+      <p class="landing-summary">Basics keeps your tech stack as plain Markdown notes. Your coding agents read it over MCP and propose what they learn. You approve every change.</p>
       <div class="landing-actions">
         <a class="landing-download" data-reveal="3" :href="withBase('/guide/desktop.html#download')">Download desktop <span aria-hidden="true">→</span></a>
         <div class="landing-command" data-reveal="4">

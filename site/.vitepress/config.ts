@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import postcss from "postcss";
 import { defineConfig } from "vitepress";
 
 const REPO = "https://github.com/MarcozVD/basics";
@@ -9,6 +12,46 @@ export default defineConfig({
   lang: "en-US",
   appearance: "dark",
   lastUpdated: true,
+  transformHtml(html, _id, { pageData, siteConfig }) {
+    if (!pageData.frontmatter.landing && pageData.frontmatter.feature !== "recommend") return html;
+
+    // VitePress combines guide, search and product CSS. Inline rules usable by the
+    // prerendered page so unrelated styles do not block its first paint. Vite's
+    // existing PostCSS parser preserves media queries, fonts and rule ordering.
+    const classes = new Set(["dark"]);
+    for (const match of html.matchAll(/class="([^"]*)"/g)) {
+      for (const name of match[1].split(/\s+/)) classes.add(name);
+    }
+    // Discover Geist before the inline CSS and module preloads consume bandwidth.
+    const fonts: string[] = [];
+    html = html.replace(/<link rel="preload" href="[^"]*\/geist(?:-mono)?-latin-wght-normal\.[^"]+"[^>]*>/g, (tag) => {
+      fonts.push(tag);
+      return "";
+    });
+    html = html.replace(/(<meta name="viewport"[^>]*>)/, `$1${fonts.join("")}`);
+    return html.replace(/<link rel="preload stylesheet" href="([^"]+)" as="style">/g, (tag, href: string) => {
+      if (!href.startsWith(`${siteConfig.site.base}assets/`)) return tag;
+      const css = readFileSync(join(siteConfig.outDir, href.slice(siteConfig.site.base.length)), "utf8");
+      const critical = postcss.parse(css);
+      critical.walkRules((rule) => {
+        if (rule.parent?.type === "atrule" && /keyframes$/.test(rule.parent.name)) return;
+        const selectors = rule.selectors.filter(
+          (selector) =>
+            // Functional pseudo-classes may negate or alternate class conditions.
+            /:(?:not|is|where|has)\(/.test(selector) ||
+            [...selector.matchAll(/\.(-?[_a-zA-Z][\w-]*)/g)].every((match) => classes.has(match[1])),
+        );
+        if (selectors.length) rule.selectors = selectors;
+        else rule.remove();
+      });
+      critical.walkAtRules((rule) => {
+        if (rule.nodes && !rule.nodes.length) rule.remove();
+      });
+      // Keep the complete cached stylesheet for client navigation and interactive
+      // states. With JavaScript disabled, the normal blocking stylesheet applies.
+      return `<style>${critical.toString().replace(/<\/style/gi, "<\\/style")}</style><link rel="stylesheet" href="${href}" media="print" onload="this.media='all'"><noscript><link rel="stylesheet" href="${href}"></noscript>`;
+    });
+  },
   transformHead({ assets }) {
     // Request the two reading fonts with the HTML, before CSS discovery can cause a late swap.
     return assets

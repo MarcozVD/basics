@@ -1,5 +1,89 @@
 import { expect, test } from "@playwright/test";
 
+test("opening geometry survives deferred CSS in both themes and viewport sizes", async ({ page }) => {
+  for (const width of [390, 1280]) {
+    await page.setViewportSize({ width, height: 844 });
+    for (const theme of ["light", "dark"]) {
+      await page.addInitScript((value) => localStorage.setItem("vitepress-theme-appearance", value), theme);
+      for (const [route, selector] of [
+        ["/basics/", ".landing-summary"],
+        ["/basics/features/recommend/", ".feature-answer"],
+      ]) {
+        let resumeStyles!: () => void;
+        const styles = new Promise<void>((resolve) => {
+          resumeStyles = resolve;
+        });
+        await page.route("**/assets/style.*.css", async (request) => {
+          await styles;
+          await request.continue();
+        });
+        await page.goto(route, { waitUntil: "domcontentloaded" });
+        await page.evaluate(() => document.fonts.ready);
+        await expect(page.locator("h1")).toHaveCSS("opacity", "1");
+        const elements = page.locator(`.VPNavBarTitle, h1, ${selector}, .feature-reading`);
+        const before = await elements.evaluateAll((nodes) =>
+          nodes.map((node) => {
+            const { x, y, width, height } = node.getBoundingClientRect();
+            return { x, y, width, height };
+          }),
+        );
+        resumeStyles();
+        await page.waitForFunction(() => Boolean(document.querySelector<HTMLLinkElement>('link[media="all"]')?.sheet));
+        await expect(page.locator("h1")).toHaveCSS("opacity", "1");
+        await expect(page.locator("h1")).toHaveCSS("transform", "none");
+        const after = await elements.evaluateAll((nodes) =>
+          nodes.map((node) => {
+            const { x, y, width, height } = node.getBoundingClientRect();
+            return { x, y, width, height };
+          }),
+        );
+        for (let index = 0; index < before.length; index++) {
+          for (const dimension of ["x", "y", "width", "height"] as const) {
+            expect(Math.abs(before[index][dimension] - after[index][dimension])).toBeLessThan(0.5);
+          }
+        }
+        await page.unroute("**/assets/style.*.css");
+      }
+    }
+  }
+});
+
+test("mobile LCP summaries stay painted before and through hydration", async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  for (const [route, selector] of [
+    ["/basics/", ".landing-summary"],
+    ["/basics/features/recommend/", ".feature-answer"],
+  ]) {
+    let resumeHydration!: () => void;
+    const hydration = new Promise<void>((resolve) => {
+      resumeHydration = resolve;
+    });
+    await page.route("**/assets/app.*.js", async (request) => {
+      await hydration;
+      await request.continue();
+    });
+    await page.goto(route, { waitUntil: "commit" });
+    const summary = page.locator(selector);
+    await expect(summary).toHaveCSS("opacity", "1");
+    await summary.evaluate((element) => {
+      const check = () => {
+        const style = getComputedStyle(element);
+        if (style.opacity !== "1" || style.transform !== "none") element.setAttribute("data-hidden-during-hydration", "true");
+      };
+      new MutationObserver(check).observe(element, { attributes: true });
+    });
+    resumeHydration();
+    await expect(page.locator("h1")).toHaveClass(/is-revealed/);
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+    await summary.scrollIntoViewIfNeeded();
+    await expect(summary).toHaveCSS("opacity", "1");
+    await expect(summary).toHaveCSS("transform", "none");
+    await expect(summary).not.toHaveAttribute("data-hidden-during-hydration", "true");
+    await page.unroute("**/assets/app.*.js");
+  }
+});
+
 test("landing replays in both scroll directions, keeps partial entries and preserves live frames", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/basics/");
