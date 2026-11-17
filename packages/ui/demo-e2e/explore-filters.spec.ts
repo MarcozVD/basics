@@ -9,7 +9,7 @@ for (const mode of ["direct", "hero", "embed"]) {
     await expect(scope.getByRole("heading", { name: "Explore", exact: true })).toBeVisible();
     const filters = scope.locator('fieldset button[aria-haspopup="listbox"]');
     const rows = scope.getByRole("listbox").first().getByRole("option");
-    await expect(rows).toHaveCount(26);
+    await expect(rows).toHaveCount(27);
     if (embedded) expect(await page.locator(".landing-window-viewport").evaluate((e) => e.clientWidth / 1280)).toBeLessThan(1);
     await filters.nth(0).click();
     await scope.getByRole("option", { name: /^Tech/ }).click();

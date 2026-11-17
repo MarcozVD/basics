@@ -1,6 +1,6 @@
 {
   "name": "core-layers",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": {
     "en": "Core architecture layers: frontend, backend, data, infra and testing.",
     "es": "Capas de arquitectura base: frontend, backend, data, infra y testing."

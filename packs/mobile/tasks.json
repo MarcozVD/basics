@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "tasks": [
+    {
+      "id": "offline-notes",
+      "title": {
+        "en": "Offline mobile notes",
+        "es": "Notas móviles offline"
+      },
+      "prompt": {
+        "en": "Build a mobile notes app with create, edit, delete and search using local persistence. Include empty/error states, offline restart recovery and accessible controls. Choose React Native or Flutter and document the choice. Test validation, persistence and an offline device flow. Include local build/test instructions and placeholder configuration only. Do not deploy, publish or use external services.",
+        "es": "Crea una app móvil de notas con crear, editar, borrar y buscar mediante persistencia local. Incluye vacío/error, recuperación offline al reiniciar y controles accesibles. Elige React Native o Flutter y documenta la elección. Prueba validación, persistencia y un flujo offline en dispositivo. Incluye instrucciones locales y configuración de ejemplo. No despliegues, publiques ni uses servicios externos."
+      },
+      "expected_layers": ["mobile", "data", "testing"]
+    },
+    {
+      "id": "rn-catalog",
+      "title": {
+        "en": "React Native catalog",
+        "es": "Catálogo React Native"
+      },
+      "prompt": {
+        "en": "Build a React Native mobile catalog with search, details and saved favorites. Use deterministic local API fixtures, loading/error/retry states and accessible labels. Preserve favorites after restart and handle offline viewing explicitly. Test component behavior and describe a native device scenario. Include local setup and test instructions, no signing secrets. Do not publish or contact external services.",
+        "es": "Crea un catálogo móvil React Native con búsqueda, detalles y favoritos. Usa fixtures API locales deterministas, carga/error/reintento y etiquetas accesibles. Conserva favoritos al reiniciar y define visualización offline. Prueba componentes y describe un escenario nativo. Incluye setup local y pruebas, sin secretos de firma. No publiques ni contactes servicios externos."
+      },
+      "expected_layers": ["mobile", "data", "testing"]
+    },
+    {
+      "id": "flutter-expenses",
+      "title": {
+        "en": "Flutter expense log",
+        "es": "Registro de gastos Flutter"
+      },
+      "prompt": {
+        "en": "Build a Flutter Dart expense app with local SQLite persistence, category filtering and a total computed from records. Validate positive amounts, label controls and support text scaling. Test calculations, widget interactions, migrations and restart recovery. Include local instructions and a device integration scenario. Do not deploy or store real financial or signing credentials.",
+        "es": "Crea una app Flutter Dart de gastos con SQLite local, filtro de categorías y total calculado desde registros. Valida importes positivos, etiqueta controles y admite escalado de texto. Prueba cálculos, widgets, migraciones y recuperación al reiniciar. Incluye instrucciones locales y escenario de dispositivo. No despliegues ni guardes credenciales financieras reales o de firma."
+      },
+      "expected_layers": ["mobile", "data", "testing"]
+    },
+    {
+      "id": "mobile-task-queue",
+      "title": {
+        "en": "Offline mobile task queue",
+        "es": "Cola móvil de tareas offline"
+      },
+      "prompt": {
+        "en": "Build a React Native or Flutter task app with a local pending-operation queue and a deterministic fake sync endpoint. Define retry limits, duplicate-operation handling and conflict behavior. Cover airplane mode, restart and failed authentication using fixtures. Include accessible navigation and tests. No real backend, deployment or release credentials.",
+        "es": "Crea una app de tareas React Native o Flutter con cola local pendiente y endpoint falso determinista de sincronización. Define límites de reintento, duplicados y conflictos. Cubre modo avión, reinicio y autenticación fallida con fixtures. Incluye navegación accesible y pruebas. Sin backend real, despliegue ni credenciales de release."
+      },
+      "expected_layers": ["mobile", "data", "testing"]
+    }
+  ]
+}

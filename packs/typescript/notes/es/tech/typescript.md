@@ -20,4 +20,4 @@ tags: [javascript, node, tipado-estatico]
 ---
 # TypeScript
 
-Base de [[react]] y [[nextjs]]. Tests con [[vitest]].
+Base de react y nextjs. Tests con vitest.

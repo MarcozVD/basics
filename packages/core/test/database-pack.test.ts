@@ -38,13 +38,14 @@ function legacyPacks(root: string) {
   return packs;
 }
 
+// Legacy language pack versions on the current core; old-core migration is tested in mobile-pack.
 function oldVault(root: string, lang: string) {
   const directory = path.join(root, "vault");
   fs.mkdirSync(directory);
   const vault = Vault.load(directory);
   installPack(vault, legacyPacks(root), "rust-api", { lang });
   assert.deepEqual(vault.issues, []);
-  assert.equal(vault.notes.size, 41);
+  assert.equal(vault.notes.size, 42);
   return vault;
 }
 
@@ -120,17 +121,17 @@ test.each(
     assert.deepEqual(approved.failed, []);
     assert.equal(approved.approved.length, 35);
     assert.deepEqual(vault.issues, []);
-    assert.equal(vault.notes.size, 41);
+    assert.equal(vault.notes.size, 42);
     assert.deepEqual(
       [...vault.notes.keys()].sort(),
       before.map(([id]) => id),
     );
-    assert.deepEqual(installedPacks(vault), { "core-layers": "1.0.0", databases: "1.0.0", "python-api": "1.2.0", "rust-api": "1.1.0" });
+    assert.deepEqual(installedPacks(vault), { "core-layers": "1.1.0", databases: "1.0.0", "python-api": "1.2.0", "rust-api": "1.1.0" });
     for (const id of SHARED) assert.equal(vault.get(id)?.data.source, "pack:databases@1.0.0");
     for (const pack of order) assert.equal(updatePack(vault, PACKS, pack).upToDate, true);
     assert.deepEqual(vault.listProposals(), []);
     installPack(vault, PACKS, "go-api", { lang });
-    assert.equal(vault.notes.size, 68);
+    assert.equal(vault.notes.size, 69);
     assert.deepEqual(vault.issues, []);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
@@ -256,7 +257,7 @@ test.each(["en", "es"])("migration keeps pre-update edits in all handoffs and 33
     assert.deepEqual(result.failed, []);
     assert.equal(result.approved.length, 36);
     const fresh = Vault.load(vault.root);
-    assert.equal(fresh.notes.size, 41);
+    assert.equal(fresh.notes.size, 42);
     for (const note of fresh.notes.values()) assert.deepEqual(content(note), before.get(note.id));
     for (const id of SHARED) assert.equal(fresh.get(id)?.data.source, "pack:databases@1.0.0");
     assert.equal(fresh.get("fastapi")?.data.source, "pack:python-api@1.2.0");
