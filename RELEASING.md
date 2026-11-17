@@ -108,6 +108,10 @@ separately by the [`.github/workflows/desktop.yml`](.github/workflows/desktop.ym
   installers are not code-signed by the OS, so SmartScreen and Gatekeeper prompts still apply.
 - **Review and publish**: open the draft, check the installers, `latest.json` and the notes, then click **Publish
   release**. Drafts do not trigger anything; only publishing does.
+- **Landing download link**: the landing page's "Download desktop" CTA (`site/.vitepress/theme/landing/LandingHero.vue`)
+  points to `guide/desktop.html#download`, the `download` heading in `site/guide/desktop.md`. The Desktop option in
+  `site/.vitepress/theme/landing/LandingClose.vue` uses the same URL. When the desktop release URL scheme changes (the
+  `desktop-v<version>` tags or the installer file names), keep the `download` id and the links on that page valid.
 - **Update manifest**: publishing a `desktop-v*` release runs
   [`.github/workflows/desktop-updater.yml`](.github/workflows/desktop-updater.yml). It checks that the release's
   `latest.json` exists and its version matches the tag, then copies it to the rolling **`desktop-updater`**
