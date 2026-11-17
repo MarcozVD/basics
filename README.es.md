@@ -6,10 +6,23 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![npm](https://img.shields.io/npm/v/@marcozvd/basics.svg)](https://www.npmjs.com/package/@marcozvd/basics)
 
-Basics es un vault personal de tu stack tecnológico: una carpeta de notas Markdown sobre las capas, tecnologías,
-prácticas, checks y perfiles que usas, que tus agentes de código leen y amplían vía MCP. Las notas son archivos
-normales (frontmatter + `[[wikilinks]]`, compatibles con Obsidian y con git), y todo lo que escribe un agente llega al
-inbox para que lo apruebes.
+Tu [agente](https://marcozvd.github.io/basics/guide/glossary.html#agent) de código (la herramienta de IA que escribe código por ti)
+no sabe cómo construyes las cosas, así que adivina. Cada proyecto nuevo empieza de cero: el agente vuelve a elegir framework, base de
+datos y herramienta de pruebas, y lo que decidiste en el proyecto anterior no pasa al siguiente.
+
+Basics guarda esas decisiones en un [vault](https://marcozvd.github.io/basics/guide/glossary.html#vault): una carpeta de notas Markdown en texto plano que tus agentes leen por [MCP](https://marcozvd.github.io/basics/guide/glossary.html#mcp) antes de elegir un stack (las tecnologías que usa un proyecto) o escribir código. Lo que un agente quiera cambiar espera como una [propuesta](https://marcozvd.github.io/basics/guide/glossary.html#proposal) en tu inbox hasta que la apruebes.
+
+El vault contiene:
+
+- **Capas**: partes de tus aplicaciones, como backend, frontend y datos.
+- **Tecnologías**: las que usas, como frameworks, bases de datos y herramientas de pruebas.
+- **Prácticas**: reglas para usar bien una tecnología.
+- **Checks**: comandos que verifican el trabajo, como pruebas y linters.
+- **Perfiles**: stacks guardados para cada tipo de proyecto.
+
+Empieza con packs oficiales (conjuntos de notas ya hechos) y pídele a Basics que recomiende tecnologías para un proyecto nuevo. Las notas son archivos normales, así que Obsidian y git también funcionan con ellas.
+
+¿Palabras nuevas? Mira el [glosario](https://marcozvd.github.io/basics/guide/glossary.html). ¿Comparas opciones? Mira [cómo se compara Basics](https://marcozvd.github.io/basics/guide/comparison.html).
 
 **Pruébalo:** [demo en vivo](https://marcozvd.github.io/basics/demo/) en tu navegador, sin instalar nada · [sitio web](https://marcozvd.github.io/basics/)
 
@@ -54,7 +67,7 @@ Mira el recorrido completo de dos minutos: [basics-demo.mp4](https://marcozvd.gi
 
 Documentación completa: **[marcozvd.github.io/basics](https://marcozvd.github.io/basics/)**
 
-- **Empezar** — [Primeros pasos](https://marcozvd.github.io/basics/guide/getting-started.html) · [Conceptos](https://marcozvd.github.io/basics/guide/concepts.html)
+- **Empezar** — [Primeros pasos](https://marcozvd.github.io/basics/guide/getting-started.html) · [Conceptos](https://marcozvd.github.io/basics/guide/concepts.html) · [Glosario](https://marcozvd.github.io/basics/guide/glossary.html) · [Comparativa](https://marcozvd.github.io/basics/guide/comparison.html)
 - **Uso** — [Notas](https://marcozvd.github.io/basics/guide/notes.html) · [Packs](https://marcozvd.github.io/basics/guide/packs.html) · [Clientes MCP](https://marcozvd.github.io/basics/guide/mcp-clients.html) · [UI web](https://marcozvd.github.io/basics/guide/web-ui.html) · [Recomendación](https://marcozvd.github.io/basics/guide/recommend.html) · [Proyectos y checks](https://marcozvd.github.io/basics/guide/projects-and-checks.html)
 - **Operación** — [Seguridad](https://marcozvd.github.io/basics/guide/security.html) · [Problemas](https://marcozvd.github.io/basics/guide/troubleshooting.html) · [Estabilidad](https://marcozvd.github.io/basics/guide/stability.html)
 - **Referencia** — [CLI](https://marcozvd.github.io/basics/reference/cli.html) · [Herramientas MCP](https://marcozvd.github.io/basics/reference/mcp-tools.html) · [Esquema del vault](https://marcozvd.github.io/basics/reference/schema.html)
