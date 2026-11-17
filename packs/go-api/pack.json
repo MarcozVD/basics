@@ -1,0 +1,11 @@
+{
+  "name": "go-api",
+  "version": "1.1.0",
+  "description": {
+    "en": "Go HTTP APIs: routers, SQL access, tests and concurrency checks.",
+    "es": "APIs HTTP Go: routers, acceso SQL, pruebas y comprobaciones de concurrencia."
+  },
+  "requires": ["databases"],
+  "languages": ["en", "es"],
+  "note_moves": [{ "version": "1.1.0", "notes": {} }]
+}

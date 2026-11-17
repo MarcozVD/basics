@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "tasks": [
+    {
+      "id": "login-api",
+      "title": {
+        "en": "Go login API",
+        "es": "API de inicio de sesión Go"
+      },
+      "prompt": {
+        "en": "Build a small Go HTTP API with POST /register, POST /login and GET /me. Store users in PostgreSQL and hash passwords with an established library. Keep credentials out of logs. Test duplicate emails, invalid passwords, unauthenticated requests and cancellation. Include versioned migrations and local run/test instructions. Do not deploy or contact external services.",
+        "es": "Crea una API HTTP Go con POST /register, POST /login y GET /me. Guarda usuarios en PostgreSQL y aplica hashing de contraseñas con una biblioteca establecida. No registres credenciales. Prueba correos duplicados, claves inválidas, peticiones sin autenticar y cancelación. Incluye migraciones versionadas e instrucciones locales. No despliegues ni contactes servicios externos."
+      },
+      "expected_layers": ["backend", "data", "testing"]
+    },
+    {
+      "id": "inventory-api",
+      "title": {
+        "en": "Go inventory API",
+        "es": "API de inventario Go"
+      },
+      "prompt": {
+        "en": "Build a Go HTTP API to create, read and update PostgreSQL inventory items with unique SKU, name and nonnegative quantity. Add bounded pagination with a stable order and propagate request cancellation into persistence. Test invalid input, duplicate SKUs, missing items and concurrent updates. Include migrations and local run/test instructions. Do not deploy or contact external services.",
+        "es": "Crea una API HTTP Go para crear, leer y actualizar artículos PostgreSQL con SKU único, nombre y cantidad no negativa. Añade paginación acotada con orden estable y propaga cancelación a persistencia. Prueba entradas inválidas, SKU duplicados, artículos ausentes y actualizaciones concurrentes. Incluye migraciones e instrucciones locales. No despliegues ni contactes servicios externos."
+      },
+      "expected_layers": ["backend", "data", "testing"]
+    },
+    {
+      "id": "webhook-inbox",
+      "title": {
+        "en": "Go webhook inbox",
+        "es": "Buzón de webhooks Go"
+      },
+      "prompt": {
+        "en": "Build a Go POST /events API accepting bounded JSON with a configured shared token. Store events in PostgreSQL with unique X-Event-ID deduplication. Bound in-flight work and stop cleanly on cancellation. Test missing authentication, malformed input, duplicate events and shutdown. Do not log the token or full payload. Include migrations and local instructions. Do not deploy or call real webhook providers.",
+        "es": "Crea una API Go POST /events que acepte JSON acotado con token compartido configurado. Guarda eventos en PostgreSQL con deduplicación por X-Event-ID único. Limita trabajo en curso y termina limpiamente al cancelar. Prueba autenticación ausente, entrada inválida, duplicados y cierre. No registres token ni payload completo. Incluye migraciones e instrucciones locales. No despliegues ni llames proveedores reales."
+      },
+      "expected_layers": ["backend", "data", "testing"]
+    },
+    {
+      "id": "local-notes",
+      "title": {
+        "en": "Go local notes API",
+        "es": "API Go de notas locales"
+      },
+      "prompt": {
+        "en": "Build a Go HTTP CRUD API for notes in a local SQLite file selected by configuration. Require a nonempty title and return 404 for missing notes. Test validation, CRUD, cancellation and persistence after reopening with isolated temporary database files. Choose an explicit SQLite driver and document its build requirements. Include migrations and local run/test instructions. Do not deploy or contact external services.",
+        "es": "Crea una API HTTP CRUD Go de notas en un archivo SQLite local elegido por configuración. Exige título no vacío y devuelve 404 para notas ausentes. Prueba validación, CRUD, cancelación y persistencia tras reabrir con archivos temporales aislados. Elige un driver SQLite y documenta requisitos de compilación. Incluye migraciones e instrucciones locales. No despliegues ni contactes servicios externos."
+      },
+      "expected_layers": ["backend", "data", "testing"]
+    }
+  ]
+}
