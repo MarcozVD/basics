@@ -159,7 +159,7 @@ test("SPA back replays feature and guide headings; 375px retains granular target
   await page.goto("/basics/");
   await expect(page.locator(".landing-chip[data-reveal]")).toHaveCount(6);
   await expect(page.locator(".landing-install-tabs button[data-reveal]")).toHaveCount(3);
-  await expect(page.locator(".site-footer a[data-reveal]")).toHaveCount(7);
+  await expect(page.locator(".site-footer a[data-reveal]")).toHaveCount(9);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(375);
 });
 

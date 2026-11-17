@@ -3,6 +3,7 @@ import { Inbox as InboxIcon, LoaderCircle, Package } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { type KeyboardEvent as ReactKeyboardEvent, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Link, useMatch } from "react-router";
+import { GlossaryLink } from "@/components/glossary-link";
 import { AnimatedNumber } from "@/components/motion/animated-number";
 import { Button } from "@/components/motion/button/base";
 import { CenterMorphModal, CenterMorphModalContent } from "@/components/motion/center-morph-modal";
@@ -697,6 +698,7 @@ export function InboxPage() {
       </span>
       <p className="text-sm font-medium">{t("inbox.emptyZero")}</p>
       <p className="max-w-md text-sm leading-5 text-muted-foreground">{t(vaultEmpty ? "inbox.emptyVaultLead" : "inbox.emptyLead")}</p>
+      <GlossaryLink />
       <p className="max-w-md text-xs leading-5 text-muted-foreground">
         {t("inbox.emptyHint")} <code className="font-mono text-[12px] text-foreground">propose_note</code>
         {t("inbox.emptyHintEnd")}{" "}
@@ -964,7 +966,10 @@ export function InboxPage() {
                 onEdit={openEdit}
               />
             ) : (
-              <p className="m-auto max-w-sm px-6 text-center text-sm text-muted-foreground">{t("inbox.empty")}</p>
+              <div className="m-auto flex max-w-sm flex-col items-center gap-2 px-6 text-center">
+                <p className="text-sm text-muted-foreground">{t("inbox.empty")}</p>
+                <GlossaryLink />
+              </div>
             )}
           </aside>
         </div>

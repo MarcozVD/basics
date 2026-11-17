@@ -1,10 +1,11 @@
 import type { ActivityEvent, PackInfo, ProposalSummary } from "@marcozvd/basics-core";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, Check, CircleDashed, Copy, GitFork, Inbox, Link2Off, Package, X } from "lucide-react";
+import { ArrowRight, Check, CircleDashed, Copy, GitFork, Inbox, Link2Off, Package } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { ApprovalCard } from "@/components/agents/approval-card";
+import { GlossaryLink } from "@/components/glossary-link";
 import { Button } from "@/components/motion/button/base";
 import { Checkbox } from "@/components/motion/checkbox";
 import { Loader } from "@/components/motion/loader";
@@ -12,6 +13,7 @@ import { MorphPopover, MorphPopoverContent, MorphPopoverTrigger } from "@/compon
 import { Tabs, TabsList, TabsTrigger } from "@/components/motion/tabs";
 import { PAGE_SECTIONS, Page } from "@/components/page";
 import { PageHeader } from "@/components/page-header";
+import { SetupChecklist } from "@/components/setup-checklist";
 import { ErrorState, Loading } from "@/components/state";
 import { type TranslationKey, useI18n } from "@/i18n";
 import { agentColor, agentInitial } from "@/lib/agent-color";
@@ -21,13 +23,12 @@ import { useIntentNavigate } from "@/lib/intent-navigate";
 import { useIntro } from "@/lib/intro";
 import { packProposer } from "@/lib/packs";
 import { useDocumentTitle } from "@/lib/page-title";
-import { useActivity, useConnectStatus, useInbox, useNotes, usePacks, useStats } from "@/lib/queries";
+import { useActivity, useInbox, useNotes, usePacks, useStats } from "@/lib/queries";
 import { type RecentItem, readRecentItems } from "@/lib/recent-notes";
 import { formatCompactRelativeTime, formatFullDateTime, formatRelativeTime } from "@/lib/relative-time";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 
-const SETUP_KEY = "basics:setup-dismissed";
 const CONTINUE_ROWS = 5;
 const ACTIVITY_ROWS = 3;
 /** Loading skeletons reserve their rows so late data does not move the page. */
@@ -167,6 +168,7 @@ function StarterPacks({
           <p className="mt-1 max-w-[72ch] text-xs leading-5 text-muted-foreground">
             {t(allInstalled ? "home.packs.installedDescription" : "home.packs.description")}
           </p>
+          <GlossaryLink />
         </div>
       </div>
 
@@ -382,91 +384,6 @@ function StarterPacks({
   );
 }
 
-interface GettingStartedProps {
-  notes: number;
-  projects: number;
-  /** The packs grid is on screen, so step 1 already has its way in right below. */
-  packsVisible: boolean;
-}
-
-/**
- * One quiet line while a first-run step is still open: the next step, its way in,
- * and a dismiss that remembers the choice on this device.
- */
-function GettingStarted({ notes, projects, packsVisible }: GettingStartedProps) {
-  const { t } = useI18n();
-  const connect = useConnectStatus();
-  const connected = connect.data?.clients.some((client) => client.connected) ?? false;
-  const [dismissed, setDismissed] = useState(() => {
-    try {
-      return localStorage.getItem(SETUP_KEY) === "1";
-    } catch {
-      return false;
-    }
-  });
-
-  const dismiss = () => {
-    setDismissed(true);
-    try {
-      localStorage.setItem(SETUP_KEY, "1");
-    } catch {
-      // Storage can be unavailable in private or restricted contexts.
-    }
-  };
-
-  const steps = [
-    {
-      key: "notes",
-      done: notes > 0,
-      label: t("home.steps.notes"),
-      action: packsVisible ? null : { to: "/?packs=1", label: t("home.steps.notes.action") },
-    },
-    {
-      key: "agent",
-      done: connected,
-      label: t("home.steps.agent"),
-      action: { to: "/settings?section=agents", label: t("home.steps.agent.action") },
-    },
-    {
-      key: "project",
-      done: projects > 0,
-      label: t("home.steps.project"),
-      action: { to: "/recommend", label: t("home.steps.project.action") },
-    },
-  ];
-  const done = steps.filter((step) => step.done).length;
-  const next = steps.find((step) => !step.done);
-  if (!next || dismissed) return null;
-
-  return (
-    <section
-      data-testid="home-getting-started"
-      aria-label={t("home.steps.progress", { done })}
-      className="flex min-h-11 min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5 rounded-xl border border-border/60 bg-muted/30 px-3 py-1.5"
-    >
-      <h2 className="shrink-0 text-xs font-semibold">{t("home.steps.title")}</h2>
-      <p className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{t("home.steps.next", { step: next.label })}</p>
-      {next.action ? (
-        <Link
-          to={next.action.to}
-          className="inline-flex shrink-0 items-center gap-0.5 rounded-sm text-[11px] text-muted-foreground underline decoration-border underline-offset-2 transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-        >
-          {next.action.label}
-          <ArrowRight className="size-3" aria-hidden="true" />
-        </Link>
-      ) : null}
-      <button
-        type="button"
-        aria-label={t("home.steps.dismiss")}
-        onClick={dismiss}
-        className="grid size-6 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-      >
-        <X className="size-3.5" aria-hidden="true" />
-      </button>
-    </section>
-  );
-}
-
 interface InboxStripProps {
   /** At most three most recent proposals to preview. */
   proposals: ProposalSummary[];
@@ -510,7 +427,7 @@ function InboxStrip({ proposals, total, isPending, error, armed, busyId, onRejec
       <section
         data-testid="inbox-strip"
         aria-label={t("home.waiting")}
-        className="flex min-h-11 min-w-0 items-center gap-2.5 rounded-xl border border-border/60 bg-muted/30 px-3 py-1.5"
+        className="flex min-h-11 min-w-0 flex-wrap items-center gap-2.5 rounded-xl border border-border/60 bg-muted/30 px-3 py-1.5"
       >
         <span aria-hidden="true" className="grid size-6 shrink-0 place-items-center rounded-full bg-muted/60 text-muted-foreground">
           <Inbox className="size-3.5" />
@@ -523,6 +440,7 @@ function InboxStrip({ proposals, total, isPending, error, armed, busyId, onRejec
           {t("home.allProposals")}
           <ArrowRight className="size-3" aria-hidden="true" />
         </Link>
+        <GlossaryLink />
       </section>
     );
   }
@@ -855,16 +773,12 @@ export function HomePage() {
   const inbox = useInbox();
   const notes = useNotes();
   const dayActivity = useActivity({ limit: 200 });
-  const connectStatus = useConnectStatus();
   const [searchParams] = useSearchParams();
   const forcePacks = searchParams.get("packs") === "1";
   const showPacks = forcePacks || stats.data?.total === 0;
   const packs = usePacks(showPacks);
 
   const notesTotal = stats.data?.total ?? 0;
-  const projectsTotal = stats.data?.counts.project ?? 0;
-  const stepsComplete = notesTotal > 0 && projectsTotal > 0 && (connectStatus.data?.clients.some((client) => client.connected) ?? false);
-  const showSteps = Boolean(stats.data) && !stepsComplete;
 
   // Questions about a normal vault are still loading when Home first paints, so treat the
   // description as settled rather than showing it and pulling it away a frame later.
@@ -1016,11 +930,7 @@ export function HomePage() {
 
       {showPacks ? (
         <>
-          {showSteps ? (
-            <div>
-              <GettingStarted notes={notesTotal} projects={projectsTotal} packsVisible />
-            </div>
-          ) : null}
+          <SetupChecklist />
           <div>
             <StarterPacks
               packs={packs.data}
@@ -1163,11 +1073,7 @@ export function HomePage() {
                 </section>
               </div>
 
-              {showSteps ? (
-                <div>
-                  <GettingStarted notes={notesTotal} projects={projectsTotal} packsVisible={false} />
-                </div>
-              ) : null}
+              <SetupChecklist />
             </>
           )}
         </>

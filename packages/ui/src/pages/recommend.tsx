@@ -7,6 +7,7 @@ import { createPortal } from "react-dom";
 import { Link } from "react-router";
 import { PromptInput } from "@/components/agents/prompt-input";
 import { EXPORT_TARGETS, ExportModal } from "@/components/export-modal";
+import { GlossaryLink } from "@/components/glossary-link";
 import {
   AdaptiveStepper,
   AdaptiveStepperDecrement,
@@ -790,6 +791,7 @@ export function RecommendPage() {
           ) : vaultEmpty ? (
             <div className="flex flex-col items-start gap-3 pt-2">
               <p className="max-w-[72ch] text-sm text-muted-foreground">{t("recommend.emptyVault.description")}</p>
+              <GlossaryLink />
               <LinkButton asChild size="sm">
                 <Link to="/?packs=1">{t("recommend.emptyVault.action")}</Link>
               </LinkButton>

@@ -79,18 +79,21 @@ test("an empty vault installs the starter packs and Home shows counts", async ({
   await expect(page.getByRole("heading", { name: "Start with a starter pack" })).toBeVisible();
   // The pack picker's language toggle is labelled; Settings > General owns the language choice.
   await expect(page.getByText("Notes language", { exact: true })).toBeVisible();
-  // The first-run checklist explains the loop before the packs; step 1 is open.
+  // The active vault is already open; installing a pack is the next step.
   const steps = page.getByTestId("home-getting-started");
   await expect(steps).toContainText("Get set up");
-  await expect(steps).toHaveAttribute("aria-label", "0 of 3 steps done");
+  await expect(steps).toContainText("1 of 4 steps complete");
+  await expect(steps.locator('[data-step="vault"]')).toHaveAttribute("data-complete", "true");
+  await expect(steps.locator('[data-step="pack"]')).toHaveAttribute("data-complete", "false");
   for (const pack of packs) {
     await expect(page.getByRole("checkbox", { name: pack.name, exact: true })).toBeChecked();
   }
 
   await page.getByRole("button", { name: `Install ${packs.length} packs` }).click();
   await expect(page.getByRole("heading", { name: "Start with a starter pack" })).toBeHidden();
-  // Notes are installed, so the first step ticks from real state.
-  await expect(page.getByTestId("home-getting-started")).toHaveAttribute("aria-label", "1 of 3 steps done");
+  // Installation ticks independently of connecting an agent or reviewing a proposal.
+  await expect(page.getByTestId("home-getting-started")).toContainText("2 of 4 steps complete");
+  await expect(page.getByTestId("home-getting-started").locator('[data-step="pack"]')).toHaveAttribute("data-complete", "true");
 
   const stats = (await (await request.get("/api/stats")).json()) as { total: number; brokenLinks: unknown[] };
   expect(stats.total).toBeGreaterThan(0);
