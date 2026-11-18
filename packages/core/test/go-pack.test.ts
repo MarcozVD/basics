@@ -16,8 +16,8 @@ test("Go pack installs a closed bilingual graph with distinct alternatives and s
       installPack(vault, PACKS, "go-api", { lang });
       assert.deepEqual(vault.issues, []);
       assert.equal(vault.get("go-api")?.data.source, "pack:go-api@1.1.0");
-      assert.equal(vault.get("postgresql")?.data.source, "pack:databases@1.0.0");
-      assert.equal(vault.get("sqlite")?.data.source, "pack:databases@1.0.0");
+      assert.equal(vault.get("postgresql")?.data.source, "pack:databases@1.1.0");
+      assert.equal(vault.get("sqlite")?.data.source, "pack:databases@1.1.0");
       const notes = packNotes(PACKS, "go-api", lang);
       assert.equal(notes.length, 27);
       ids.push(notes.map((note) => note.id).sort());

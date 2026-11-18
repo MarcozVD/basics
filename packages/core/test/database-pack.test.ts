@@ -20,6 +20,7 @@ function legacyPacks(root: string) {
     fs.writeFileSync(path.join(packs, name, "pack.json"), JSON.stringify({ ...manifest, version, requires, note_moves: undefined }));
   }
   for (const lang of ["en", "es"]) {
+    fs.cpSync(path.join(packs, "python", "notes", lang), path.join(packs, "python-api", "notes", lang), { recursive: true });
     for (const [id, type, owner] of [
       ["postgresql", "tech", "python-api"],
       ["sql-migrations", "practices", "python-api"],
@@ -45,7 +46,7 @@ function oldVault(root: string, lang: string) {
   const vault = Vault.load(directory);
   installPack(vault, legacyPacks(root), "rust-api", { lang });
   assert.deepEqual(vault.issues, []);
-  assert.equal(vault.notes.size, 42);
+  assert.equal(vault.notes.size, 43);
   return vault;
 }
 
@@ -58,10 +59,14 @@ test("shared databases are closed and each API installs without other language s
         const result = installPack(vault, PACKS, pack, { lang });
         assert.deepEqual(
           Object.keys(result.byPack),
-          pack === "databases" ? ["core-layers", "databases"] : ["core-layers", "databases", pack],
+          pack === "databases"
+            ? ["core-layers", "databases"]
+            : pack === "python-api"
+              ? ["core-layers", "databases", "python", pack]
+              : ["core-layers", "databases", pack],
         );
         assert.deepEqual(vault.issues, []);
-        for (const id of SHARED) assert.equal(vault.get(id)?.data.source, "pack:databases@1.0.0");
+        for (const id of SHARED) assert.equal(vault.get(id)?.data.source, "pack:databases@1.1.0");
         for (const [language, owner] of [
           ["python", "python-api"],
           ["rust", "rust-api"],
@@ -73,7 +78,7 @@ test("shared databases are closed and each API installs without other language s
           packNotes(PACKS, "databases", lang)
             .map((note) => note.id)
             .sort(),
-          SHARED,
+          [...SHARED, "duckdb"].sort(),
         );
       } finally {
         fs.rmSync(root, { recursive: true, force: true });
@@ -93,10 +98,10 @@ test.each(
     const before = [...vault.notes.values()].map((note) => [note.id, note.hash]).sort();
     for (const pack of order) updatePack(vault, PACKS, pack);
     assert.deepEqual([...Vault.load(vault.root).notes.values()].map((note) => [note.id, note.hash]).sort(), before);
-    assert.equal(vault.listProposals().length, 36);
+    assert.equal(vault.listProposals().length, 37);
     for (const id of SHARED) {
       const pending = vault.getProposal(id);
-      assert.equal(pending?.meta.proposed_by, "pack:databases@1.0.0");
+      assert.equal(pending?.meta.proposed_by, "pack:databases@1.1.0");
       assert.equal(pending?.meta.action, "update");
       assert.equal(pending?.meta.base_hash, vault.get(id)?.hash);
       assert.equal(pending?.data.pack_lang, lang);
@@ -109,29 +114,32 @@ test.each(
     );
     const rejected = vault.rejectMany();
     assert.deepEqual(rejected.failed, []);
-    assert.equal(rejected.rejected.length, 36);
+    assert.equal(rejected.rejected.length, 37);
     assert.deepEqual([...Vault.load(vault.root).notes.values()].map((note) => [note.id, note.hash]).sort(), before);
     for (const pack of order) updatePack(vault, PACKS, pack);
-    assert.equal(vault.listProposals().length, 36);
+    assert.equal(vault.listProposals().length, 37);
     // Partially approve dependency moves first, then retry at the already-installed shared version.
     vault.approve("postgresql");
     for (const pack of order) updatePack(vault, PACKS, pack);
-    assert.equal(vault.getProposal("sqlite")?.meta.proposed_by, "pack:databases@1.0.0");
+    assert.equal(vault.getProposal("sqlite")?.meta.proposed_by, "pack:databases@1.1.0");
     const approved = vault.approveMany();
     assert.deepEqual(approved.failed, []);
-    assert.equal(approved.approved.length, 35);
+    assert.equal(approved.approved.length, 36);
     assert.deepEqual(vault.issues, []);
-    assert.equal(vault.notes.size, 42);
-    assert.deepEqual(
-      [...vault.notes.keys()].sort(),
-      before.map(([id]) => id),
-    );
-    assert.deepEqual(installedPacks(vault), { "core-layers": "1.1.0", databases: "1.0.0", "python-api": "1.2.0", "rust-api": "1.1.0" });
-    for (const id of SHARED) assert.equal(vault.get(id)?.data.source, "pack:databases@1.0.0");
+    assert.equal(vault.notes.size, 44);
+    assert.deepEqual([...vault.notes.keys()].sort(), [...before.map(([id]) => id), "duckdb"].sort());
+    assert.deepEqual(installedPacks(vault), {
+      "core-layers": "1.2.0",
+      databases: "1.1.0",
+      python: "1.0.0",
+      "python-api": "1.3.0",
+      "rust-api": "1.1.0",
+    });
+    for (const id of SHARED) assert.equal(vault.get(id)?.data.source, "pack:databases@1.1.0");
     for (const pack of order) assert.equal(updatePack(vault, PACKS, pack).upToDate, true);
     assert.deepEqual(vault.listProposals(), []);
     installPack(vault, PACKS, "go-api", { lang });
-    assert.equal(vault.notes.size, 69);
+    assert.equal(vault.notes.size, 71);
     assert.deepEqual(vault.issues, []);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
@@ -207,11 +215,11 @@ test("an existing preview Go pack updates its dependency-only version through re
     assert.equal(installedPacks(vault)["go-api"], "1.0.0");
     const before = [...vault.notes.keys()].sort();
     updatePack(vault, PACKS, "go-api");
-    assert.equal(vault.listProposals().length, 30);
+    assert.equal(vault.listProposals().length, 31);
     assert.equal(vault.get("go")?.data.source, "pack:go-api@1.0.0");
     assert.deepEqual(vault.approveMany().failed, []);
     assert.equal(installedPacks(vault)["go-api"], "1.1.0");
-    assert.deepEqual([...vault.notes.keys()].sort(), before);
+    assert.deepEqual([...vault.notes.keys()].sort(), [...before, "duckdb"].sort());
     assert.equal(updatePack(vault, PACKS, "go-api").upToDate, true);
     assert.deepEqual(vault.issues, []);
   } finally {
@@ -219,7 +227,7 @@ test("an existing preview Go pack updates its dependency-only version through re
   }
 });
 
-test.each(["en", "es"])("migration keeps pre-update edits in all handoffs and 33 version refreshes (%s)", (lang) => {
+test.each(["en", "es"])("migration keeps pre-update edits in all handoffs and version refreshes (%s)", (lang) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "basics-db-edited-"));
   const content = (note: { data: Record<string, unknown>; body: string }) => {
     const data = { ...note.data };
@@ -246,8 +254,8 @@ test.each(["en", "es"])("migration keeps pre-update edits in all handoffs and 33
     const before = new Map([...vault.notes.values()].map((note) => [note.id, content(note)]));
     updatePack(vault, PACKS, "python-api");
     updatePack(vault, PACKS, "rust-api");
-    assert.equal(vault.listProposals().length, 36);
-    for (const proposal of vault.listProposals()) {
+    assert.equal(vault.listProposals().length, 37);
+    for (const proposal of vault.listProposals().filter((proposal) => proposal.id !== "duckdb")) {
       assert.deepEqual(content(proposal), before.get(proposal.id));
       assert.equal(proposal.meta.base_hash, vault.get(proposal.id)?.hash);
     }
@@ -255,12 +263,13 @@ test.each(["en", "es"])("migration keeps pre-update edits in all handoffs and 33
     updatePack(vault, PACKS, "rust-api");
     const result = vault.approveMany();
     assert.deepEqual(result.failed, []);
-    assert.equal(result.approved.length, 36);
+    assert.equal(result.approved.length, 37);
     const fresh = Vault.load(vault.root);
-    assert.equal(fresh.notes.size, 42);
-    for (const note of fresh.notes.values()) assert.deepEqual(content(note), before.get(note.id));
-    for (const id of SHARED) assert.equal(fresh.get(id)?.data.source, "pack:databases@1.0.0");
-    assert.equal(fresh.get("fastapi")?.data.source, "pack:python-api@1.2.0");
+    assert.equal(fresh.notes.size, 44);
+    for (const [id, expected] of before) assert.deepEqual(content(fresh.get(id)!), expected);
+    assert.ok(fresh.get("duckdb"));
+    for (const id of SHARED) assert.equal(fresh.get(id)?.data.source, "pack:databases@1.1.0");
+    assert.equal(fresh.get("fastapi")?.data.source, "pack:python-api@1.3.0");
     assert.equal(fresh.get("rust")?.data.source, "pack:rust-api@1.1.0");
     assert.deepEqual(fresh.issues, []);
     assert.equal(updatePack(fresh, PACKS, "python-api").upToDate, true);

@@ -16,11 +16,11 @@ test("mobile is bilingual, closed and independent of other stack packs", () => {
       const result = installPack(vault, PACKS, "mobile", { lang });
       assert.deepEqual(Object.keys(result.byPack).sort(), ["core-layers", "databases", "mobile", "typescript"]);
       assert.deepEqual(vault.issues, []);
-      assert.equal(vault.notes.size, 44);
+      assert.equal(vault.notes.size, 46);
       for (const id of ["react", "nextjs", "vitest", "python", "rust", "go"]) assert.equal(vault.get(id), undefined);
       assert.equal(vault.get("typescript")?.data.source, "pack:typescript@1.0.0");
       assert.equal(vault.get("mobile")?.data.type, "layer");
-      assert.equal(vault.get("mobile")?.data.source, "pack:core-layers@1.1.0");
+      assert.equal(vault.get("mobile")?.data.source, "pack:core-layers@1.2.0");
       const notes = packNotes(PACKS, "mobile", lang);
       assert.equal(notes.length, 32);
       ids.push(notes.map((note) => note.id).sort());
@@ -62,7 +62,7 @@ test.each(["en", "es"])("old web/core update preserves local edits while sharing
   };
   try {
     const vault = Vault.load(root);
-    for (const note of packNotes(PACKS, "core-layers", lang).filter((note) => note.id !== "mobile")) {
+    for (const note of packNotes(PACKS, "core-layers", lang).filter((note) => !["mobile", "ml"].includes(note.id))) {
       vault.writeNote(note.id, { ...note.data, source: "pack:core-layers@1.0.0", pack_lang: lang }, note.body, { reload: false });
     }
     for (const pack of ["web-typescript", "typescript"])
@@ -86,10 +86,10 @@ test.each(["en", "es"])("old web/core update preserves local edits while sharing
     assert.equal(vault.notes.size, 14);
     const before = new Map([...vault.notes.values()].map((note) => [note.id, content(note)]));
     updatePack(vault, PACKS, "web-typescript");
-    assert.equal(vault.listProposals().length, 10);
+    assert.equal(vault.listProposals().length, 16);
     assert.equal(vault.get("mobile"), undefined);
-    assert.equal(vault.getProposal("mobile")?.meta.proposed_by, "pack:core-layers@1.1.0");
-    for (const proposal of vault.listProposals().filter((proposal) => proposal.id !== "mobile")) {
+    assert.equal(vault.getProposal("mobile")?.meta.proposed_by, "pack:core-layers@1.2.0");
+    for (const proposal of vault.listProposals().filter((proposal) => !["mobile", "ml"].includes(proposal.id))) {
       assert.deepEqual(content(proposal), before.get(proposal.id));
     }
     const pending = vault.listProposals().map((proposal) => fs.readFileSync(proposal.path, "utf8"));
@@ -100,12 +100,12 @@ test.each(["en", "es"])("old web/core update preserves local edits while sharing
     );
     assert.deepEqual(vault.approveMany().failed, []);
     const fresh = Vault.load(root);
-    assert.equal(fresh.notes.size, 15);
+    assert.equal(fresh.notes.size, 16);
     for (const [id, expected] of before) assert.deepEqual(content(fresh.get(id) as NonNullable<ReturnType<Vault["get"]>>), expected);
     for (const id of ["typescript", "typescript-strict", "typescript-typecheck"])
       assert.equal(fresh.get(id)?.data.source, "pack:typescript@1.0.0");
     assert.equal(fresh.get("react")?.data.source, "pack:web-typescript@1.2.0");
-    assert.equal(fresh.get("mobile")?.data.source, "pack:core-layers@1.1.0");
+    assert.equal(fresh.get("mobile")?.data.source, "pack:core-layers@1.2.0");
     assert.deepEqual(fresh.issues, []);
     assert.equal(updatePack(fresh, PACKS, "web-typescript").upToDate, true);
   } finally {

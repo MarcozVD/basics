@@ -80,5 +80,5 @@ test("pack install core-layers works on a fresh vault", () => {
 
   const vault = Vault.load(vaultDir);
   for (const note of packNotes(PACKS, "core-layers", "en")) assert.ok(vault.get(note.id), `missing ${note.id}`);
-  assert.equal(vault.get("backend")?.data.source, "pack:core-layers@1.1.0");
+  assert.equal(vault.get("backend")?.data.source, "pack:core-layers@1.2.0");
 }, 60000);
