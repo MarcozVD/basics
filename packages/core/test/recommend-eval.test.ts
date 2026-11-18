@@ -35,7 +35,7 @@ function metrics(entries: EvalCaseResult[]): { cases: number; hit1: number; hit3
   };
 }
 
-test("keyword recommendation eval meets hit@3 and forbid thresholds", () => {
+test("keyword recommendation eval meets hit@3 and forbid thresholds", { timeout: 60_000 }, () => {
   const cases = JSON.parse(fs.readFileSync(CASES, "utf8")) as EvalCase[];
   const { dirs, vaults } = tempVaults();
   try {

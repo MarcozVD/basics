@@ -17,7 +17,7 @@ export interface EvalCase {
   /** Describes the project without naming the expected technology; tracked separately. */
   indirect?: boolean;
   /** `holdout` cases are authored separately from the cases used while tuning scoring. */
-  split?: "dev" | "holdout";
+  split?: "dev" | "holdout" | "tune" | "held-out";
   expect: Record<string, EvalExpectation>;
 }
 
@@ -29,6 +29,7 @@ export interface EvalLayerResult {
   forbidden: string[];
   hit1: boolean;
   hit3: boolean;
+  reciprocalRank: number;
   violations: string[];
 }
 
@@ -36,7 +37,7 @@ export interface EvalCaseResult {
   description: string;
   lang: "en" | "es";
   indirect: boolean;
-  split?: "dev" | "holdout";
+  split?: "dev" | "holdout" | "tune" | "held-out";
   layers: EvalLayerResult[];
   hit1: boolean;
   hit3: boolean;
@@ -49,6 +50,8 @@ export interface EvalResult {
   hit1: number;
   /** Share of layer expectations whose top three contained an expected candidate (0..1). */
   hit3: number;
+  /** Mean reciprocal rank of the first relevant candidate per expected layer. */
+  mrr: number;
   /** Number of forbidden candidates that showed up. */
   forbidViolations: number;
   perCase: EvalCaseResult[];
@@ -67,6 +70,7 @@ export function evaluate(vault: Vault, cases: EvalCase[], recommendFn: (vault: V
       const expectedTop3 = expected.top3 ?? (expected.top1 ? [expected.top1] : []);
       const hit1 = expected.top1 ? top[0] === expected.top1 : expectedTop3.length > 0 && expectedTop3.includes(top[0]);
       const hit3 = expectedTop3.length > 0 && top3.some((id) => expectedTop3.includes(id));
+      const rank = top.findIndex((id) => expectedTop3.includes(id));
       const forbidden = expected.forbid ?? [];
       return {
         layer,
@@ -76,6 +80,7 @@ export function evaluate(vault: Vault, cases: EvalCase[], recommendFn: (vault: V
         forbidden,
         hit1,
         hit3,
+        reciprocalRank: rank < 0 ? 0 : 1 / (rank + 1),
         violations: forbidden.filter((id) => top.includes(id)),
       };
     });
@@ -97,6 +102,7 @@ export function evaluate(vault: Vault, cases: EvalCase[], recommendFn: (vault: V
     cases: cases.length,
     hit1: total ? expectations.filter((layer) => layer.hit1).length / total : 0,
     hit3: total ? expectations.filter((layer) => layer.hit3).length / total : 0,
+    mrr: total ? expectations.reduce((sum, layer) => sum + layer.reciprocalRank, 0) / total : 0,
     forbidViolations: perCase.reduce((sum, testCase) => sum + testCase.forbidViolations, 0),
     perCase,
   };

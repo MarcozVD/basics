@@ -1,0 +1,208 @@
+{
+  "schema_version": 1,
+  "mrr_definition": "reciprocal first relevant rank across positive candidates, macro averaged over expected layers",
+  "fingerprints": {
+    "internal": "4b0a14d7240268056f613b203060d1fabcde4e636cab8411de72a96187105364",
+    "realistic": "54d2d6bc1428306ada23b98637e9ebac0fa8620336fc040b2deee6b819bc5979",
+    "github": "5a63e272d4d9c15d9b4a252d50af7192e91656ff8c052b103daa7267ba9dc43a",
+    "private": "1f1d26fe234507ff6b59fb46b4b05cfc9f4582d21fbfb3b9031fce008c0d7bc8",
+    "github-audit": "d9eb9447f1eeca48ea0bdded25c54642010995eb19186590ec7cb04cc413be37"
+  },
+  "rows": {
+    "keywords/internal/all": {
+      "set": "internal",
+      "mode": "keywords",
+      "split": "all",
+      "cases": 72,
+      "expectations": 83,
+      "hit1": 0.9879518072289156,
+      "hit3": 0.9879518072289156,
+      "mrr": 0.9903614457831326,
+      "forbid": 0
+    },
+    "keywords/internal/holdout": {
+      "set": "internal",
+      "mode": "keywords",
+      "split": "holdout",
+      "cases": 30,
+      "expectations": 30,
+      "hit1": 1,
+      "hit3": 1,
+      "mrr": 1,
+      "forbid": 0
+    },
+    "keywords/internal/indirect": {
+      "set": "internal",
+      "mode": "keywords",
+      "split": "indirect",
+      "cases": 27,
+      "expectations": 27,
+      "hit1": 0.9629629629629629,
+      "hit3": 0.9629629629629629,
+      "mrr": 0.9703703703703703,
+      "forbid": 0
+    },
+    "keywords/internal/direct": {
+      "set": "internal",
+      "mode": "keywords",
+      "split": "direct",
+      "cases": 45,
+      "expectations": 56,
+      "hit1": 1,
+      "hit3": 1,
+      "mrr": 1,
+      "forbid": 0
+    },
+    "keywords/realistic/all": {
+      "set": "realistic",
+      "mode": "keywords",
+      "split": "all",
+      "cases": 25,
+      "expectations": 25,
+      "hit1": 1,
+      "hit3": 1,
+      "mrr": 1,
+      "forbid": 0
+    },
+    "keywords/realistic/indirect": {
+      "set": "realistic",
+      "mode": "keywords",
+      "split": "indirect",
+      "cases": 19,
+      "expectations": 19,
+      "hit1": 1,
+      "hit3": 1,
+      "mrr": 1,
+      "forbid": 0
+    },
+    "keywords/realistic/direct": {
+      "set": "realistic",
+      "mode": "keywords",
+      "split": "direct",
+      "cases": 6,
+      "expectations": 6,
+      "hit1": 1,
+      "hit3": 1,
+      "mrr": 1,
+      "forbid": 0
+    },
+    "keywords/github/all": {
+      "set": "github",
+      "mode": "keywords",
+      "split": "all",
+      "cases": 150,
+      "expectations": 417,
+      "hit1": 0.1486810551558753,
+      "hit3": 0.28776978417266186,
+      "mrr": 0.2406256812731634,
+      "forbid": 0
+    },
+    "keywords/github/tune": {
+      "set": "github",
+      "mode": "keywords",
+      "split": "tune",
+      "cases": 105,
+      "expectations": 290,
+      "hit1": 0.13793103448275862,
+      "hit3": 0.2827586206896552,
+      "mrr": 0.23324588247002054,
+      "forbid": 0
+    },
+    "keywords/github/held-out": {
+      "set": "github",
+      "mode": "keywords",
+      "split": "held-out",
+      "cases": 45,
+      "expectations": 127,
+      "hit1": 0.1732283464566929,
+      "hit3": 0.2992125984251969,
+      "mrr": 0.25747719035120603,
+      "forbid": 0
+    },
+    "keywords/github/indirect": {
+      "set": "github",
+      "mode": "keywords",
+      "split": "indirect",
+      "cases": 72,
+      "expectations": 188,
+      "hit1": 0.16489361702127658,
+      "hit3": 0.2925531914893617,
+      "mrr": 0.2622213779128673,
+      "forbid": 0
+    },
+    "keywords/github/direct": {
+      "set": "github",
+      "mode": "keywords",
+      "split": "direct",
+      "cases": 78,
+      "expectations": 229,
+      "hit1": 0.13537117903930132,
+      "hit3": 0.2838427947598253,
+      "mrr": 0.22289646307113561,
+      "forbid": 0
+    },
+    "keywords/github/apps-only/all": {
+      "set": "github",
+      "mode": "keywords",
+      "split": "apps-only/all",
+      "cases": 76,
+      "expectations": 229,
+      "hit1": 0.14410480349344978,
+      "hit3": 0.27510917030567683,
+      "mrr": 0.22814703491559396,
+      "forbid": 0
+    },
+    "keywords/github/apps-only/tune": {
+      "set": "github",
+      "mode": "keywords",
+      "split": "apps-only/tune",
+      "cases": 53,
+      "expectations": 159,
+      "hit1": 0.15723270440251572,
+      "hit3": 0.29559748427672955,
+      "mrr": 0.24357115630700546,
+      "forbid": 0
+    },
+    "keywords/github/apps-only/held-out": {
+      "set": "github",
+      "mode": "keywords",
+      "split": "apps-only/held-out",
+      "cases": 23,
+      "expectations": 70,
+      "hit1": 0.11428571428571428,
+      "hit3": 0.22857142857142856,
+      "mrr": 0.19311224489795917,
+      "forbid": 0
+    },
+    "keywords/private/all": {
+      "set": "private",
+      "mode": "keywords",
+      "split": "all",
+      "cases": 30,
+      "expectations": 31,
+      "hit1": 0.03225806451612903,
+      "hit3": 0.06451612903225806,
+      "mrr": 0.06451612903225806,
+      "forbid": 0,
+      "comparison": "other vault, not comparable"
+    },
+    "keywords/private/direct": {
+      "set": "private",
+      "mode": "keywords",
+      "split": "direct",
+      "cases": 30,
+      "expectations": 31,
+      "hit1": 0.03225806451612903,
+      "hit3": 0.06451612903225806,
+      "mrr": 0.06451612903225806,
+      "forbid": 0,
+      "comparison": "other vault, not comparable"
+    }
+  },
+  "unavailable": [
+    {
+      "mode": "hybrid",
+      "reason": "embeddings runtime unavailable"
+    }
+  ]
+}
