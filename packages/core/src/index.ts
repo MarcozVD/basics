@@ -12,6 +12,7 @@ export * from "./outcome.js";
 export * from "./pack-tasks.js";
 export * from "./packs.js";
 export * from "./query.js";
+export * from "./recommend-history.js";
 export * from "./schema.js";
 export * from "./tar.js";
 export * from "./templates.js";

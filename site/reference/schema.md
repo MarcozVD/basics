@@ -110,6 +110,7 @@ Stored in `projects/`.
 | `description` | `string` | no | — | — |
 | `path` | `string` | no | — | Absolute path of the project on disk. |
 | `status` | `active` \| `paused` \| `done` \| `archived` | no | `active` | — |
+| `outcome` | `successful` \| `failed` \| `abandoned` | no | — | — |
 | `profile` | `string` | no | — | Profile id it started from. |
 | `stack` | map<string, `string`[]> | no | `{}` | layer id -> tech ids |
 | `reason` | `string` | no | — | — |
