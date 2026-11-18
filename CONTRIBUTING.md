@@ -26,7 +26,7 @@ The repo is an npm/pnpm workspace: `packages/core` (library), `packages/basics` 
 | `npm run e2e` | Playwright end-to-end tests; run `npm run build` first |
 | `npm run lint` | Biome lint and format check (`npm run format` applies fixes) |
 | `npm run typecheck` | TypeScript check without emitting |
-| `npm run eval` | Recommendation eval over the official packs (`--hybrid`, `--grid`, `--json`) |
+| `npm run eval` | Recommendation eval over the official, realistic and public GitHub sets, gated against `scripts/eval/baseline.json` (`--hybrid`, `--grid`, `--json`, `--record-baseline`) |
 | `npm run gen:reference` | Regenerate `site/reference/` from the code |
 | `npm run docs:dev` | VitePress dev server for the docs site (`npm run docs:build` to build it) |
 
