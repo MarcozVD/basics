@@ -128,20 +128,34 @@ The model is configurable with `embeddingsModel` (default `Xenova/multilingual-e
 
 ## Evaluating the ranking
 
-From the repo, over the official packs:
+The eval checks the ranking against labelled cases from the repo. It runs four sets:
+
+- **Official keyword cases**: 72 cases written against the official packs.
+- **Realistic fixture vault**: 25 cases on a larger vault written like a real one (`npm run eval -- --realistic`).
+- **Public GitHub repositories**: 150 repositories, each with its description and the technologies its manifests use.
+  105 cases tune the ranking and 45 are held out. Held-out cases are never used for tuning. Libraries, examples and mixed
+  repositories stay in the full set. The apps-only rows (76 cases, 53 tune and 23 held out) measure applications alone.
+- **Private set**: runs only on a maintainer's machine, from `BASICS_PRIVATE_EVAL`. CI always skips it, and its numbers
+  are not comparable with the public sets.
+
+The recorded baseline for the held-out GitHub cases, keywords only, is hit@1 0.173, hit@3 0.299 and MRR 0.257. These
+numbers are low. They are a baseline, not a target: they show where the ranking stands today, so a change that makes it
+worse fails the eval. They do not say how well the ranking works for your vault.
 
 ```bash
-npm run eval                        # keywords: hit@1, hit@3, forbid violations
+npm run eval                        # every set, gated against scripts/eval/baseline.json
 npm run eval -- --hybrid            # hybrid score (requires `basics embeddings enable` first)
 npm run eval -- --hybrid --grid     # sweep the hybrid weights (w, θ, μ)
 npm run eval -- --json              # raw JSON result
+npm run eval -- --record-baseline   # contributors only: record a new baseline after review
 ```
 
-Run the eval after changing a pack or touching the scoring code; `forbid` violations mean a `avoid_when` was recommended
-anyway.
+CI runs `npm run eval` on every change. It fails when a gated metric drops below the recorded baseline: hit@1, hit@3, MRR,
+forbidden results, case counts, split membership or fixture hashes. Recording a baseline is a review step, never a CI
+repair step. Hybrid runs only when the embeddings runtime is installed; CI reports it as skipped otherwise. Run the eval
+after changing a pack or touching the scoring code; `forbid` violations mean an `avoid_when` was recommended anyway.
 
-`npm run eval -- --realistic` runs the same checks against a larger fixture vault written like a real one (many
-notes with only tags and a short body). Both suites guard against regressions while the scoring changes; they are not
-an accuracy promise for your vault, which depends on how much `use_when`, tags and text your notes have. The
-**hybrid** numbers require the embeddings runtime, so `npm run eval -- --hybrid` only runs after
-`basics embeddings enable` (or the **Turn on semantic matching** button) has installed it.
+The sets guard against regressions while the scoring changes; they are not an accuracy promise for your vault, which
+depends on how much `use_when`, tags and text your notes have. The **hybrid** numbers require the embeddings runtime, so
+`npm run eval -- --hybrid` only runs after `basics embeddings enable` (or the **Turn on semantic matching** button) has
+installed it.
