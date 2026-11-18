@@ -20,12 +20,14 @@ import {
   type Embedder,
   type EmbeddingsEnableResponse,
   type ExportRequest,
+  historyConfigPatchSchema,
   installPack,
   type LayerSummary,
   listNotes,
   listPacks,
   loadConfig,
   loadIndex,
+  loadVaultConfig,
   type NoteType,
   NotFoundError,
   PackDownloadError,
@@ -37,6 +39,7 @@ import {
   renderExport,
   type SaveNoteRequest,
   saveConfig,
+  saveHistoryConfig,
   search,
   syncIndex,
   title,
@@ -408,6 +411,11 @@ export function createApp(opts: {
   });
 
   app.get("/api/config", (c) => c.json({ language: loadConfig().language }));
+  app.get("/api/vault-config", (c) => c.json(loadVaultConfig(opts.root)));
+  app.put("/api/vault-config/history", async (c) => {
+    const patch = historyConfigPatchSchema.parse(await c.req.json());
+    return c.json(saveHistoryConfig(opts.root, patch));
+  });
 
   app.post("/api/connect", async (c) => {
     const body = connectRequestSchema.parse(await c.req.json().catch(() => ({})));

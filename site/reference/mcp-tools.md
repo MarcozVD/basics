@@ -200,6 +200,7 @@ Propose an outcome for a project note: append lessons, optionally extend tech no
 | --- | --- | --- | --- |
 | `project` | `string` | yes | Project note id |
 | `summary` | `string` | yes | What happened and what was learned |
+| `outcome` | `successful` \| `failed` \| `abandoned` | no | Explicit result for future stack recommendations; proposed for review with the project |
 | `lessons` | `string`[] | no | — |
 | `tech_updates` | { id, add_use_when, add_avoid_when, add_performs_best, lesson }[] | no | — |
 

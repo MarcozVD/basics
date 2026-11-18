@@ -269,8 +269,7 @@ function renderOverview(overview: VaultOverview): string {
 }
 
 /**
- * A candidate with only the parts that carry information: no empty match lists, no zero parts in
- * the breakdown. The keys that are left are exactly the documented ones for a candidate.
+ * Preserve the compact contract: no zero scoring parts or empty match/evidence lists.
  */
 function compactCandidate(candidate: Candidate): Record<string, unknown> {
   const compact: Record<string, unknown> = { id: candidate.id, kind: candidate.kind, score: candidate.score };
@@ -286,6 +285,7 @@ function compactCandidate(candidate: Candidate): Record<string, unknown> {
   }
   if (candidate.language_boost) compact.language_boost = candidate.language_boost;
   compact.score_breakdown = Object.fromEntries(Object.entries(candidate.score_breakdown).filter(([, part]) => part));
+  if (candidate.score_breakdown.history && candidate.history_projects?.length) compact.history_projects = candidate.history_projects;
   return compact;
 }
 
@@ -504,6 +504,10 @@ const TOOLS: ToolSpec[] = [
     inputSchema: {
       project: z.string().describe("Project note id"),
       summary: z.string().describe("What happened and what was learned"),
+      outcome: z
+        .enum(["successful", "failed", "abandoned"])
+        .optional()
+        .describe("Explicit result for future stack recommendations; proposed for review with the project"),
       lessons: z.array(z.string()).optional(),
       tech_updates: z
         .array(
