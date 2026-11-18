@@ -18,4 +18,4 @@ tags: [dinamico, tipado-gradual]
 ---
 # Python
 
-Lenguaje principal para backend rápido y datos. Frameworks: [[fastapi]]. Tests con [[pytest]].
+Lenguaje principal para backend rápido y datos. Frameworks: fastapi. Tests con [[pytest]].

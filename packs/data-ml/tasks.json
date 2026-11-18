@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "tasks": [
+    {
+      "id": "csv-report",
+      "title": {
+        "en": "Clean CSV and report",
+        "es": "Limpiar CSV y generar informe"
+      },
+      "prompt": {
+        "en": "Build a Python data analysis tool that cleans a local CSV and writes a summary report. Declare schema, null and duplicate rules, retain rejected-row counts and test malformed input. Use small synthetic fixtures and document local commands. No external services or private data.",
+        "es": "Crea una herramienta de análisis Python que limpie CSV local y escriba informe resumen. Declara esquema, nulos y duplicados, conserva conteos de rechazo y prueba entradas malformadas. Usa fixtures sintéticos pequeños y documenta comandos locales. Sin servicios externos ni datos privados."
+      },
+      "expected_layers": ["data", "ml", "testing"]
+    },
+    {
+      "id": "heldout-classifier",
+      "title": {
+        "en": "Train a held-out classifier",
+        "es": "Entrenar clasificador con test reservado"
+      },
+      "prompt": {
+        "en": "Build a Python tabular classifier with scikit-learn and a held-out split. Fit preprocessing only on training data, compare a simple baseline and report suitable metrics without tuning on test data. Record environment, seeds and data provenance. Test split disjointness and transformations using a small synthetic dataset. No deployment or external downloads.",
+        "es": "Crea un clasificador tabular Python con scikit-learn y partición reservada. Ajusta preprocesamiento solo en entrenamiento, compara baseline y reporta métricas sin optimizar con test. Registra entorno, semillas y procedencia. Prueba particiones disjuntas y transformaciones con dataset sintético pequeño. Sin despliegue ni descargas externas."
+      },
+      "expected_layers": ["data", "ml", "testing"]
+    },
+    {
+      "id": "batch-pipeline",
+      "title": {
+        "en": "Small batch pipeline",
+        "es": "Pipeline batch pequeño"
+      },
+      "prompt": {
+        "en": "Build a Python batch data pipeline that reads local Parquet partitions, validates schemas and writes aggregate outputs. Make reruns idempotent and test partial failures and invalid records. Choose a lightweight entrypoint or explicit orchestration and explain why. Include local fixtures and run instructions, no scheduler deployment or external services.",
+        "es": "Crea un pipeline batch Python que lea particiones Parquet locales, valide esquemas y escriba agregados. Haz reejecuciones idempotentes y prueba fallos parciales e inválidos. Elige entrypoint ligero u orquestación explícita y explica por qué. Incluye fixtures e instrucciones locales, sin desplegar planificador ni servicios externos."
+      },
+      "expected_layers": ["data", "ml", "testing"]
+    },
+    {
+      "id": "notebook-module",
+      "title": {
+        "en": "From notebook to module",
+        "es": "De notebook a módulo"
+      },
+      "prompt": {
+        "en": "Build a Python exploratory data notebook plus reusable module for its transformations. Produce a small report from a synthetic local dataset, run all cells in a clean kernel and test module behavior independently. Pin dependencies and document reproducible commands. Do not commit secrets, real private data or large outputs.",
+        "es": "Crea un notebook exploratorio Python y módulo reutilizable para transformaciones. Produce informe pequeño con dataset sintético local, ejecuta todo desde kernel limpio y prueba módulo independientemente. Fija dependencias y documenta comandos reproducibles. No publiques secretos, datos privados ni salidas grandes."
+      },
+      "expected_layers": ["data", "ml", "testing"]
+    }
+  ]
+}
