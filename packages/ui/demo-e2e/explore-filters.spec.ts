@@ -9,11 +9,11 @@ for (const mode of ["direct", "hero", "embed"]) {
     await expect(scope.getByRole("heading", { name: "Explore", exact: true })).toBeVisible();
     const filters = scope.locator('fieldset button[aria-haspopup="listbox"]');
     const rows = scope.getByRole("listbox").first().getByRole("option");
-    await expect(rows).toHaveCount(27);
+    await expect(rows).toHaveCount(29);
     if (embedded) expect(await page.locator(".landing-window-viewport").evaluate((e) => e.clientWidth / 1280)).toBeLessThan(1);
     await filters.nth(0).click();
     await scope.getByRole("option", { name: /^Tech/ }).click();
-    await expect(rows).toHaveCount(10);
+    await expect(rows).toHaveCount(11);
     await expect(filters.nth(0)).toHaveText("Tech");
     await filters.nth(1).click();
     await scope.getByRole("option", { name: "Frontend", exact: true }).click();

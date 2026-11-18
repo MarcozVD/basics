@@ -265,10 +265,11 @@ function updateOnePack(vault: Vault, packsDir: string, name: string, preferredLa
         : `New dependency pack ${name}@${manifest.version}`,
   };
   const refreshSource = Boolean(
-    oldVersion &&
-      (manifest.note_moves ?? []).some(
-        (move) => compareVersions(oldVersion, move.version) < 0 && compareVersions(manifest.version, move.version) >= 0,
-      ),
+    movingIn ||
+      (oldVersion &&
+        (manifest.note_moves ?? []).some(
+          (move) => compareVersions(oldVersion, move.version) < 0 && compareVersions(manifest.version, move.version) >= 0,
+        )),
   );
   const pendingById = new Map(vault.listProposals().map((proposal) => [proposal.id, proposal]));
 
@@ -283,6 +284,12 @@ function updateOnePack(vault: Vault, packsDir: string, name: string, preferredLa
     if (!note) continue;
     if (current) {
       const moving = canMoveNote(packsDir, name, id, current);
+      // Retrying a partial handoff must not turn an already accepted handoff into
+      // an ordinary content update, especially when that note has local edits.
+      if (movingIn && current.data.source === `pack:${name}@${manifest.version}`) {
+        unchanged.push(id);
+        continue;
+      }
       if (!current.data.source.startsWith(`pack:${name}@`) && !moving) {
         skipped.push(id);
         continue;

@@ -20,7 +20,7 @@ A technology you can use in a project, such as a language, a framework, a librar
 
 ## Layer
 
-One part of an application, such as backend, frontend, data, infrastructure, testing or mobile. A tech can belong to one or more layers, and Basics ranks techs against each other inside a layer.
+One part of an application, such as backend, frontend, data, infrastructure, testing, mobile or ml. A tech can belong to one or more layers, and Basics ranks techs against each other inside a layer.
 
 ## Stack
 

@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "vitest";
-import { type Embedder, installPack, loadIndex, recommend, recommendHybrid, syncIndex, Vault } from "../src/index.js";
+import { type Embedder, installPack, listPacks, loadIndex, recommend, recommendHybrid, syncIndex, Vault } from "../src/index.js";
 
 function fixture() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "basics-language-"));
@@ -80,6 +80,150 @@ test("explicit language mentions constrain implementation tools in every layer, 
       }
     }
     assert.equal(recommend(vault, "Golang HTTP API").layers.backend[0]?.id, "go-backend");
+  } finally {
+    cleanup();
+  }
+});
+
+test.each(["en", "es"])("named frameworks infer their language for keyword and hybrid recommendations (%s)", async (lang) => {
+  const packs = path.resolve(import.meta.dirname, "../../../packs");
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "basics-named-language-"));
+  const embedder: Embedder = {
+    model: "named-language-test",
+    dim: 2,
+    async embed(texts) {
+      return texts.map(() => Float32Array.from([1, 0]));
+    },
+  };
+  try {
+    const vault = Vault.load(root);
+    for (const pack of listPacks(packs)) installPack(vault, packs, pack.name, { lang });
+    await syncIndex(vault, embedder);
+    const index = loadIndex(vault);
+    const cases =
+      lang === "en"
+        ? [
+            ["FastAPI API serving machine learning models over HTTP", "backend", "python"],
+            ["Axum HTTP API with JSON validation and cargo tests", "backend", "rust"],
+            ["Gin HTTP API with JSON endpoints and PostgreSQL", "backend", "go"],
+            ["Flutter mobile app with offline records", "mobile", "dart"],
+            ["Next.js web with SEO and server-side rendering", "frontend", "typescript"],
+          ]
+        : [
+            ["API FastAPI que sirve modelos de machine learning por HTTP", "backend", "python"],
+            ["API HTTP Axum con validación JSON y pruebas cargo", "backend", "rust"],
+            ["API HTTP Gin con JSON y PostgreSQL", "backend", "go"],
+            ["App móvil Flutter con registros offline", "mobile", "dart"],
+            ["Web Next.js con SEO y renderizado de servidor", "frontend", "typescript"],
+          ];
+    for (const [query, layer, language] of cases) {
+      const keyword = recommend(vault, query, { perLayer: 100 });
+      const hybrid = await recommendHybrid(vault, query, index, embedder, { weight: 0, perLayer: 100 });
+      for (const result of [keyword, hybrid]) {
+        const first = vault.get(result.layers[layer][0]?.id);
+        assert.ok(first?.data.type === "tech");
+        assert.equal(first.data.language, language, query);
+        assert.equal(result.layers[layer][0]?.language_boost, 3, query);
+        if (query.includes("FastAPI")) {
+          assert.equal(result.layers.backend[0]?.id, "fastapi");
+          assert.equal(result.layers.testing[0]?.id, "pytest");
+          assert.equal(
+            result.layers.backend.some((candidate) => candidate.id === "net-http"),
+            false,
+          );
+          assert.equal(
+            result.layers.testing.some((candidate) => ["httptest", "wiremock-rs"].includes(candidate.id)),
+            false,
+          );
+        }
+      }
+    }
+    const mixed =
+      lang === "en"
+        ? ["FastAPI API with React frontend and dashboard", "Go HTTP API with Flutter mobile app"]
+        : ["API FastAPI con frontend React y dashboard", "API HTTP Go con app móvil Flutter"];
+    for (const query of mixed) {
+      for (const result of [recommend(vault, query), await recommendHybrid(vault, query, index, embedder, { weight: 0 })]) {
+        if (query.includes("FastAPI")) {
+          assert.equal(result.layers.backend[0]?.id, "fastapi");
+          assert.equal(result.layers.frontend[0]?.id, "react");
+        } else {
+          const first = vault.get(result.layers.backend[0]?.id);
+          assert.ok(first?.data.type === "tech" && first.data.language === "go");
+          assert.equal(result.layers.mobile[0]?.id, "flutter");
+        }
+      }
+    }
+    const neutral = recommend(
+      vault,
+      lang === "en" ? "FastAPI API with PostgreSQL transactions" : "API FastAPI con transacciones PostgreSQL",
+    );
+    assert.ok(neutral.layers.data.some((candidate) => candidate.id === "postgresql"));
+    assert.equal(neutral.layers.data.find((candidate) => candidate.id === "postgresql")?.language_boost, 0);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("package names infer languages without partial-name or negated-name inference", () => {
+  const { vault, cleanup } = fixture();
+  try {
+    vault.writeNote(
+      "model-engine",
+      {
+        type: "tech",
+        kind: "library",
+        title: "Tensor Engine",
+        layer: "backend",
+        language: "rust",
+        packages: { pypi: ["tensor-engine"] },
+        use_when: ["HTTP API"],
+        source: "manual",
+      },
+      "",
+    );
+    for (const query of ["tensor-engine HTTP API", "Tensor Engine HTTP API", "model-engine HTTP API"]) {
+      const result = recommend(vault, query, { perLayer: 100 });
+      assert.equal(result.layers.testing[0]?.id, "rust-testing", query);
+      assert.equal(
+        result.layers.testing.some((candidate) => candidate.id === "python-testing"),
+        false,
+      );
+    }
+    vault.writeNote(
+      "document-store",
+      {
+        type: "tech",
+        kind: "library",
+        title: "Document Store",
+        layer: "data",
+        language: "go",
+        packages: { pypi: ["documentstore"] },
+        source: "manual",
+      },
+      "",
+    );
+    assert.equal(recommend(vault, "documentstore HTTP API").layers.testing[0]?.id, "go-testing");
+    vault.writeNote(
+      "async-storage",
+      { type: "tech", kind: "library", title: "AsyncStorage", layer: "data", language: "go", source: "manual" },
+      "",
+    );
+    for (const query of [
+      "HTTP API engine",
+      "HTTP API async",
+      "HTTP API documentstor",
+      "HTTP API without tensor-engine",
+      "API HTTP sin Tensor Engine",
+    ]) {
+      const result = recommend(vault, query, { perLayer: 100 });
+      assert.ok(
+        Object.values(result.layers)
+          .flat()
+          .every((candidate) => candidate.language_boost === 0),
+        query,
+      );
+    }
   } finally {
     cleanup();
   }

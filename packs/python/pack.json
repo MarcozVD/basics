@@ -1,0 +1,10 @@
+{
+  "name": "python",
+  "version": "1.0.0",
+  "description": {
+    "en": "Shared Python language, tests, typing and lint checks.",
+    "es": "Lenguaje Python, pruebas, tipado y checks compartidos."
+  },
+  "requires": ["core-layers"],
+  "languages": ["en", "es"]
+}

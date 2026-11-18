@@ -9,7 +9,8 @@ layer: data
 use_when:
   - datos relacionales con transacciones
   - SaaS, CRUD, ecommerce
-  - búsqueda full-text o datos geoespaciales moderados
+  - búsqueda full-text indexada por palabras en documentos guardados
+  - datos geoespaciales moderados
 avoid_when:
   - caché efímera de muy baja latencia (mejor Redis)
 performs_best:

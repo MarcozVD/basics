@@ -13,14 +13,16 @@ basics pack install web-typescript --lang es  # Spanish notes
 
 | Pack | Content | Requires |
 | --- | --- | --- |
-| `core-layers` | the six base layers (frontend, backend, data, infra, testing and mobile) | none |
+| `core-layers` | the seven base layers (frontend, backend, data, infra, testing, mobile and ml) | none |
 | `typescript` | TypeScript language, strict mode and typecheck + practice and check | `core-layers` |
+| `python` | Python language, pytest, typing and lint checks, shared by the Python packs | `core-layers` |
 | `web-typescript` | React, Next.js, Vitest and Playwright + practice and check | `typescript` |
-| `python-api` | Python, FastAPI and pytest + practices and checks | `databases` |
-| `databases` | PostgreSQL, SQLite and SQL migrations, shared by the API and mobile packs | `core-layers` |
+| `python-api` | FastAPI + practice and check | `databases`, `python` |
+| `databases` | PostgreSQL, SQLite, DuckDB and SQL migrations, shared by the API, data and mobile packs | `core-layers` |
 | `rust-api` | Rust HTTP APIs: web frameworks, SQL libraries, Cargo test tools + practices and checks | `databases` |
 | `go-api` | Go HTTP APIs: routers, SQL access, Go test tools + practices and checks | `databases` |
 | `mobile` | React Native with Expo, Flutter, native Swift and Kotlin, state, storage and device testing + practices, checks and two profiles | `databases`, `typescript` |
+| `data-ml` | Python data analysis, model training and batch workflows: 18 techs, practices, a check and three profiles | `python`, `databases` |
 | `profiles` | the `ml-api` and `saas-web` profiles | `web-typescript`, `python-api` |
 
 Each pack ships the same note ids in every language it declares (`notes/en` and `notes/es`). Installing notes whose ids
@@ -37,14 +39,27 @@ basics pack install typescript   # TypeScript notes, with core-layers
 
 The language note covers the frontend and backend layers, and the typecheck check runs `npx tsc --noEmit`.
 
-## The databases pack
+## The python pack
 
-`databases` holds the notes that the API and mobile packs share: PostgreSQL, SQLite and SQL migrations. `python-api`, `rust-api`,
-`go-api` and `mobile` all require it, so installing any of them also installs `databases` and `core-layers`:
+`python` holds the shared Python notes: the Python language, pytest, the typing practice, and one check that runs
+`ruff check . && ruff format --check . && mypy .`. `python-api` and `data-ml` require it, so installing either one also
+installs `python` and `core-layers`:
 
 ```bash
-basics pack install databases   # PostgreSQL, SQLite and SQL migrations, with core-layers
+basics pack install python   # Python language, pytest, typing and lint checks, with core-layers
 ```
+
+## The databases pack
+
+`databases` holds the notes that the API, data and mobile packs share: PostgreSQL, SQLite, DuckDB and SQL migrations.
+`python-api`, `rust-api`, `go-api`, `mobile` and `data-ml` all require it, so installing any of them also installs `databases` and `core-layers`:
+
+```bash
+basics pack install databases   # PostgreSQL, SQLite, DuckDB and SQL migrations, with core-layers
+```
+
+DuckDB is an analytical SQL engine that runs inside the process and reads local CSV and Parquet files. It is not a shared
+transactional server, so keep PostgreSQL for concurrent application writes.
 
 ## The rust-api pack
 
@@ -144,6 +159,36 @@ The pack can also ship sample compare tasks in an optional `tasks.json`. This pa
 Native catalog, a Flutter expense log and an offline task queue. Each uses the same format as the rust-api tasks, shown
 above. Installing the pack never runs them.
 
+## The data-ml pack
+
+`data-ml` holds notes for Python data analysis, model training and reproducible batch workflows. It requires `python` and
+`databases`, which bring the Python language, the lint checks, PostgreSQL, SQLite and DuckDB with them, so one command is
+enough:
+
+```bash
+basics pack install data-ml            # installs python, databases and core-layers too
+basics pack install data-ml --lang es  # Spanish notes
+```
+
+It holds:
+
+- **18 techs** in three layers: pandas, Polars, NumPy and PyArrow (data); scikit-learn, PyTorch, XGBoost, LightGBM, JAX,
+  Jupyter, MLflow, DVC, Prefect and Dagster (ml); and Great Expectations, Pandera, Hypothesis and unittest (testing).
+- **4 practices**: reproducible experiments (environment, data and seeds), splitting before fitting to avoid leakage,
+  validating data at the boundaries, and moving reusable notebook code into modules. The notes do not promise identical
+  results across hardware or library releases.
+- **1 check**: `pytest -q` for data transformation and model tests.
+- **Three profiles**: Python data analysis, Python model training and Python batch data pipeline. They are starting choices,
+  not requirements. When a description matches a profile's use cases, the recommend step lists it first.
+
+The `ml` layer comes with core-layers 1.2.0. It covers model training, experiment tracking and analytical workflow tools.
+Its notes present these as complementary roles, not interchangeable products.
+
+The pack can also ship sample compare tasks in an optional `tasks.json`. This pack has four: a CSV cleaning and report
+task, a held-out tabular classifier, a small Parquet batch pipeline, and extracting notebook code into a module. Each uses
+the same format as the rust-api tasks, shown above, and expects the data, ml and testing layers. Installing the pack never
+runs them.
+
 ## Update
 
 ```bash
@@ -168,13 +213,14 @@ an **Approve all** button.
 ## Updating from older packs
 
 Some notes moved between packs in this release: PostgreSQL and SQL migrations moved from `python-api` to `databases`, SQLite
-moved from `rust-api` to `databases`, and TypeScript, its strict practice and its typecheck check moved from
-`web-typescript` to `typescript`. After you upgrade, `basics pack update` proposes the moved notes under their new packs,
-along with the shared notes that the packs now require. Expect a one-time batch of these proposals. A moved note's proposal
-only changes where the note comes from. Your edits to the note stay as they are, and nothing changes until you approve it.
-Review each batch like any other pack proposal, or approve it with `basics inbox approve-all --pack databases` or
-`basics inbox approve-all --pack typescript`. The `core-layers` update adds the mobile layer as new notes, which arrive as
-ordinary proposals.
+moved from `rust-api` to `databases`, TypeScript, its strict practice and its typecheck check moved from `web-typescript`
+to `typescript`, and Python, pytest, Python typing and the Python lint check moved from `python-api` to `python`. After you
+upgrade, `basics pack update` proposes each moved note under its new pack, and proposes the new notes too, such as the `ml`
+layer and DuckDB. Expect one batch of proposals per pack. A moved note's proposal only changes where the note comes from.
+Your edits stay as they are, and nothing changes until you approve it. The `core-layers` and `databases` updates also propose
+a provenance refresh for their existing notes, which changes no content. If you approve some moves and not others, a later
+update keeps your edited notes and does not propose the moved ones again. Review each batch like any other pack proposal, or
+approve it with `basics inbox approve-all --pack <name>`.
 
 ## Community packs
 

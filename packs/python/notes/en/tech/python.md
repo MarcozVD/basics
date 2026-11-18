@@ -18,4 +18,4 @@ tags: [dynamic, gradual-typing]
 ---
 # Python
 
-Main language for fast backends and data. Frameworks: [[fastapi]]. Tests with [[pytest]].
+Main language for fast backends and data. Frameworks: fastapi. Tests with [[pytest]].

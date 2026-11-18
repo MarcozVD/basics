@@ -1,0 +1,10 @@
+{
+  "name": "data-ml",
+  "version": "1.0.0",
+  "description": {
+    "en": "Python data analysis, model training and reproducible batch workflows.",
+    "es": "Análisis de datos Python, entrenamiento y flujos batch reproducibles."
+  },
+  "requires": ["python", "databases"],
+  "languages": ["en", "es"]
+}

@@ -75,9 +75,18 @@ Basics only passes the agent the description, the chosen layers and the `plan-st
   matching `avoid_when` adds them.
 - Naming a language (`in TypeScript`, `en TypeScript`, `in Rust`) boosts the techs written in that language. In each layer
   that has techs in that language, techs written in another language lose their positive score. Layers with no tech in
-  that language, such as the frontend when no frontend tech is written in Rust, keep their normal ranking. Techs you name
-  in the description (such as `with FastAPI`) and techs without a language, such as SQLite, stay eligible. If the rule
-  would leave a layer with no match at all, that layer keeps its matches without the penalty.
+  that language, such as the frontend when no frontend tech is written in Rust, keep their normal ranking. Techs without a
+  language, such as SQLite, stay eligible. If the rule would leave a layer with no match at all, that layer keeps its
+  matches without the penalty.
+- Naming a technology by its full name also names its language. `FastAPI` implies Python, `Axum` implies Rust, `Gin`
+  implies Go, `Flutter` implies Dart, and `Next.js` implies TypeScript. A technology you name stays eligible even when its
+  language differs from the other techs in its layer. Names inside a negated phrase, such as `without FastAPI`, imply
+  nothing. A partial match does not imply a language: the word `async` does not name AsyncStorage.
+- Six ordinary words are also tech names: `poem`, `rocket`, `echo`, `fiber`, `swift` and `next`. Alone, they are ignored as
+  tech names and as keyword evidence. They count only with context: a stack word within two words of them, such as `API`,
+  `framework`, `library`, `backend`, `package` or `language` (or `servidor`, `paquete`, `biblioteca` or `lenguaje`); a
+  language name after `in`, `using`, `en` or `con`, such as `in Swift`; or a platform word (`iOS`, `macOS`, `Apple` or
+  `Xcode`) that the vault's notes for that language mention. `Next.js` always counts, because its full name is distinctive.
 
 Scores are relative to your own notes; exact values are not part of the stable API (see [Stability](./stability.md)). The Recommend screen shows them only under each card's **Why**.
 

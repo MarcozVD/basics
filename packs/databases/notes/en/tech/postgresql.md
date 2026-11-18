@@ -9,7 +9,8 @@ layer: data
 use_when:
   - relational data with transactions
   - SaaS, CRUD, ecommerce
-  - full-text search or moderate geospatial data
+  - indexed full-text word search over stored documents
+  - moderate geospatial data
 avoid_when:
   - ephemeral very low-latency cache (Redis is better)
 performs_best:
