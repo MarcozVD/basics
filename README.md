@@ -52,7 +52,7 @@ Other clients (Cursor, VS Code, Codex, OpenCode, Windsurf, oh-my-pi, Gemini CLI,
 
 - **A vault you can read** — layers, tech, practices, checks, profiles and projects as Markdown notes. No database, no lock-in.
 - **Agents that ask first** — agent writes become proposals in `inbox/` with a reason and a diff; you approve in the CLI or the UI.
-- **Recommended stacks** — rank technologies per layer from a project description, by keywords or with optional local embeddings.
+- **Recommended stacks**: rank technologies per layer from a project description, by keywords or with optional local embeddings, with a small nudge from how your past projects went.
 - **From stack to project** — export `STACK.md`, `AGENTS.md`, `CLAUDE.md` and Cursor rules, then run the stack checks in the project.
 - **Packs** — official starter packs in English and Spanish, plus community packs from any GitHub repo; new notes and updates arrive as inbox proposals, never as silent writes.
 - **Local web UI and MCP** — a React UI with editor, graph, inbox diff and recommendation playground, plus MCP over HTTP or stdio.

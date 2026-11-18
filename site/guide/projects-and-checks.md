@@ -121,5 +121,6 @@ done project sorts last and collapses into a `Done (N)` group in the All view; t
 the browser. Done projects still feed `get_vault_overview` and `record_project_outcome`; only archived projects are left
 out of the overview.
 
-The MCP tool `record_project_outcome` proposes new lessons and tech-note updates for a project; they arrive in the inbox
-like any other proposal.
+A project can also record how it went in its `outcome` field: `successful`, `failed` or `abandoned`. The field is optional and separate from `status`. When it is missing, a project marked **Done** counts as successful in [project history](./recommend.md#project-history), and the other statuses count for nothing.
+
+The MCP tool `record_project_outcome` proposes new lessons and tech-note updates for a project, and it can propose the `outcome` too. Like any proposal, it waits in the inbox. Nothing changes until you approve it, and until then the outcome does not count in recommendations. Rejecting it leaves the project as it was.

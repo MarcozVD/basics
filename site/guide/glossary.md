@@ -58,6 +58,10 @@ A change that an agent or a pack update wants to make to the vault, such as a ne
 
 Where proposals wait for your decision: the inbox folder in the vault, and the Inbox page of the web UI. You review each change, then approve it or reject it.
 
+## Project history
+
+What your finished projects say about a tech. Each project that used a tech casts one small vote for it: +1 when it succeeded, -1 when it failed or was abandoned. [Recommend](./recommend.md#project-history) uses the votes only to nudge close calls. You can switch them off, or change their strength, in Settings → Search.
+
 ## Skill
 
 A folder with a `SKILL.md` file that teaches an agent when to do something, such as when to call a Basics tool. When you run `basics connect`, Basics installs its own skill for the agents that support skills.
