@@ -70,6 +70,9 @@ test("record_project_outcome proposes project and tech updates", async () => {
   const vault = Vault.load(root);
   assert.equal(vault.listProposals().length, 2);
   assert.equal(vault.getProposal("demo")?.meta.proposed_by, "test-agent");
+  const data = vault.getProposal("demo")?.data;
+  assert.ok(data?.type === "project");
+  assert.equal(data.outcome, undefined, "legacy MCP calls need no outcome field");
 });
 
 test("record_project_outcome treats a done project like an active one", async () => {
