@@ -20,6 +20,7 @@ backend
 | `sem` | semantic similarity; `—` when embeddings are off |
 | `neg` | adjustment for negations |
 | `lang` | language boost or penalty |
+| `history` | project history from accepted outcomes; printed only when it is not zero. See [Project history](#project-history). |
 
 Profiles whose description matches are returned too, which is why the same description can suggest a whole stack. A
 layer with no candidate above zero is omitted from the output — the CLI prints no section for it, `recommend_stack`
@@ -113,7 +114,7 @@ In plain words, history nudges close calls and does not override clear matches:
 - It is off for techs that get a language penalty, and for techs whose match your description negates.
 - Its effect is bounded. At the default weight it can change the order only between techs whose keyword scores are within about 20% of the layer's top score. At weight 3 that window is about 60%.
 
-The **Recommend** screen shows a **project history** row under each card's **Why**. When projects stand behind it, the card lists each one with its outcome, its vote and a link to the project note. Over MCP, `recommend_stack` adds `history` to a candidate's `score_breakdown` and a `history_projects` list with each project's `id`, `title`, `outcome` and `contribution` (`1` or `-1`). Both are left out when the history is zero. The CLI line prints only `kw`, `sem`, `neg` and `lang`, but its total includes history.
+The **Recommend** screen shows a **project history** row under each card's **Why**. When projects stand behind it, the card lists each one with its outcome, its vote and a link to the project note. Over MCP, `recommend_stack` adds `history` to a candidate's `score_breakdown` and a `history_projects` list with each project's `id`, `title`, `outcome` and `contribution` (`1` or `-1`). Both are left out when the history is zero. The CLI line adds `history=` when it is not zero, and the total always includes it.
 
 Turn history off, or change its strength, in **Settings → Search**: the **Use project history** switch saves at once, and the **History strength** field takes a number from 0 to 3 and saves when you press Enter or leave the field. The values are stored for this vault in `.basics/config.json`:
 
