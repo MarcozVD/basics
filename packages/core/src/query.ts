@@ -6,6 +6,7 @@ import type { Embedder } from "./embeddings.js";
 import { phraseParts, splitNegations } from "./negation.js";
 import { NOTE_TYPES, type Note, type NoteData, type NoteType, type Proposal, type TechData } from "./schema.js";
 import { expandSynonyms } from "./synonyms.js";
+import { nameParts, techNameContext } from "./tech-names.js";
 import { firstParagraph, idf, tokens } from "./tokens.js";
 import { serializeNote, stampApproved, toId, type Vault } from "./vault.js";
 import type { LoadedIndex } from "./vector-index.js";
@@ -66,16 +67,6 @@ function alias(a: string, b: string): boolean {
   if (a === b) return true;
   if (a.length < 5 || b.length < 5) return false;
   return a.startsWith(b) || b.startsWith(a);
-}
-
-/** Raw name words (stems), lowercased and split on every separator, without stemming. */
-function nameParts(names: string): string[] {
-  return names
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .split(/[^a-z0-9+#]+/)
-    .filter(Boolean);
 }
 
 /**
@@ -489,36 +480,31 @@ function scoreProfiles(vault: Vault, description: string): { id: string; score: 
     .sort((a, b) => b.score - a.score);
 }
 
-/** Explicit language requests constrain layers with matching implementations, including tests.
- * Language notes supply the vocabulary, so new packs do not need a scorer allowlist.
+/** Languages and explicitly named tools constrain layers with matching implementations, including tests.
+ * Vault notes supply the vocabulary, so new packs do not need a scorer allowlist.
  * Neutral tools and explicitly named integrations remain eligible in mixed stacks.
  */
-function languageAdjustment(vault: Vault, positive: string): (note: Note, signal: number, layer: string) => number {
-  const query = new Set(tokens(positive));
-  const mentioned = new Set(
-    vault
-      .byType("tech")
-      .filter((note) => note.data.type === "tech" && note.data.kind === "language")
-      .filter((note) => [...tokens(note.id), ...tokens(title(note))].some((token) => query.has(token)))
-      .map((note) => note.id),
-  );
+function languageAdjustment(
+  vault: Vault,
+  context: ReturnType<typeof techNameContext>,
+): (note: Note, signal: number, layer: string) => number {
+  const techs = vault.byType("tech");
+  const { named, mentioned } = context;
   const coveredLayers = new Set<string>();
-  for (const note of vault.byType("tech")) {
+  for (const note of techs) {
     const data = note.data as TechData;
     const language = data.kind === "language" ? note.id : data.language && toId(data.language);
     if (language && mentioned.has(language)) {
       for (const layer of [data.layer].flat()) coveredLayers.add(toId(layer));
     }
   }
-  const words = ` ${nameParts(positive).join(" ")} `;
   return (note, signal, layer) => {
     const data = note.data as TechData;
     const language = data.kind === "language" ? note.id : data.language && toId(data.language);
     if (!mentioned.size || !language) return 0;
     if (mentioned.has(language)) return data.kind === "language" ? 0 : 3;
     if (!coveredLayers.has(toId(layer))) return 0;
-    const named = [note.id, title(note)].some((name) => words.includes(` ${nameParts(name).join(" ")} `));
-    if (named) return 0;
+    if (named.has(note.id)) return 0;
     // Cancel the positive signal rather than letting a fixed -2 lose to arbitrarily large
     // keyword scores. Keep a negative component even at zero signal for hybrid filtering.
     return -Math.max(1, signal);
@@ -541,7 +527,10 @@ function withoutLanguagePenalty<T extends Candidate>(candidate: T): T {
  */
 export function recommend(vault: Vault, description: string, opts: RecommendOptions = {}): Recommendation {
   const { positive, negated } = splitNegations(description);
-  const q = new Set(tokens(positive));
+  const nameContext = techNameContext(vault.byType("tech"), positive);
+  // Unqualified ordinary-word aliases are domain vocabulary, not technology
+  // evidence, including self-mentions in use_when, tags and note bodies.
+  const q = new Set(tokens(positive).filter((word) => !nameContext.blocked.has(word)));
   const syn = expandSynonyms(q);
   const idfWeights = vaultIdf(vault);
   const layerIds = opts.layers?.map(toId) ?? vault.byType("layer").map((n) => n.id);
@@ -573,7 +562,7 @@ export function recommend(vault: Vault, description: string, opts: RecommendOpti
     return { same: [...same], opposite: [...opposite] };
   };
 
-  const languageFit = languageAdjustment(vault, positive);
+  const languageFit = languageAdjustment(vault, nameContext);
 
   const layers: Record<string, Candidate[]> = {};
   for (const layer of layerIds) {
