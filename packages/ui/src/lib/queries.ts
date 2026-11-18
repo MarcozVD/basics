@@ -16,6 +16,7 @@ import {
   getProposal,
   getSkills,
   getStats,
+  getVaultConfig,
   type NoteFilter,
   search,
 } from "./api";
@@ -30,6 +31,7 @@ export const queryKeys = {
   proposal: (id: string) => ["proposal", id] as const,
   packs: ["packs"] as const,
   config: ["config"] as const,
+  vaultConfig: ["vault-config"] as const,
   embeddings: ["embeddings"] as const,
   activity: (filter: ActivityFilter) => ["activity", filter] as const,
   stats: ["stats"] as const,
@@ -73,6 +75,9 @@ export function usePacks(enabled = true) {
 
 export function useConfig() {
   return useQuery({ queryKey: queryKeys.config, queryFn: getConfig });
+}
+export function useVaultConfig() {
+  return useQuery({ queryKey: queryKeys.vaultConfig, queryFn: getVaultConfig });
 }
 
 export function useEmbeddings(enabled = true) {

@@ -454,6 +454,12 @@ export const en = {
   "recommend.breakdown.semantic": "semantic",
   "recommend.breakdown.negation": "negation",
   "recommend.breakdown.language": "language",
+  "recommend.breakdown.history": "project history",
+  "recommend.history.explanation":
+    "Recorded project evidence. Opposing results cancel. Default strength adjusts scores by up to 10% of this layer's leading score; maximum strength allows 30%, rounded to whole points.",
+  "recommend.history.successful": "successful",
+  "recommend.history.failed": "failed",
+  "recommend.history.abandoned": "abandoned",
   "recommend.empty.title": "Recommend a stack",
   "recommend.emptyVault.description":
     "Recommend reads your notes to suggest a stack. Install the starter packs first, then describe a project.",
@@ -779,6 +785,13 @@ export const en = {
   "settings.search.title": "Search",
   "settings.search.description": "Find and recommend notes by meaning, not only by matching words.",
   "settings.search.semantic": "Semantic search",
+  "settings.search.history": "Use project history",
+  "settings.search.historyWeight": "History strength",
+  "settings.search.historyWeightDescription":
+    "0 turns it off. 1 adjusts scores by up to 10% of the layer leader; 3 allows 30%, rounded to whole points. Press Enter or leave the field to save.",
+  "settings.search.historyWeightInvalid": "Enter a number from 0 to 3, then press Enter or leave the field to save.",
+  "settings.search.historyDescription":
+    "Give small preferences to tools from successful projects and lower tools from failed or abandoned projects. Saved for this vault.",
   "settings.search.semanticDescription": "Compares meaning with a small model that runs on this computer.",
   "settings.search.download": "One-time download of {size}; after that, searches stay local.",
   "settings.search.enabling": "Downloading and indexing... {done} of {total}",
