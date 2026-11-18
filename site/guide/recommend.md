@@ -20,6 +20,7 @@ backend
 | `sem` | semantic similarity; `—` when embeddings are off |
 | `neg` | adjustment for negations |
 | `lang` | language boost or penalty |
+| `history` | project history from accepted outcomes; printed only when it is not zero. See [Project history](#project-history). |
 
 Profiles whose description matches are returned too, which is why the same description can suggest a whole stack. A
 layer with no candidate above zero is omitted from the output — the CLI prints no section for it, `recommend_stack`
@@ -32,7 +33,7 @@ The MCP tool `recommend_stack` returns the same ranking. The **Recommend** scree
 - **Fits profile**: the profiles above whose stack includes the tech.
 - **Watch out**: the note's `avoid_when` phrases that matched, and phrases your description negates, such as *without login* against a note that says *login*.
 
-A tech that fits several layers appears once, under the layer of its note's first `layer`, and **Also fits** names the others. Each card's **Why** lists the score parts: keywords, text, synonyms, semantic (in hybrid mode), negation and language. The order of the cards is the ranking.
+A tech that fits several layers appears once, under the layer of its note's first `layer`, and **Also fits** names the others. Each card's **Why** lists the score parts: keywords, text, synonyms, semantic (in hybrid mode), negation, language and project history. The order of the cards is the ranking.
 
 ## Ask an agent
 
@@ -89,6 +90,39 @@ Basics only passes the agent the description, the chosen layers and the `plan-st
   `Xcode`) that the vault's notes for that language mention. `Next.js` always counts, because its full name is distinctive.
 
 Scores are relative to your own notes; exact values are not part of the stable API (see [Stability](./stability.md)). The Recommend screen shows them only under each card's **Why**.
+
+## Project history
+
+Finished projects nudge the ranking a little. A project note can say how it went with an `outcome` field: `successful`, `failed` or `abandoned`. A project with status **Done** and no outcome counts as successful. Active, paused and archived projects without an outcome count for nothing. An outcome counts whatever the status is, but only after you approve the proposal that records it, so a pending proposal changes nothing (see [Projects and checks](./projects-and-checks.md#project-notes)).
+
+Each project votes once for every tech in its stack: +1 if it succeeded, -1 if it failed or was abandoned. A tech listed in several layers still gets one vote per project. A tech's votes add up and are capped at +1 or -1, so ten successful projects nudge a tech no more than one does, and a success cancels out a failure.
+
+The nudge is a share of the top score in the tech's layer, rounded to whole points:
+
+| Weight | Largest nudge |
+| --- | --- |
+| `0` | none, history is off |
+| `1` (default) | 10% of the layer's top score |
+| `3` (maximum) | 30% of the layer's top score |
+
+Say the top tech in a layer scores 40. At the default weight, a tech with successful projects gets +4 and a tech with failed projects gets -4. At weight 3 those become +12 and -12.
+
+In plain words, history nudges close calls and does not override clear matches:
+
+- It applies only to techs that already match your description by words or synonyms. It never recommends a tech on history alone.
+- It is off in each layer that holds a tech or language you name, such as `using TypeScript`. Those layers keep their normal ranking.
+- It is off for techs that get a language penalty, and for techs whose match your description negates.
+- Its effect is bounded. At the default weight it can change the order only between techs whose keyword scores are within about 20% of the layer's top score. At weight 3 that window is about 60%.
+
+The **Recommend** screen shows a **project history** row under each card's **Why**. When projects stand behind it, the card lists each one with its outcome, its vote and a link to the project note. Over MCP, `recommend_stack` adds `history` to a candidate's `score_breakdown` and a `history_projects` list with each project's `id`, `title`, `outcome` and `contribution` (`1` or `-1`). Both are left out when the history is zero. The CLI line adds `history=` when it is not zero, and the total always includes it.
+
+Turn history off, or change its strength, in **Settings → Search**: the **Use project history** switch saves at once, and the **History strength** field takes a number from 0 to 3 and saves when you press Enter or leave the field. The values are stored for this vault in `.basics/config.json`:
+
+```json
+{ "history": { "enabled": true, "weight": 1 } }
+```
+
+Setting `enabled` to `false`, or `weight` to `0`, turns history off.
 
 ## Embeddings (opt-in)
 

@@ -12,6 +12,7 @@ export interface TechOutcomeUpdate {
 export interface OutcomeInput {
   project: string;
   summary: string;
+  outcome?: "successful" | "failed" | "abandoned";
   lessons?: string[];
   tech_updates?: TechOutcomeUpdate[];
 }
@@ -87,6 +88,7 @@ export function recordOutcome(vault: Vault, input: OutcomeInput, agent: string):
   drafts.set(project.id, {
     data: {
       ...base,
+      ...(input.outcome ? { outcome: input.outcome } : {}),
       lessons,
       ...(base.reason?.trim() ? {} : { reason: summary }),
     },

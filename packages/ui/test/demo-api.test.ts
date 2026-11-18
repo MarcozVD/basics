@@ -51,6 +51,16 @@ async function fixture() {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("reload-scoped demo API", () => {
+  it("keeps the history settings switch usable without a recorded config route", async () => {
+    const { snapshot } = await fixture();
+    const api = await createDemoApi(snapshot);
+    expect(await (await api("GET", "/api/vault-config")).json()).toEqual({ history: { enabled: true, weight: 1 } });
+    await api("PUT", "/api/vault-config/history", { weight: 2 });
+    await api("PUT", "/api/vault-config/history", { enabled: false });
+    expect(await (await api("GET", "/api/vault-config")).json()).toEqual({ history: { enabled: false, weight: 2 } });
+    const reset = await createDemoApi(snapshot);
+    expect(await (await reset("GET", "/api/vault-config")).json()).toEqual({ history: { enabled: true, weight: 1 } });
+  });
   it("approves recorded proposals, stamps source, updates notes/graph/stats, and resets with a new instance", async () => {
     const { snapshot } = await fixture();
     const changed = vi.fn();

@@ -891,7 +891,7 @@ function printRecommendation(rec: Recommendation): void {
       const breakdown = candidate.score_breakdown;
       const semantic = breakdown.semantic === undefined ? "—" : breakdown.semantic.toFixed(3);
       console.log(
-        `  ${candidate.id.padEnd(18)} ${score.padStart(7)}  kw=${breakdown.keywords} sem=${semantic} neg=${breakdown.negation} lang=${breakdown.language}`,
+        `  ${candidate.id.padEnd(18)} ${score.padStart(7)}  kw=${breakdown.keywords} sem=${semantic} neg=${breakdown.negation} lang=${breakdown.language}${breakdown.history ? ` history=${breakdown.history}` : ""}`,
       );
       for (const phrase of candidate.matched_use_when) console.log(`      use: ${phrase}`);
       for (const phrase of candidate.matched_performs_best) console.log(`      best: ${phrase}`);

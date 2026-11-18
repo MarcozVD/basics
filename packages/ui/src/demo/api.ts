@@ -71,6 +71,7 @@ export async function createDemoApi(snapshot: Snapshot, onChange: () => void = (
   for (const proposal of await read<{ id: string }[]>("/api/inbox"))
     proposals.set(proposal.id, await read(`/api/inbox/${encodeURIComponent(proposal.id)}`));
   let config = await read<{ language: "en" | "es" }>("/api/config");
+  let history = { enabled: true, weight: 1 };
   const activity = snapshot[await snapshotKey("GET", "/api/activity")]?.body as ActivityEvent[] | undefined;
   let changed = false;
 
@@ -173,6 +174,8 @@ export async function createDemoApi(snapshot: Snapshot, onChange: () => void = (
       body?: string;
       expectedHash?: string;
       language?: "en" | "es";
+      enabled?: boolean;
+      weight?: number;
       description?: string;
       layers?: string[];
       perLayer?: number;
@@ -183,6 +186,17 @@ export async function createDemoApi(snapshot: Snapshot, onChange: () => void = (
       version?: string;
     };
     if (path === "/api/events") return new Response(null, { status: 204 });
+    if (path === "/api/vault-config" && method === "GET") return json({ history });
+    if (path === "/api/vault-config/history" && method === "PUT") {
+      if (input.weight !== undefined && (!Number.isFinite(input.weight) || input.weight < 0 || input.weight > 3))
+        return json({ error: "invalid weight" }, 400);
+      history = {
+        ...history,
+        ...(typeof input.enabled === "boolean" ? { enabled: input.enabled } : {}),
+        ...(typeof input.weight === "number" ? { weight: input.weight } : {}),
+      };
+      return json(history);
+    }
     if (path === "/api/config") {
       if (method === "PUT" && (input.language === "en" || input.language === "es")) config = { language: input.language };
       if (method === "GET" || method === "PUT") return json(config);

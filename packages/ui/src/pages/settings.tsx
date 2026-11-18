@@ -12,7 +12,15 @@ import { ErrorState, Loading } from "@/components/state";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { type TranslationKey, useI18n, useT } from "@/i18n";
 import { agentColor, agentInitial } from "@/lib/agent-color";
-import { type ConnectClientId, connectClients, disableEmbeddings, disconnectClients, enableEmbeddings, type Language } from "@/lib/api";
+import {
+  type ConnectClientId,
+  connectClients,
+  disableEmbeddings,
+  disconnectClients,
+  enableEmbeddings,
+  type Language,
+  setHistoryConfig,
+} from "@/lib/api";
 import {
   type CloseBehavior,
   chooseVaultFolder,
@@ -27,7 +35,7 @@ import { useEmbeddingsProgress } from "@/lib/events";
 import { useIntro } from "@/lib/intro";
 import { type DockEdge, type NavigationStyle, setDockEdge, setNavigationStyle, useNavigation } from "@/lib/navigation";
 import { useDocumentTitle } from "@/lib/page-title";
-import { queryKeys, useConnectStatus, useEmbeddings, useHealth } from "@/lib/queries";
+import { queryKeys, useConnectStatus, useEmbeddings, useHealth, useVaultConfig } from "@/lib/queries";
 import { useRouteSearchParams } from "@/lib/route-query";
 import { type Theme, useTheme } from "@/lib/theme";
 import { toast } from "@/lib/toast";
@@ -997,6 +1005,29 @@ function SearchSection() {
   const t = useT();
   const queryClient = useQueryClient();
   const status = useEmbeddings();
+  const vaultConfig = useVaultConfig();
+  const [historyWeight, setHistoryWeight] = useState("");
+  const [weightError, setWeightError] = useState<string | null>(null);
+  const weightDescription = useId();
+  useEffect(() => {
+    if (vaultConfig.data) setHistoryWeight(String(vaultConfig.data.history.weight));
+  }, [vaultConfig.data]);
+  const history = useMutation({
+    mutationFn: setHistoryConfig,
+    onSuccess: (saved) => {
+      queryClient.setQueryData(queryKeys.vaultConfig, { ...vaultConfig.data, history: saved });
+      toast.success(t("settings.saved"));
+    },
+  });
+  const saveWeight = () => {
+    const weight = Number(historyWeight);
+    if (!historyWeight.trim() || !Number.isFinite(weight) || weight < 0 || weight > 3) {
+      setWeightError(t("settings.search.historyWeightInvalid"));
+      return;
+    }
+    setWeightError(null);
+    if (weight !== vaultConfig.data?.history.weight) history.mutate({ weight });
+  };
   const [error, setError] = useState<string | null>(null);
 
   const refresh = () => {
@@ -1032,6 +1063,41 @@ function SearchSection() {
   return (
     <Section id="search" title={t("settings.search.title")} description={t("settings.search.description")}>
       <Rows>
+        <Row title={t("settings.search.history")} description={t("settings.search.historyDescription")}>
+          <Switch
+            checked={vaultConfig.data?.history.enabled ?? false}
+            disabled={!vaultConfig.data || history.isPending}
+            ariaLabel={t("settings.search.history")}
+            onCheckedChange={(next) => history.mutate({ enabled: next })}
+          />
+        </Row>
+        <Row title={t("settings.search.historyWeight")} description={t("settings.search.historyWeightDescription")}>
+          <div className="flex flex-col gap-1">
+            <input
+              type="number"
+              min={0}
+              max={3}
+              step="any"
+              value={historyWeight}
+              disabled={!vaultConfig.data || history.isPending}
+              aria-label={t("settings.search.historyWeight")}
+              aria-describedby={weightDescription}
+              aria-invalid={Boolean(weightError)}
+              onChange={(event) => {
+                setHistoryWeight(event.target.value);
+                setWeightError(null);
+              }}
+              onBlur={saveWeight}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") event.currentTarget.blur();
+              }}
+              className="w-20 rounded-lg border border-border bg-background px-2 py-1.5 text-sm tabular-nums focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-50"
+            />
+            <span id={weightDescription} className="sr-only">
+              {t("settings.search.historyWeightDescription")}
+            </span>
+          </div>
+        </Row>
         <Row title={t("settings.search.semantic")} description={t("settings.search.semanticDescription")}>
           <Switch
             checked={enabled}
@@ -1045,6 +1111,14 @@ function SearchSection() {
           />
         </Row>
       </Rows>
+
+      {vaultConfig.isError ? <ErrorState error={vaultConfig.error} /> : null}
+      {history.isError ? <ErrorState error={history.error} /> : null}
+      {weightError ? (
+        <p role="alert" className="text-xs text-destructive">
+          {weightError}
+        </p>
+      ) : null}
 
       {data ? (
         <div className="flex flex-col gap-2 text-xs text-muted-foreground">

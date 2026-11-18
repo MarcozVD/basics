@@ -4,6 +4,7 @@ import type { GraphData, GraphEdge, GraphNode, NoteDetail, NoteSummary, Proposal
 import { inRange } from "./detect.js";
 import type { Embedder } from "./embeddings.js";
 import { phraseParts, splitNegations } from "./negation.js";
+import { type HistoryProject, loadVaultConfig, projectHistory } from "./recommend-history.js";
 import { NOTE_TYPES, type Note, type NoteData, type NoteType, type Proposal, type TechData } from "./schema.js";
 import { expandSynonyms } from "./synonyms.js";
 import { nameParts, techNameContext } from "./tech-names.js";
@@ -410,7 +411,16 @@ export interface Candidate {
   negated_avoid_when: string[];
   language_boost: number;
   /** Every part adds up to `score`; `synonyms` counts points won only through the synonym map. */
-  score_breakdown: { keywords: number; text: number; synonyms: number; negation: number; language: number; semantic?: number };
+  score_breakdown: {
+    keywords: number;
+    text: number;
+    synonyms: number;
+    negation: number;
+    language: number;
+    history?: number;
+    semantic?: number;
+  };
+  history_projects?: HistoryProject[];
   /** Fused 0–1 score; only present in hybrid mode. */
   hybrid?: number;
 }
@@ -563,9 +573,13 @@ export function recommend(vault: Vault, description: string, opts: RecommendOpti
   };
 
   const languageFit = languageAdjustment(vault, nameContext);
+  const historyConfig = loadVaultConfig(vault.root).history;
+  const historyByTech = historyConfig.enabled && historyConfig.weight > 0 ? projectHistory(vault) : new Map<string, HistoryProject[]>();
 
   const layers: Record<string, Candidate[]> = {};
   for (const layer of layerIds) {
+    // History is a bounded preference, never an alternative to an explicitly named stack.
+    const explicitLayer = vault.techInLayer(layer).some((note) => nameContext.named.has(note.id));
     let candidates = vault.techInLayer(layer).map((n) => {
       const d = n.data as TechData;
       const use = hits(d.use_when);
@@ -605,10 +619,13 @@ export function recommend(vault: Vault, description: string, opts: RecommendOpti
       // There must be a positive signal before the language boost or negation can rank a tech.
       const signal = keywords + text + synonyms + negation;
       const language = languageFit(n, signal, layer);
+      const baseScore = signal + language - avoidSig.direct;
+      const historyProjects =
+        !explicitLayer && language >= 0 && negation >= 0 && signal > 0 && baseScore > 0 ? (historyByTech.get(n.id) ?? []) : [];
       return {
         id: n.id,
         kind: d.kind,
-        score: signal + language - avoidSig.direct,
+        score: baseScore,
         hasSignal: signal > 0,
         matched_performs_best: best,
         matched_use_when: [...new Set([...use, ...negUse.same])],
@@ -616,7 +633,8 @@ export function recommend(vault: Vault, description: string, opts: RecommendOpti
         negated_use_when: negUse.opposite,
         negated_avoid_when: negAvoid.opposite,
         language_boost: language,
-        score_breakdown: { keywords, text, synonyms, negation, language },
+        score_breakdown: { keywords, text, synonyms, negation, language, history: 0 },
+        history_projects: historyProjects,
       };
     });
     // Coverage alone does not guarantee a matching recommendation. Do not empty a layer
@@ -624,6 +642,12 @@ export function recommend(vault: Vault, description: string, opts: RecommendOpti
     if (!candidates.some((candidate) => candidate.hasSignal && candidate.score > 0)) {
       candidates = candidates.map(withoutLanguagePenalty);
     }
+    const topPreHistory = Math.max(0, ...candidates.filter((candidate) => candidate.hasSignal).map((candidate) => candidate.score));
+    candidates = candidates.map((candidate) => {
+      const votes = candidate.history_projects.reduce((sum, project) => sum + project.contribution, 0);
+      const history = Math.sign(votes) * Math.round(Math.min(1, Math.abs(votes)) * historyConfig.weight * 0.1 * topPreHistory);
+      return { ...candidate, score: candidate.score + history, score_breakdown: { ...candidate.score_breakdown, history } };
+    });
     layers[layer] = candidates
       .filter((candidate) => opts.includeUnscored || (candidate.hasSignal && candidate.score > 0))
       .sort((a, b) => b.score - a.score || a.id.localeCompare(b.id))

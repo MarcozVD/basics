@@ -88,6 +88,11 @@ export async function verifyLegacyContract(api) {
   const actual = await captureContract(api);
   const tools = structuredClone(actual.tools);
   for (const tool of tools) {
+    if (tool.name === "record_project_outcome") {
+      assert.deepEqual(tool.inputSchema.properties.outcome?.enum, ["successful", "failed", "abandoned"]);
+      assert.ok(!tool.inputSchema.required?.includes("outcome"), "outcome must be optional");
+      delete tool.inputSchema.properties.outcome;
+    }
     if (["get_vault_overview", "get_stack_context"].includes(tool.name)) {
       assert.ok(tool.inputSchema.properties.workflow, `${tool.name} exposes optional declaration`);
       assert.ok(!tool.inputSchema.required?.includes("workflow"), "workflow must be optional");

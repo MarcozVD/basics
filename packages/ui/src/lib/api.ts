@@ -216,6 +216,16 @@ export function getConfig(): Promise<AppConfig> {
   return request<AppConfig>("/api/config");
 }
 
+export interface VaultConfig {
+  history: { enabled: boolean; weight: number };
+}
+export function getVaultConfig(): Promise<VaultConfig> {
+  return request<VaultConfig>("/api/vault-config");
+}
+export function setHistoryConfig(patch: Partial<VaultConfig["history"]>): Promise<VaultConfig["history"]> {
+  return request("/api/vault-config/history", { method: "PUT", body: JSON.stringify(patch) });
+}
+
 /** Coding clients `basics connect` can register the MCP server with. */
 export type ConnectClientId =
   | "claude-code"

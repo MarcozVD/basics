@@ -148,6 +148,7 @@ function CandidateCard({ card, title, layerTitleOf, profileFits, selected, onTog
     ...(breakdown.semantic === undefined ? [] : [{ label: t("recommend.breakdown.semantic"), value: breakdown.semantic.toFixed(3) }]),
     { label: t("recommend.breakdown.negation"), value: String(breakdown.negation) },
     { label: t("recommend.breakdown.language"), value: String(breakdown.language) },
+    { label: t("recommend.breakdown.history"), value: String(breakdown.history ?? 0) },
   ];
   return (
     <Card interactive selected={selected} size="compact" className="h-full gap-2.5 bg-muted/40 py-3 hover:border-foreground/20">
@@ -208,6 +209,26 @@ function CandidateCard({ card, title, layerTitleOf, profileFits, selected, onTog
               </div>
             ))}
           </dl>
+          {candidate.history_projects?.length ? (
+            <>
+              <p className="relative z-10 mt-2 text-[11px] text-muted-foreground">{t("recommend.history.explanation")}</p>
+              <ul className="relative z-10 mt-1 space-y-1 text-[11px]">
+                {candidate.history_projects.map((project) => (
+                  <li key={project.id}>
+                    <Link
+                      className="rounded-sm text-primary-text underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-ring"
+                      to={`/notes/${encodeURIComponent(project.id)}`}
+                    >
+                      {project.title}
+                    </Link>{" "}
+                    <span className="text-muted-foreground">
+                      {t(`recommend.history.${project.outcome}`)} ({project.contribution > 0 ? "+1" : "-1"})
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : null}
         </details>
       </CardContent>
     </Card>

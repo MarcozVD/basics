@@ -458,6 +458,12 @@ export const es: typeof en = {
   "recommend.breakdown.semantic": "semántica",
   "recommend.breakdown.negation": "negación",
   "recommend.breakdown.language": "idioma",
+  "recommend.breakdown.history": "historial de proyectos",
+  "recommend.history.explanation":
+    "Evidencia de proyectos registrados. Los resultados opuestos se cancelan. La intensidad predeterminada ajusta hasta un 10% del puntaje líder de esta capa; el máximo permite un 30%, redondeado a puntos enteros.",
+  "recommend.history.successful": "exitoso",
+  "recommend.history.failed": "fallido",
+  "recommend.history.abandoned": "abandonado",
   "recommend.empty.title": "Recomendar un stack",
   "recommend.emptyVault.description":
     "Recomendar lee tus notas para sugerir un stack. Instala antes los packs iniciales y luego describe un proyecto.",
@@ -788,6 +794,13 @@ export const es: typeof en = {
   "settings.search.title": "Búsqueda",
   "settings.search.description": "Encuentra y recomienda notas por significado, no solo por palabras.",
   "settings.search.semantic": "Búsqueda semántica",
+  "settings.search.history": "Usar historial de proyectos",
+  "settings.search.historyWeight": "Intensidad del historial",
+  "settings.search.historyWeightDescription":
+    "0 lo desactiva. 1 ajusta hasta un 10% del puntaje líder de la capa; 3 permite un 30%, redondeado a puntos enteros. Pulsa Enter o sal del campo para guardar.",
+  "settings.search.historyWeightInvalid": "Escribe un número de 0 a 3 y pulsa Enter o sal del campo para guardar.",
+  "settings.search.historyDescription":
+    "Da una pequeña preferencia a herramientas de proyectos exitosos y resta a las de proyectos fallidos o abandonados. Se guarda para este vault.",
   "settings.search.semanticDescription": "Compara por significado con un modelo pequeño que se ejecuta en esta computadora.",
   "settings.search.download": "Descarga única de {size}; después, las búsquedas siguen siendo locales.",
   "settings.search.enabling": "Descargando e indexando... {done} de {total}",

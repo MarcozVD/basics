@@ -16,7 +16,7 @@ inbox/      proposals waiting for your approval
 ```
 
 `basics.vault.json` at the root records the vault schema version. `.basics/` holds local state (embeddings, trust list,
-activity log) and is added to the vault's `.gitignore` automatically.
+activity log, and `config.json` for settings such as project history) and is added to the vault's `.gitignore` automatically.
 
 ## Note types
 
