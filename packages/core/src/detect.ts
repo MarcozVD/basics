@@ -1,7 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
+import matter from "gray-matter";
 import semver from "semver";
 import { parse as parseToml, type TomlTable, type TomlValue } from "smol-toml";
+import { cargoPackages, goPackages, pubPackages } from "./detection-packages.js";
 import type { TechData } from "./schema.js";
 import type { Vault } from "./vault.js";
 
@@ -12,7 +14,7 @@ export interface DetectedTech {
 }
 
 export interface UnknownPackage {
-  ecosystem: "npm" | "pypi";
+  ecosystem: "npm" | "pypi" | "cargo" | "go" | "pub";
   name: string;
   version?: string;
 }
@@ -118,7 +120,7 @@ export function detectStack(vault: Vault, dir: string): DetectResult {
     if (!found) techs.set(id, { id, version, source });
     else if (!found.version && version) found.version = version;
   };
-  const addUnknown = (ecosystem: "npm" | "pypi", name: string, version: string | undefined): void => {
+  const addUnknown = (ecosystem: UnknownPackage["ecosystem"], name: string, version: string | undefined): void => {
     const key = `${ecosystem}:${name}`;
     if (seenUnknown.has(key)) return;
     seenUnknown.add(key);
@@ -214,6 +216,81 @@ export function detectStack(vault: Vault, dir: string): DetectResult {
         ? REQUIREMENTS_DEV_FILE
         : undefined;
   if (pythonSource) addTech("python", pythonVersion(requiresPython), pythonSource);
+
+  const addMapped = (
+    ecosystem: UnknownPackage["ecosystem"],
+    name: string,
+    version: string | undefined,
+    source: string,
+    aliases: Record<string, string>,
+  ) => {
+    const id = aliases[name] ?? (ecosystem === "go" ? undefined : name.replaceAll("_", "-"));
+    if (id && index.ids.has(id)) addTech(id, version, source);
+    else addUnknown(ecosystem, name, version);
+  };
+  const cargoFile = path.join(dir, "Cargo.toml");
+  if (fs.existsSync(cargoFile)) {
+    files.push("Cargo.toml");
+    try {
+      const doc = parseToml(fs.readFileSync(cargoFile, "utf8"));
+      const dependencies = (section: TomlTable | undefined) => {
+        for (const key of ["dependencies", "dev-dependencies", "build-dependencies"]) {
+          for (const [alias, spec] of Object.entries(table(section?.[key]) ?? {})) {
+            const detail = table(spec);
+            // Local/git dependencies are not proof of a registry package identity.
+            if (detail?.path || detail?.git || detail?.workspace === true) continue;
+            const name = typeof detail?.package === "string" ? detail.package : alias;
+            addMapped("cargo", name, npmVersion(tableVersion(spec) ?? ""), "Cargo.toml", cargoPackages);
+          }
+        }
+      };
+      dependencies(doc);
+      dependencies(table(doc.workspace));
+      for (const target of Object.values(table(doc.target) ?? {})) dependencies(table(target));
+      if (index.ids.has("rust")) addTech("rust", undefined, "Cargo.toml");
+    } catch {
+      /* Invalid TOML is left to Cargo. */
+    }
+  }
+  const goFile = path.join(dir, "go.mod");
+  if (fs.existsSync(goFile)) {
+    files.push("go.mod");
+    let block = false;
+    for (const line of fs.readFileSync(goFile, "utf8").split(/\r?\n/)) {
+      const clean = line.split("//")[0].trim();
+      if (/^require\s*\(/.test(clean)) {
+        block = true;
+        continue;
+      }
+      if (clean === ")") {
+        block = false;
+        continue;
+      }
+      if (/\/\/\s*indirect\b/.test(line)) continue;
+      const entry = /^(\S+)\s+(v\S+)/.exec(block ? clean : clean.replace(/^require\s+/, ""));
+      if (!entry || (!block && !/^require\s+/.test(clean))) continue;
+      const name = entry[1].replace(/\/v\d+$/, "");
+      addMapped("go", name, semver.coerce(entry[2])?.version, "go.mod", goPackages);
+    }
+    if (index.ids.has("go")) addTech("go", undefined, "go.mod");
+  }
+  const pubFile = path.join(dir, "pubspec.yaml");
+  if (fs.existsSync(pubFile)) {
+    files.push("pubspec.yaml");
+    try {
+      const doc = matter(`---\n${fs.readFileSync(pubFile, "utf8")}\n---`).data;
+      for (const section of [doc.dependencies, doc.dev_dependencies]) {
+        if (!section || typeof section !== "object" || Array.isArray(section)) continue;
+        for (const [name, spec] of Object.entries(section)) {
+          if (spec && typeof spec === "object" && ("path" in spec || "git" in spec)) continue;
+          addMapped("pub", name, typeof spec === "string" ? npmVersion(spec) : undefined, "pubspec.yaml", pubPackages);
+        }
+      }
+      if (index.ids.has("dart")) addTech("dart", undefined, "pubspec.yaml");
+    } catch {
+      /* Invalid YAML is left to pub. */
+    }
+  }
 
   return { techs: [...techs.values()], unknown, files };
 }
