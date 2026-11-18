@@ -34,7 +34,7 @@
   },
   "overrides": [
     {
-      "includes": ["scripts/demo/transcripts.json"],
+      "includes": ["scripts/demo/transcripts.json", "scripts/eval/github-repos.json", "scripts/eval/baseline.json"],
       "formatter": { "enabled": false }
     }
   ],
