@@ -30,26 +30,30 @@ sample task.
 
 ## Start a comparison
 
-Pass `--yes` to approve the plan in a script:
+Pass `--yes` to approve the agent runs in a script:
 
 ```bash
 basics --vault ~/basics-vault compare --sample rust-api/login-api --agent claude --yes
 ```
 
-Without `--yes`, compare first prints the plan to stderr:
+Without `--yes`, compare first prints the plan to stderr. The plan also lists every vault check command the run would
+execute. Each one is marked untrusted until you approve it:
 
 ```
-Planned: 2 agent runs (1 without Basics, 1 with Basics). Timeout: 600s per condition. Output checks will run in those directories.
+Planned: 2 agent runs (1 without Basics, 1 with Basics). Timeout: 600s per condition. --yes approves agent runs only. --trust-checks approves listed checks in these fresh run directories for this invocation only; no vault trust is saved.
+Check <id>: untrusted (will not run without separate approval): <command>
 ```
 
-In a terminal it then asks whether to start the runs and run the vault checks on their output. Answer no and nothing starts.
-Without a terminal, compare stops with `compare requires --yes without an interactive terminal` unless you pass `--yes`.
+In a terminal it then asks whether to start the agent runs. Answer no and nothing starts. Checks get a second question,
+covered in [Safety and trust](#safety-and-trust). Without a terminal, compare stops with
+`compare requires --yes without an interactive terminal` unless you pass `--yes`.
 
 ### Why it asks
 
 Each run is a full agent session. It calls the model, uses your agent's quota, plan allowance or API credits, and a run
 usually takes minutes. The default is two sessions, one per condition. `--runs N` makes 2N sessions. The plan shows that
-count before anything starts, which is why the confirmation exists.
+count before anything starts, which is why the first question exists. Check commands need their own approval, because they
+are shell commands. See [Safety and trust](#safety-and-trust).
 
 Ctrl+C during an agent run stops that run, records it as failed and still saves the report.
 
@@ -62,7 +66,8 @@ Ctrl+C during an agent run stops that run, records it as failed and still saves 
 | `--runs <count>` | Repeats of the pair. Each repeat runs both conditions. | `1` |
 | `--timeout <seconds>` | Limit per condition, for the agent run and its checks together. | `600` |
 | `--sample <pack>/<task-id>` | Official sample task, such as `rust-api/login-api`, `mobile/offline-notes` or `data-ml/csv-report`. Cannot be combined with a typed task. | none |
-| `--yes` | Approve the planned runs and the output checks without asking. | off |
+| `--yes` | Approve the planned agent runs without asking. It never approves check commands. | off |
+| `--trust-checks` | Approve the listed vault check commands for this invocation only. The approval covers this run's fresh project folders and is not saved to the vault. | off |
 | `--keep` | Keep the project folders for inspection. Temporary credentials are removed either way. | off |
 | `--json` | Print the full report as JSON on stdout. The plan and the confirmation go to stderr. | off |
 
@@ -121,12 +126,13 @@ Each comparison writes one JSON file:
 ```
 
 The `.basics/` folder is git-ignored, either by its `*` rule or by a `/compare/` line that compare adds. The file has
-`schema_version` 1. It records the task, the sample, the agent, the model, the runs, the timeout, the recommended stack and
-the recommendation mode. It also holds one entry per run, with its metrics, checks and file lists, the agent's final text
-(its last 100,000 characters) and, with `--keep`, the path of the kept folder. Finally it has a summary per condition.
-Share the file with its settings, because agent, model, runs and timeout are part of the result.
+`schema_version` 1. It records the task, the sample, the agent, the model, the runs, the timeout, whether check commands
+were approved (`trust_checks`), the recommended stack and the recommendation mode. It also holds one entry per run, with its
+metrics, token counts, checks and file lists, the agent's final text (its last 100,000 characters) and, with `--keep`, the path of the kept
+folder. Finally it has a summary per condition. Share the file with its settings, because agent, model, runs and timeout are
+part of the result.
 
-Plain output prints a block per run with its stack lines, checks and file counts, then one summary line per condition.
+Plain output prints a block per run with its token count, stack lines, checks and file counts, then one summary line per condition.
 `--json` prints the same report as one JSON document.
 
 ## Metrics
@@ -136,9 +142,9 @@ Each run records these five measures. The limits matter as much as the values.
 | Measure | What it records | Limits |
 | --- | --- | --- |
 | Stack match | The share of recommended layers whose recommended tech appears in the project's manifests, detected the way `basics detect` does it. A number from 0 to 1, or `null` when nothing was recommended. | It measures agreement with Basics' recommendation, not code quality. A project without manifests scores 0 even when its code works. The `with_basics` condition is measured against the stack it was given, so it is expected to agree more. |
-| Checks | The vault's check commands for the recommended techs, run in the generated project after a successful agent run. Project-local tools (`.venv`, `venv`, `node_modules/.bin`) come first on the PATH. Each check is `pass`, `fail`, `timeout`, `missing_tool` or `skip`. | `pass` means the command exited with code 0. It says nothing about design, and it ignores what the agent claimed about its tests. `missing_tool` means the command was not found, so it counts neither as a pass nor as a fail. `skip` means the agent failed, the check has no command, or the time budget ran out. |
+| Checks | The vault's check commands for the recommended techs, run in the generated project after a successful agent run and only when approved (see [Safety and trust](#safety-and-trust)). Project-local tools (`.venv`, `venv`, `node_modules/.bin`) come first on the PATH. Each check is `pass`, `fail`, `timeout`, `missing_tool`, `skip` or `untrusted`. | `pass` means the command exited with code 0. It says nothing about design, and it ignores what the agent claimed about its tests. `missing_tool` means the command was not found, so it counts neither as a pass nor as a fail. `skip` means the agent failed, the check has no command, or the time budget ran out. `untrusted` means the command was not approved, so it did not run and has no duration. |
 | Wall time | Milliseconds the agent process ran. Checks, setup and cleanup are not included. | Depends on model speed, network load and the machine. |
-| Tokens | Input and output tokens as the CLI reports them, and their sum. `unavailable` when the CLI reports none. | Claude Code's counts leave out cache reads and writes, and each CLI counts in its own way. Do not compare totals across agents, and do not treat them as a bill. |
+| Tokens | Input and output tokens: the total is input without cache plus output, for every agent. `unavailable` when the CLI reports no usage. | The total leaves out cache reads and writes, so it undercounts the tokens a run processed. It is a count, not a cost, and not a bill. When the CLI reports them, `cache_read` and `cache_creation` are kept next to the total and never added to it. Compare totals only within the same agent and model. |
 | Files | Files added, changed and deleted, from a snapshot taken after setup. Files Basics exported at the start are not counted as added. Dependency, virtualenv, cache, build and coverage folders are left out. Their paths are listed under `excluded` in the JSON. | A count, not a quality measure. A snapshot stops after 10,000 files, and files over 10 MiB are skipped. The JSON marks such a snapshot as truncated. |
 
 ### Repeated runs
@@ -165,23 +171,45 @@ Read these before you quote any number.
 
 ## Safety and trust
 
-- Runs use each agent's automatic mode inside a temp folder. See [How each agent runs](#how-each-agent-runs). The folder is
-  a starting point, not a sandbox.
-- Check commands come from your vault's check notes, including notes from packs you installed. With `--yes`, compare runs
-  them in each generated project. It does not use the trust list that `basics check` asks you to build, and it writes no
-  trust entries. Read the check notes of a pack before you compare with it.
-- Compare writes to your vault only its result file under `.basics/compare/`.
+Check commands are shell commands from your vault's check notes, including notes from packs you installed. Compare never
+runs them on its own. A check runs only when you approve it for that invocation:
+
+- In a terminal, compare asks a second question after the agent prompt. It lists each command, and the default answer is no.
+- `--trust-checks` approves the listed commands without asking. Read them in the plan first, then use it in scripts.
+- Without a terminal and without `--trust-checks`, checks are marked `untrusted` and skipped. The agent runs still happen
+  when you pass `--yes`.
+- `--yes` never approves checks.
+
+Compare never writes to the vault's trust list, `.basics/trust.json`. It reads that list the same way `basics check` does,
+but each run gets a new project folder, so a trust entry saved by `basics check` almost never matches there. Approval covers
+one invocation. The next invocation starts untrusted again.
+
+Approved checks still run under the rest of the safety rules. The timeout, the output link check and the missing-tool check
+apply as usual.
+
+To run a check yourself, keep the project with `--keep`, then run it against the same vault:
+
+```bash
+basics --vault ~/basics-vault check <kept project folder> --only <check-id> --trust
+```
+
+If that folder has no `basics.json`, run `basics export --stack <ids>` in it first, with the tech ids from the result's
+`recommendation` field.
+
+Compare writes to your vault only its result file under `.basics/compare/`. Runs use each agent's automatic mode inside a
+temp folder, as described in [How each agent runs](#how-each-agent-runs). That folder is a starting point, not a sandbox.
 
 ## Troubleshooting
 
 | Message or symptom | What to do |
 | --- | --- |
 | `<agent> is not installed (not on PATH)` | Install that agent CLI, or make sure its command runs in your terminal. |
-| `compare requires --yes without an interactive terminal` | Pass `--yes`, or run compare in a terminal and confirm the plan. |
+| `compare requires --yes without an interactive terminal` | Pass `--yes`, or run compare in a terminal and confirm the plan. `--trust-checks` does not replace `--yes` here. |
 | `compare cancelled; no agent runs started` | You declined the plan. Nothing ran. |
 | `provide a task or --sample <pack>/<task-id>` | Type a quoted task, or pass a sample id. |
 | `--sample must be <pack>/<task-id>` or `sample not found` | Use an id from an official pack, such as `rust-api/login-api`. |
 | `the agent timed out after N seconds` | Raise `--timeout`. It is in seconds. |
+| Checks show `untrusted` | Expected without approval. Read the commands in the plan, then rerun with `--trust-checks`, or keep the project and run the check yourself as shown in [Safety and trust](#safety-and-trust). |
 | Checks show `missing_tool` | The generated project does not have that tool on its PATH. It is recorded as a result, not as a failure. |
 | Every run fails at once | Run the agent CLI yourself, outside Basics, to confirm it starts and is logged in. |
 | Exit code 1 | At least one run failed, timed out or left a cleanup error. Read the `error` lines in the output or the JSON. |

@@ -74,7 +74,9 @@ basics --vault ~/basics-vault compare --sample rust-api/login-api --agent claude
 - `--agent` (obligatorio): `claude`, `opencode` o `codex`.
 - `--model`, `--runs` (repeticiones, por defecto 1) y `--timeout` (segundos por condición, por defecto 600).
 - `--sample <pack>/<task-id>` para una tarea de ejemplo oficial, o una tarea entre comillas en su lugar.
-- `--yes` aprueba el plan, `--keep` conserva las carpetas de los proyectos y `--json` imprime el informe.
+- `--yes` aprueba las ejecuciones del agente. Nunca aprueba los comandos de checks.
+- `--trust-checks` aprueba los comandos de checks del vault que se listan, solo para esta ejecución de compare. No se guarda nada como confianza.
+- `--keep` conserva las carpetas de los proyectos y `--json` imprime el informe.
 
 Cada ejecución del agente es una sesión completa que consume tu cuota o tus créditos. Compare muestra primero el número de sesiones previsto: por defecto son dos, y fuera de una terminal se necesita `--yes`. Antes de citar un resultado, lee la [guía de compare (en inglés)](https://marcozvd.github.io/basics/guide/compare.html). Una sola ejecución no demuestra nada, y la coincidencia de stack mide el acuerdo con la recomendación propia de Basics, no la calidad del código.
 
