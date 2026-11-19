@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { type Candidate, type Recommendation, Vault } from "@marcozvd/basics-core";
+import { type Candidate, type Recommendation, trust, Vault } from "@marcozvd/basics-core";
 import { test, vi } from "vitest";
 import { AgentRunner } from "../src/agents.js";
 import { type CompareDependencies, expectedCompareStack, metricStats, resolveCompareTask, runComparison } from "../src/compare.js";
@@ -92,13 +92,148 @@ test("confirmation refuses non-TTY, declined confirmation and missing agents bef
     f.cleanup();
   }
 });
+test("--yes never grants check trust, including trust for another directory or a different command", async () => {
+  const f = fixture();
+  try {
+    const sentinel = path.join(f.base, "check-ran");
+    const command = `"${process.execPath.replaceAll("\\", "/")}" -e "require('node:fs').writeFileSync('${sentinel.replaceAll("\\", "/")}', 'unsafe')"`;
+    f.vault.writeNote("verify", { type: "check", kind: "test", applies_to: ["react"], command, tags: [], source: "manual" }, "");
+    trust(f.vault, f.base, command);
+    const plans: string[] = [];
+    const confirmChecks = vi.fn(async () => true);
+    const report = await runComparison(
+      f.vault,
+      { agent: "claude", task: "dashboard", yes: true },
+      {
+        ...f.deps,
+        isTTY: false,
+        confirmChecks,
+        announce(message) {
+          plans.push(message);
+          if (message.startsWith("Check directory: ")) trust(f.vault, message.slice("Check directory: ".length), `${command} changed`);
+        },
+      },
+    );
+    assert.equal(fs.existsSync(sentinel), false);
+    assert.equal(confirmChecks.mock.calls.length, 0);
+    assert.equal(report.trust_checks, false);
+    assert.ok(report.results.every((r) => r.ok && r.checks_passed === 0 && r.checks[0].status === "untrusted"));
+    assert.ok(
+      report.results.every((r) => r.checks[0].command === command && /basics check .* --only verify --trust/.test(r.checks[0].hint!)),
+    );
+    assert.match(plans.join("\n"), /untrusted \(will not run\)/);
+    assert.deepEqual(fs.readdirSync(f.tempRoot), []);
+  } finally {
+    f.cleanup();
+  }
+});
+
+test("--trust-checks runs only invocation checks without persisting trust or implying agent approval", async () => {
+  const f = fixture();
+  try {
+    const confirmChecks = vi.fn(async () => false);
+    const announce = vi.fn();
+    await assert.rejects(
+      runComparison(
+        f.vault,
+        { agent: "claude", task: "dashboard", trustChecks: true },
+        {
+          ...f.deps,
+          isTTY: false,
+          confirmChecks,
+        },
+      ),
+      /--yes/,
+    );
+    const report = await runComparison(
+      f.vault,
+      { agent: "claude", task: "dashboard", yes: true, trustChecks: true },
+      {
+        ...f.deps,
+        isTTY: false,
+        confirmChecks,
+        announce,
+      },
+    );
+    assert.equal(confirmChecks.mock.calls.length, 0);
+    assert.equal(report.trust_checks, true);
+    assert.deepEqual(
+      report.results.map((r) => r.checks[0].status),
+      ["fail", "pass"],
+    );
+    assert.deepEqual(
+      report.results.map((r) => r.checks_passed),
+      [0, 1],
+    );
+    assert.match(announce.mock.calls.map((call) => call[0]).join("\n"), /will run \(--trust-checks\).*verify.cjs/);
+    assert.equal(fs.existsSync(path.join(f.vault.root, ".basics/trust.json")), false);
+    const next = await runComparison(f.vault, { agent: "claude", task: "dashboard", yes: true }, { ...f.deps, isTTY: false });
+    assert.ok(next.results.every((r) => r.checks[0].status === "untrusted"));
+  } finally {
+    f.cleanup();
+  }
+});
+
+test("interactive check approval is separate: accept runs checks, decline or no answer leaves them untrusted", async () => {
+  const f = fixture();
+  try {
+    const order: string[] = [];
+    const trustFile = path.join(f.vault.root, ".basics/trust.json");
+    trust(f.vault, f.base, "existing unrelated trust");
+    const beforeTrust = fs.readFileSync(trustFile, "utf8");
+    for (const approved of [true, false, undefined]) {
+      const confirm = vi.fn(async () => {
+        order.push("agent");
+        return true;
+      });
+      const confirmChecks = vi.fn(async (checks: { id: string; command: string }[]) => {
+        order.push("checks");
+        assert.deepEqual(
+          checks.map((check) => check.id),
+          ["verify"],
+        );
+        assert.match(checks[0].command, /verify.cjs/);
+        assert.deepEqual(fs.readdirSync(f.tempRoot), [], "confirmation happens before starting either run");
+        return approved === true;
+      });
+      const report = await runComparison(
+        f.vault,
+        { agent: "claude", task: "dashboard" },
+        {
+          ...f.deps,
+          isTTY: true,
+          confirm,
+          confirmChecks: approved === undefined ? undefined : confirmChecks,
+        },
+      );
+      assert.equal(confirm.mock.calls.length, 1);
+      assert.equal(confirmChecks.mock.calls.length, approved === undefined ? 0 : 1);
+      assert.deepEqual(
+        report.results.map((r) => r.checks[0].status),
+        approved ? ["fail", "pass"] : ["untrusted", "untrusted"],
+      );
+      assert.equal(fs.readFileSync(trustFile, "utf8"), beforeTrust);
+    }
+    assert.deepEqual(order, ["agent", "checks", "agent", "checks", "agent"]);
+    const confirmChecks = vi.fn(async () => false);
+    await runComparison(f.vault, { agent: "claude", task: "dashboard", yes: true }, { ...f.deps, isTTY: true, confirmChecks });
+    assert.equal(confirmChecks.mock.calls.length, 1, "--yes must not bypass the separate interactive check prompt");
+  } finally {
+    f.cleanup();
+  }
+});
+
 test("paired fake runs measure real checks, detected stack, tokens, diffs and repeat aggregation, then clean everything", async () => {
   const f = fixture();
   try {
     fs.mkdirSync(path.join(f.vault.root, ".basics"));
     fs.writeFileSync(path.join(f.vault.root, ".basics/.gitignore"), "activity.jsonl\n");
     const confirm = vi.fn(async () => true);
-    const report = await runComparison(f.vault, { agent: "claude", task: "dashboard", runs: 2 }, { ...f.deps, isTTY: true, confirm });
+    const report = await runComparison(
+      f.vault,
+      { agent: "claude", task: "dashboard", runs: 2, trustChecks: true },
+      { ...f.deps, isTTY: true, confirm },
+    );
     assert.equal(confirm.mock.calls.length, 1);
     assert.equal(report.results.length, 4);
     for (const result of report.results) {
@@ -209,7 +344,7 @@ test("internal dependency links permit checks and are cleaned without traversing
   try {
     const report = await runComparison(
       f.vault,
-      { agent: "claude", task: "dashboard", yes: true },
+      { agent: "claude", task: "dashboard", yes: true, trustChecks: true },
       { ...f.deps, env: { ...f.deps.env, FAKE_COMPARE_MODE: "internal-link" } },
     );
     assert.ok(report.results.every((result) => result.ok));
@@ -257,7 +392,7 @@ test("checks prefer project venv and npm tools, distinguish missing tools from f
     for (const venv of [".venv", "venv"]) {
       const report = await runComparison(
         f.vault,
-        { agent: "claude", task: "dashboard", yes: true },
+        { agent: "claude", task: "dashboard", yes: true, trustChecks: true },
         { ...f.deps, env: { ...f.deps.env, FAKE_COMPARE_MODE: "tools", FAKE_COMPARE_VENV: venv } },
       );
       for (const result of report.results) {
@@ -420,6 +555,18 @@ test("CLI JSON output is a single report, planned count is separate, and --sampl
     assert.match(text, /used=react; recommended=react; match=yes/);
     assert.match(text, /files: added=3 changed=0 deleted=0/);
     assert.match(text, /tokens mean=17 stddev=0/);
+    assert.match(text, /verify=untrusted/);
+    assert.match(text, /verify.cjs/);
+    assert.match(text, /basics check .* --only verify --trust/);
+    output.mockClear();
+    await buildProgram().parseAsync(["compare", "dashboard", "--agent", "claude", "--yes", "--trust-checks", "--json"], { from: "user" });
+    const trustedReport = JSON.parse(String(output.mock.calls[0][0]));
+    assert.equal(trustedReport.trust_checks, true);
+    assert.deepEqual(
+      trustedReport.results.map((result: { checks_passed: number }) => result.checks_passed),
+      [0, 1],
+    );
+    assert.equal(fs.existsSync(path.join(f.vault.root, ".basics/trust.json")), false);
   } finally {
     output.mockRestore();
     plan.mockRestore();

@@ -7,6 +7,7 @@ import {
   atomicWrite,
   basicsDir,
   detectStack,
+  isTrusted,
   type Recommendation,
   readPackTasks,
   recommend,
@@ -26,6 +27,7 @@ export interface CompareOptions {
   runs?: number;
   timeoutMs?: number;
   yes?: boolean;
+  trustChecks?: boolean;
   keep?: boolean;
   language?: string;
 }
@@ -37,6 +39,7 @@ export interface CompareDependencies {
   resolveExe?: (agent: AgentId) => string | undefined;
   isTTY?: boolean;
   confirm?: () => Promise<boolean>;
+  confirmChecks?: (checks: { id: string; command: string }[]) => Promise<boolean>;
   announce?: (message: string) => void;
 }
 export function resolveCompareTask(options: CompareOptions, packs: string) {
@@ -65,7 +68,8 @@ export function metricStats(values: number[]) {
 interface CheckResult {
   id: string;
   command?: string;
-  status: "pass" | "fail" | "skip" | "timeout" | "missing_tool";
+  status: "pass" | "fail" | "skip" | "timeout" | "missing_tool" | "untrusted";
+  hint?: string;
   duration_ms: number;
   output_tail?: string;
 }
@@ -176,19 +180,34 @@ export async function runComparison(vault: Vault, options: CompareOptions, deps:
   if (!Number.isFinite(timeout) || timeout <= 0 || timeout > 2_147_483_647)
     throw new Error("--timeout must be positive seconds within the timer limit");
   const task = resolveCompareTask(options, deps.packsDir);
-  deps.announce?.(
-    `Planned: ${runs * 2} agent runs (${runs} without Basics, ${runs} with Basics). Timeout: ${timeout / 1000}s per condition. Output checks will run in those directories.`,
-  );
-  if (!options.yes) {
-    if (!(deps.isTTY ?? process.stdin.isTTY)) throw new Error("compare requires --yes without an interactive terminal");
-    if (!deps.confirm || !(await deps.confirm())) throw new Error("compare cancelled; no agent runs started");
-  }
-  const executable = deps.resolveExe ? deps.resolveExe(options.agent) : onPath(options.agent, deps.env?.PATH ?? process.env.PATH);
-  if (!executable) throw new AgentUnavailableError(`${options.agent} is not installed (not on PATH)`);
   const advice = recommend(vault, task.prompt, { layers: task.expectedLayers });
   const expected = expectedCompareStack(advice);
   const stack = [...new Set(Object.values(expected).flat())];
   const checks = stackContext(vault, stack).checks;
+  const commands = checks.flatMap((check) =>
+    check.data.type === "check" && check.data.command ? [{ id: check.id, command: check.data.command }] : [],
+  );
+  const interactive = deps.isTTY ?? process.stdin.isTTY;
+  deps.announce?.(
+    `Planned: ${runs * 2} agent runs (${runs} without Basics, ${runs} with Basics). Timeout: ${timeout / 1000}s per condition. --yes approves agent runs only. --trust-checks approves listed checks in these fresh run directories for this invocation only; no vault trust is saved.`,
+  );
+  for (const check of commands)
+    deps.announce?.(
+      `Check ${check.id}: ${options.trustChecks ? "will run (--trust-checks)" : "untrusted (will not run without separate approval)"}: ${check.command}`,
+    );
+  if (!options.yes) {
+    if (!interactive) throw new Error("compare requires --yes without an interactive terminal");
+    if (!deps.confirm || !(await deps.confirm())) throw new Error("compare cancelled; no agent runs started");
+  }
+  const executable = deps.resolveExe ? deps.resolveExe(options.agent) : onPath(options.agent, deps.env?.PATH ?? process.env.PATH);
+  if (!executable) throw new AgentUnavailableError(`${options.agent} is not installed (not on PATH)`);
+  // Separate, invocation-local approval; --yes never authorizes shell commands.
+  let checksApproved = options.trustChecks === true;
+  if (!checksApproved && interactive && commands.length) checksApproved = (await deps.confirmChecks?.(commands)) === true;
+  for (const check of commands)
+    deps.announce?.(
+      `Check ${check.id}: ${checksApproved ? "approved for this invocation (will run)" : "untrusted (will not run)"}: ${check.command}`,
+    );
   const directories = new CompareDirectories();
   const results: CompareRunResult[] = [];
   let interrupted = false;
@@ -211,6 +230,12 @@ export async function runComparison(vault: Vault, options: CompareOptions, deps:
             prepared = prepareCompareEnvironment(dir, options.agent, vault, stack, condition === "with_basics", deps.env, deps.authHome);
             directories.own(prepared.control);
             before = snapshotFiles(prepared.project);
+            deps.announce?.(`Check directory: ${prepared.project}`);
+            for (const check of checks)
+              if (check.data.type === "check" && check.data.command)
+                deps.announce?.(
+                  `Check ${check.id}: ${checksApproved || isTrusted(vault, prepared.project, check.data.command) ? "trusted (will run)" : "untrusted (will not run)"}: ${check.data.command}`,
+                );
             return { cwd: prepared.project, env: prepared.env, args: prepared.args };
           },
         });
@@ -245,6 +270,16 @@ export async function runComparison(vault: Vault, options: CompareOptions, deps:
           const deadline = Date.now() + Math.max(0, timeout - (agent.duration_ms ?? 0));
           for (const check of checks) {
             if (check.data.type !== "check") continue;
+            if (check.data.command && !checksApproved && !isTrusted(vault, prepared.project, check.data.command)) {
+              runChecks.push({
+                id: check.id,
+                command: check.data.command,
+                status: "untrusted",
+                duration_ms: 0,
+                hint: `Review the listed commands and rerun compare with --trust-checks to approve checks for that invocation only. --yes never grants check trust. Alternatively, use --keep to retain this project, run basics export --stack ${stack.join(",")} in the project if basics.json is missing, then basics check ${JSON.stringify(prepared.project)} --only ${check.id} --trust with the same vault.`,
+              });
+              continue;
+            }
             if (!agent.ok || !check.data.command || Date.now() >= deadline) {
               runChecks.push({ id: check.id, status: "skip", duration_ms: 0 });
               continue;
@@ -357,6 +392,7 @@ export async function runComparison(vault: Vault, options: CompareOptions, deps:
     runs,
     timeout_ms: timeout,
     keep: options.keep ?? false,
+    trust_checks: checksApproved,
     recommendation: expected,
     mode: advice.mode,
     results,

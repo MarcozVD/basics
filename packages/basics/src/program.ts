@@ -1297,7 +1297,8 @@ export function buildProgram(): Command {
     .option("--runs <count>", "runs per condition", "1")
     .option("--timeout <seconds>", "timeout per condition in seconds", "600")
     .option("--sample <pack/task>", "bilingual sample task from an official pack")
-    .option("--yes", "approve the planned agent runs and output checks")
+    .option("--yes", "approve planned agent runs only; never trust check commands")
+    .option("--trust-checks", "approve listed check commands for this invocation's fresh run directories only; never save trust")
     .option("--keep", "keep project directories, excluding temporary credentials")
     .option("--json", "print the result JSON; plan goes to stderr")
     .action(
@@ -1310,6 +1311,7 @@ export function buildProgram(): Command {
           timeout: string;
           sample?: string;
           yes?: boolean;
+          trustChecks?: boolean;
           keep?: boolean;
           json?: boolean;
         },
@@ -1328,7 +1330,15 @@ export function buildProgram(): Command {
             announce: (message) => console.error(message),
             confirm: async () => {
               const answer = await confirm({
-                message: "Start these agent runs and run the vault checks on their output?",
+                message: "Start these agent runs? Check commands require separate approval.",
+                output: process.stderr,
+              });
+              return !isCancel(answer) && answer;
+            },
+            confirmChecks: async (checks) => {
+              const answer = await confirm({
+                message: `Run these vault check commands in this invocation's fresh project directories only? No trust will be saved.\n${checks.map((check) => `${check.id}: ${check.command}`).join("\n")}`,
+                initialValue: false,
                 output: process.stderr,
               });
               return !isCancel(answer) && answer;
@@ -1348,6 +1358,8 @@ export function buildProgram(): Command {
             console.log(
               `  checks: ${result.checks_passed}/${result.checks.length} passed; ${result.checks.map((check) => `${check.id}=${check.status}`).join(", ") || "none"}`,
             );
+            for (const check of result.checks)
+              if (check.status === "untrusted") console.log(`  ${check.id}: ${check.command}\n  ${check.hint}`);
             console.log(
               `  files: added=${result.files?.added.length ?? "unavailable"} changed=${result.files?.changed.length ?? "unavailable"} deleted=${result.files?.deleted.length ?? "unavailable"}`,
             );

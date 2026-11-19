@@ -307,7 +307,8 @@ basics compare [options] [task...]
 | `--runs <count>` | runs per condition | `1` |
 | `--timeout <seconds>` | timeout per condition in seconds | `600` |
 | `--sample <pack/task>` | bilingual sample task from an official pack | — |
-| `--yes` | approve the planned agent runs and output checks | — |
+| `--yes` | approve planned agent runs only; never trust check commands | — |
+| `--trust-checks` | approve listed check commands for this invocation's fresh run directories only; never save trust | — |
 | `--keep` | keep project directories, excluding temporary credentials | — |
 | `--json` | print the result JSON; plan goes to stderr | — |
 
