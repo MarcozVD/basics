@@ -223,6 +223,43 @@ test("interactive check approval is separate: accept runs checks, decline or no 
   }
 });
 
+test("sample usage events normalize provider input and preserve separate optional cache counts", async () => {
+  const f = fixture();
+  try {
+    for (const agent of ["claude", "codex", "opencode"] as const) {
+      const report = await runComparison(
+        f.vault,
+        { agent, task: "dashboard", yes: true },
+        {
+          ...f.deps,
+          env: { ...f.deps.env, FAKE_COMPARE_MODE: "cache-tokens" },
+        },
+      );
+      for (const result of report.results) {
+        assert.deepEqual(result.tokens, {
+          input: agent === "claude" ? 12 : 24,
+          output: agent === "claude" ? 5 : 10,
+          total: agent === "claude" ? 17 : 34,
+          cache_read: agent === "claude" ? 100 : 200,
+          cache_creation: agent === "claude" ? 20 : 40,
+        });
+      }
+      const noCache = await runComparison(f.vault, { agent, task: "dashboard", yes: true }, f.deps);
+      assert.deepEqual(noCache.results[0].tokens, { input: 12, output: 5, total: 17 });
+    }
+    const fullyCached = await runComparison(
+      f.vault,
+      { agent: "codex", task: "dashboard", yes: true },
+      {
+        ...f.deps,
+        env: { ...f.deps.env, FAKE_COMPARE_MODE: "fully-cached" },
+      },
+    );
+    assert.deepEqual(fullyCached.results[0].tokens, { input: 0, output: 5, total: 5, cache_read: 100 });
+  } finally {
+    f.cleanup();
+  }
+});
 test("paired fake runs measure real checks, detected stack, tokens, diffs and repeat aggregation, then clean everything", async () => {
   const f = fixture();
   try {
@@ -554,7 +591,7 @@ test("CLI JSON output is a single report, planned count is separate, and --sampl
     const text = output.mock.calls.map((call) => call.join(" ")).join("\n");
     assert.match(text, /used=react; recommended=react; match=yes/);
     assert.match(text, /files: added=3 changed=0 deleted=0/);
-    assert.match(text, /tokens mean=17 stddev=0/);
+    assert.match(text, /tokens \(input \+ output, excluding cache\) mean=17 stddev=0/);
     assert.match(text, /verify=untrusted/);
     assert.match(text, /verify.cjs/);
     assert.match(text, /basics check .* --only verify --trust/);

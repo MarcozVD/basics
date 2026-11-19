@@ -1349,7 +1349,7 @@ export function buildProgram(): Command {
         else {
           for (const result of report.results) {
             console.log(
-              `Run ${result.run} ${result.condition}: ${result.ok ? "completed" : "failed"}, ${result.wall_ms}ms, tokens=${result.tokens?.total ?? "unavailable"}`,
+              `Run ${result.run} ${result.condition}: ${result.ok ? "completed" : "failed"}, ${result.wall_ms}ms, tokens (input + output, excluding cache)=${result.tokens?.total ?? "unavailable"}${result.tokens?.cache_read !== undefined ? `, cache_read=${result.tokens.cache_read}` : ""}${result.tokens?.cache_creation !== undefined ? `, cache_creation=${result.tokens.cache_creation}` : ""}`,
             );
             for (const layer of result.stack_comparison)
               console.log(
@@ -1367,7 +1367,7 @@ export function buildProgram(): Command {
           }
           for (const [condition, stats] of Object.entries(report.summary))
             console.log(
-              `${condition}: ${stats.successes}/${stats.runs} completed; time mean=${stats.wall_ms?.mean.toFixed(0)}ms stddev=${stats.wall_ms?.stddev.toFixed(0)}ms; checks passed mean=${stats.checks_passed?.mean.toFixed(2)} stddev=${stats.checks_passed?.stddev.toFixed(2)}; tokens mean=${stats.tokens_total?.mean.toFixed(0) ?? "unavailable"} stddev=${stats.tokens_total?.stddev.toFixed(0) ?? "unavailable"}; stack match mean=${stats.stack_match?.mean.toFixed(2) ?? "unavailable"} stddev=${stats.stack_match?.stddev.toFixed(2) ?? "unavailable"}; files added mean=${stats.files_added?.mean.toFixed(2)} stddev=${stats.files_added?.stddev.toFixed(2)} changed mean=${stats.files_changed?.mean.toFixed(2)} stddev=${stats.files_changed?.stddev.toFixed(2)} deleted mean=${stats.files_deleted?.mean.toFixed(2)} stddev=${stats.files_deleted?.stddev.toFixed(2)}`,
+              `${condition}: ${stats.successes}/${stats.runs} completed; time mean=${stats.wall_ms?.mean.toFixed(0)}ms stddev=${stats.wall_ms?.stddev.toFixed(0)}ms; checks passed mean=${stats.checks_passed?.mean.toFixed(2)} stddev=${stats.checks_passed?.stddev.toFixed(2)}; tokens (input + output, excluding cache) mean=${stats.tokens_total?.mean.toFixed(0) ?? "unavailable"} stddev=${stats.tokens_total?.stddev.toFixed(0) ?? "unavailable"}; stack match mean=${stats.stack_match?.mean.toFixed(2) ?? "unavailable"} stddev=${stats.stack_match?.stddev.toFixed(2) ?? "unavailable"}; files added mean=${stats.files_added?.mean.toFixed(2)} stddev=${stats.files_added?.stddev.toFixed(2)} changed mean=${stats.files_changed?.mean.toFixed(2)} stddev=${stats.files_changed?.stddev.toFixed(2)} deleted mean=${stats.files_deleted?.mean.toFixed(2)} stddev=${stats.files_deleted?.stddev.toFixed(2)}`,
             );
           console.log(`Results: ${report.file}`);
           for (const result of report.results) if (result.directory) console.log(`Kept: ${result.directory}`);

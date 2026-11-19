@@ -35,13 +35,38 @@ if (mode === "sleep") {
   }
   const emit = (event) => process.stdout.write(`${JSON.stringify(event)}\n`);
   if (args[0] === "-p")
-    emit({ type: "result", result: "Generated files", ...(mode === "no-tokens" ? {} : { usage: { input_tokens: 12, output_tokens: 5 } }) });
+    emit({
+      type: "result",
+      result: "Generated files",
+      ...(mode === "no-tokens"
+        ? {}
+        : {
+            usage: {
+              input_tokens: 12,
+              output_tokens: 5,
+              ...(mode === "cache-tokens" ? { cache_read_input_tokens: 100, cache_creation_input_tokens: 20 } : {}),
+            },
+          }),
+    });
   else if (args[0] === "exec") {
     emit({ type: "item.completed", item: { type: "agent_message", text: "Generated files" } });
-    emit({ type: "turn.completed", usage: { input_tokens: 12, output_tokens: 5 } });
+    for (let i = 0; i < (mode === "cache-tokens" ? 2 : 1); i++)
+      emit({
+        type: "turn.completed",
+        usage: {
+          input_tokens: mode === "cache-tokens" ? 112 : mode === "fully-cached" ? 100 : 12,
+          output_tokens: 5,
+          ...(mode === "cache-tokens" ? { cached_input_tokens: 100, cache_write_input_tokens: 20 } : {}),
+          ...(mode === "fully-cached" ? { cached_input_tokens: 100 } : {}),
+        },
+      });
   } else {
     emit({ type: "text", part: { text: "Generated files" } });
-    emit({ type: "step_finish", part: { tokens: { input: 12, output: 5 } } });
+    for (let i = 0; i < (mode === "cache-tokens" ? 2 : 1); i++)
+      emit({
+        type: "step_finish",
+        part: { tokens: { input: 12, output: 5, ...(mode === "cache-tokens" ? { cache: { read: 100, write: 20 } } : {}) } },
+      });
   }
   if (mode === "fail") process.exitCode = 3;
 }

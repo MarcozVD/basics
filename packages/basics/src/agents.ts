@@ -382,7 +382,10 @@ export interface AgentRunOptions {
 export interface TokenUsage {
   input: number;
   output: number;
+  /** Input plus output only; provider-reported cache usage is separate. */
   total: number;
+  cache_read?: number;
+  cache_creation?: number;
 }
 
 export interface AgentRunResult {
@@ -484,13 +487,41 @@ export class AgentRunner {
           : event.type === "result" || event.type === "turn.completed"
             ? event.usage
             : undefined
-      ) as { input_tokens?: number; output_tokens?: number; input?: number; output?: number } | undefined;
+      ) as
+        | {
+            input_tokens?: number;
+            output_tokens?: number;
+            input?: number;
+            output?: number;
+            cache_read_input_tokens?: number;
+            cache_creation_input_tokens?: number;
+            cached_input_tokens?: number;
+            cache_write_input_tokens?: number;
+            cache?: { read?: number; write?: number };
+          }
+        | undefined;
       if (!counts) return;
-      const input = counts.input_tokens ?? counts.input;
+      let input = counts.input_tokens ?? counts.input;
       const output = counts.output_tokens ?? counts.output;
       if (typeof input !== "number" || typeof output !== "number" || !Number.isFinite(input + output) || input < 0 || output < 0) return;
+      const caches =
+        opts.agent === "codex"
+          ? { cache_read: counts.cached_input_tokens, cache_creation: counts.cache_write_input_tokens }
+          : opts.agent === "claude"
+            ? { cache_read: counts.cache_read_input_tokens, cache_creation: counts.cache_creation_input_tokens }
+            : { cache_read: counts.cache?.read, cache_creation: counts.cache?.write };
+      // Codex protocol.rs non_cached_input(): input_tokens includes cached_input_tokens.
+      if (opts.agent === "codex" && typeof caches.cache_read === "number" && Number.isFinite(caches.cache_read) && caches.cache_read >= 0)
+        input = Math.max(0, input - caches.cache_read);
+      // Claude input is already separate. OpenCode step_finish tokens.input is also normalized:
+      // https://github.com/anomalyco/opencode/blob/v1.3.16/packages/opencode/src/session/index.ts#L257-L271
       const sum = opts.agent !== "claude" ? usage : undefined;
       usage = { input: (sum?.input ?? 0) + input, output: (sum?.output ?? 0) + output, total: (sum?.total ?? 0) + input + output };
+      for (const key of ["cache_read", "cache_creation"] as const) {
+        const value = caches[key];
+        if (typeof value === "number" && Number.isFinite(value) && value >= 0) usage[key] = (sum?.[key] ?? 0) + value;
+        else if (sum?.[key] !== undefined) usage[key] = sum[key];
+      }
     });
     const started = Date.now();
     let child: ChildProcess;
