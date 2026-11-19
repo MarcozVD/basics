@@ -56,6 +56,7 @@ import {
   writeVaultMeta,
 } from "@marcozvd/basics-core";
 import { Command } from "commander";
+import { type CompareOptions, runComparison } from "./compare.js";
 import { CONNECT_CLIENTS, type ConnectResult, connect, connectSnippets, type DisconnectResult, disconnect } from "./connect.js";
 import {
   createEmbedder,
@@ -1287,6 +1288,93 @@ export function buildProgram(): Command {
       if (opts.json) console.log(JSON.stringify(rec, null, 2));
       else printRecommendation(rec);
     });
+
+  program
+    .command("compare [task...]")
+    .description("compare generated projects without and with read-only Basics")
+    .requiredOption("--agent <agent>", "claude, opencode or codex")
+    .option("--model <model>", "agent model")
+    .option("--runs <count>", "runs per condition", "1")
+    .option("--timeout <seconds>", "timeout per condition in seconds", "600")
+    .option("--sample <pack/task>", "bilingual sample task from an official pack")
+    .option("--yes", "approve planned agent runs only; never trust check commands")
+    .option("--trust-checks", "approve listed check commands for this invocation's fresh run directories only; never save trust")
+    .option("--keep", "keep project directories, excluding temporary credentials")
+    .option("--json", "print the result JSON; plan goes to stderr")
+    .action(
+      async (
+        task: string[],
+        opts: {
+          agent: CompareOptions["agent"];
+          model?: string;
+          runs: string;
+          timeout: string;
+          sample?: string;
+          yes?: boolean;
+          trustChecks?: boolean;
+          keep?: boolean;
+          json?: boolean;
+        },
+      ) => {
+        const report = await runComparison(
+          load(),
+          {
+            ...opts,
+            task: task.join(" "),
+            runs: Number(opts.runs),
+            timeoutMs: Number(opts.timeout) * 1000,
+            language: loadConfig().language,
+          },
+          {
+            packsDir: packsDir(),
+            announce: (message) => console.error(message),
+            confirm: async () => {
+              const answer = await confirm({
+                message: "Start these agent runs? Check commands require separate approval.",
+                output: process.stderr,
+              });
+              return !isCancel(answer) && answer;
+            },
+            confirmChecks: async (checks) => {
+              const answer = await confirm({
+                message: `Run these vault check commands in this invocation's fresh project directories only? No trust will be saved.\n${checks.map((check) => `${check.id}: ${check.command}`).join("\n")}`,
+                initialValue: false,
+                output: process.stderr,
+              });
+              return !isCancel(answer) && answer;
+            },
+          },
+        );
+        if (opts.json) console.log(JSON.stringify(report, null, 2));
+        else {
+          for (const result of report.results) {
+            console.log(
+              `Run ${result.run} ${result.condition}: ${result.ok ? "completed" : "failed"}, ${result.wall_ms}ms, tokens (input + output, excluding cache)=${result.tokens?.total ?? "unavailable"}${result.tokens?.cache_read !== undefined ? `, cache_read=${result.tokens.cache_read}` : ""}${result.tokens?.cache_creation !== undefined ? `, cache_creation=${result.tokens.cache_creation}` : ""}`,
+            );
+            for (const layer of result.stack_comparison)
+              console.log(
+                `  ${layer.layer}: used=${layer.used.join(",") || "none"}; recommended=${layer.expected.join(",")}; match=${layer.match ? "yes" : "no"}`,
+              );
+            console.log(
+              `  checks: ${result.checks_passed}/${result.checks.length} passed; ${result.checks.map((check) => `${check.id}=${check.status}`).join(", ") || "none"}`,
+            );
+            for (const check of result.checks)
+              if (check.status === "untrusted") console.log(`  ${check.id}: ${check.command}\n  ${check.hint}`);
+            console.log(
+              `  files: added=${result.files?.added.length ?? "unavailable"} changed=${result.files?.changed.length ?? "unavailable"} deleted=${result.files?.deleted.length ?? "unavailable"}`,
+            );
+            if (result.error) console.log(`  error: ${result.error}`);
+          }
+          for (const [condition, stats] of Object.entries(report.summary))
+            console.log(
+              `${condition}: ${stats.successes}/${stats.runs} completed; time mean=${stats.wall_ms?.mean.toFixed(0)}ms stddev=${stats.wall_ms?.stddev.toFixed(0)}ms; checks passed mean=${stats.checks_passed?.mean.toFixed(2)} stddev=${stats.checks_passed?.stddev.toFixed(2)}; tokens (input + output, excluding cache) mean=${stats.tokens_total?.mean.toFixed(0) ?? "unavailable"} stddev=${stats.tokens_total?.stddev.toFixed(0) ?? "unavailable"}; stack match mean=${stats.stack_match?.mean.toFixed(2) ?? "unavailable"} stddev=${stats.stack_match?.stddev.toFixed(2) ?? "unavailable"}; files added mean=${stats.files_added?.mean.toFixed(2)} stddev=${stats.files_added?.stddev.toFixed(2)} changed mean=${stats.files_changed?.mean.toFixed(2)} stddev=${stats.files_changed?.stddev.toFixed(2)} deleted mean=${stats.files_deleted?.mean.toFixed(2)} stddev=${stats.files_deleted?.stddev.toFixed(2)}`,
+            );
+          console.log(`Results: ${report.file}`);
+          for (const result of report.results) if (result.directory) console.log(`Kept: ${result.directory}`);
+        }
+        if (report.results.some((result) => !result.ok || result.cleanup_errors.length)) process.exitCode = 1;
+      },
+    );
 
   program
     .command("new <type> <id>")

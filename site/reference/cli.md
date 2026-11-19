@@ -292,6 +292,26 @@ basics recommend [options] <description...>
 | --- | --- | --- |
 | `--json` | print the full JSON response | — |
 
+### `basics compare`
+
+compare generated projects without and with read-only Basics
+
+```
+basics compare [options] [task...]
+```
+
+| Flag | Description | Default |
+| --- | --- | --- |
+| `--agent <agent>` | claude, opencode or codex (required) | — |
+| `--model <model>` | agent model | — |
+| `--runs <count>` | runs per condition | `1` |
+| `--timeout <seconds>` | timeout per condition in seconds | `600` |
+| `--sample <pack/task>` | bilingual sample task from an official pack | — |
+| `--yes` | approve planned agent runs only; never trust check commands | — |
+| `--trust-checks` | approve listed check commands for this invocation's fresh run directories only; never save trust | — |
+| `--keep` | keep project directories, excluding temporary credentials | — |
+| `--json` | print the result JSON; plan goes to stderr | — |
+
 ### `basics new`
 
 create a note from a template

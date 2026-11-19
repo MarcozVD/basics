@@ -8,6 +8,7 @@ import {
   NOTE_TYPES,
   type NoteData,
   noteSchema,
+  recommend,
   recordOutcome,
   renderContext,
   renderExport,
@@ -54,6 +55,8 @@ export interface McpServerOptions {
   clientHint?: string;
   /** Shared vault cache (the UI server passes the one its watcher keeps fresh). */
   cache?: VaultCache;
+  /** Compare: expose reads only, without activity or vector-index writes. */
+  readOnly?: boolean;
 }
 
 export interface McpToolDefinition {
@@ -63,6 +66,7 @@ export interface McpToolDefinition {
 }
 
 interface ToolContext {
+  readOnly?: boolean;
   vault: () => Vault;
   log: (tool: string, noteIds: string[], detail?: string) => void;
   clientName: () => string | undefined;
@@ -390,7 +394,9 @@ const TOOLS: ToolSpec[] = [
     run: async ({ description, layers, per_layer }, ctx) =>
       withVault(async () => {
         const v = ctx.vault();
-        const run = await getRecommender(v);
+        const run = ctx.readOnly
+          ? async (description: string, options: Parameters<typeof recommend>[2]) => recommend(v, description, options)
+          : await getRecommender(v);
         const rec = await run(description, { layers, perLayer: per_layer });
         ctx.log(
           "recommend_stack",
@@ -675,6 +681,7 @@ export function createMcpServer(resolveRoot: () => string, opts: McpServerOption
   const memo = <T>(key: string, build: (vault: Vault) => T): T => cacheFor().memo(key, build);
   const clientName = () => server.server.getClientVersion()?.name ?? opts.clientHint;
   const log = (tool: string, noteIds: string[], detail?: string) => {
+    if (opts.readOnly) return;
     try {
       appendActivity(resolveRoot(), {
         agent: clientName() ?? "unknown",
@@ -686,9 +693,10 @@ export function createMcpServer(resolveRoot: () => string, opts: McpServerOption
       // Activity logging must never break a tool call.
     }
   };
-  const context: ToolContext = { vault, log, clientName, refresh, invalidate, memo };
+  const context: ToolContext = { vault, log, clientName, refresh, invalidate, memo, readOnly: opts.readOnly };
 
   for (const tool of TOOLS) {
+    if (opts.readOnly && ["propose_note", "record_project_outcome"].includes(tool.name)) continue;
     // Every tool starts by checking the vault files, so an edit made in an editor or by a
     // `git pull` shows up in the next call, the same as when each call reloaded the vault.
     server.registerTool(tool.name, { description: tool.description, inputSchema: tool.inputSchema }, async (input) => {

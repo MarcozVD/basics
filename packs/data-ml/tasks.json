@@ -11,7 +11,7 @@
         "en": "Build a Python data analysis tool that cleans a local CSV and writes a summary report. Declare schema, null and duplicate rules, retain rejected-row counts and test malformed input. Use small synthetic fixtures and document local commands. No external services or private data.",
         "es": "Crea una herramienta de análisis Python que limpie CSV local y escriba informe resumen. Declara esquema, nulos y duplicados, conserva conteos de rechazo y prueba entradas malformadas. Usa fixtures sintéticos pequeños y documenta comandos locales. Sin servicios externos ni datos privados."
       },
-      "expected_layers": ["data", "ml", "testing"]
+      "expected_layers": ["data", "testing"]
     },
     {
       "id": "heldout-classifier",
@@ -35,7 +35,7 @@
         "en": "Build a Python batch data pipeline that reads local Parquet partitions, validates schemas and writes aggregate outputs. Make reruns idempotent and test partial failures and invalid records. Choose a lightweight entrypoint or explicit orchestration and explain why. Include local fixtures and run instructions, no scheduler deployment or external services.",
         "es": "Crea un pipeline batch Python que lea particiones Parquet locales, valide esquemas y escriba agregados. Haz reejecuciones idempotentes y prueba fallos parciales e inválidos. Elige entrypoint ligero u orquestación explícita y explica por qué. Incluye fixtures e instrucciones locales, sin desplegar planificador ni servicios externos."
       },
-      "expected_layers": ["data", "ml", "testing"]
+      "expected_layers": ["data", "testing"]
     },
     {
       "id": "notebook-module",
@@ -47,7 +47,7 @@
         "en": "Build a Python exploratory data notebook plus reusable module for its transformations. Produce a small report from a synthetic local dataset, run all cells in a clean kernel and test module behavior independently. Pin dependencies and document reproducible commands. Do not commit secrets, real private data or large outputs.",
         "es": "Crea un notebook exploratorio Python y módulo reutilizable para transformaciones. Produce informe pequeño con dataset sintético local, ejecuta todo desde kernel limpio y prueba módulo independientemente. Fija dependencias y documenta comandos reproducibles. No publiques secretos, datos privados ni salidas grandes."
       },
-      "expected_layers": ["data", "ml", "testing"]
+      "expected_layers": ["data", "testing"]
     }
   ]
 }

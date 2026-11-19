@@ -7,6 +7,12 @@ import { installedPacks, installPack, listPacks, packNotes, readPackTasks, recom
 
 const PACKS = path.resolve(import.meta.dirname, "../../../packs");
 const SHARED = ["python", "pytest", "python-typing", "python-lint-types"];
+const TASK_LAYERS: Record<string, string[]> = {
+  "csv-report": ["data", "testing"],
+  "heldout-classifier": ["data", "ml", "testing"],
+  "batch-pipeline": ["data", "testing"],
+  "notebook-module": ["data", "testing"],
+};
 const content = (note: { data: Record<string, unknown>; body: string }) => {
   const data = { ...note.data };
   delete data.source;
@@ -50,7 +56,7 @@ test.each(["en", "es"])("data-ml installs an isolated, closed Python graph with 
     for (const task of tasks) {
       assert.deepEqual(Object.keys(task.prompt).sort(), ["en", "es"]);
       assert.deepEqual(Object.keys(task.title).sort(), ["en", "es"]);
-      assert.deepEqual(task.expected_layers, ["data", "ml", "testing"]);
+      assert.deepEqual(task.expected_layers, TASK_LAYERS[task.id]);
       assert.equal(vault.get(task.id), undefined);
     }
   } finally {
