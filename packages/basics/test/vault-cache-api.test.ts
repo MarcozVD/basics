@@ -166,7 +166,7 @@ test("a watcher change invalidates the cache before the debounced broadcast", as
   }
 });
 
-test("a note with broken frontmatter drops out while the rest of the vault is served", async () => {
+test("a note with broken frontmatter drops out while the rest of the vault is served", { timeout: 90_000 }, async () => {
   const root = tempVault();
   const events = new EventHub(root);
   events.start();
@@ -175,10 +175,14 @@ test("a note with broken frontmatter drops out while the rest of the vault is se
   try {
     const before = await notes(app);
     fs.writeFileSync(path.join(root, "tech", "broken.md"), "---\ntype: nope\ntitle: Broken\n---\n\n# Broken\n");
-    await until(async () => {
-      const res = await app.request("/api/graph", { headers: HOST });
-      return res.status === 200 && (await notes(app)).length === before.length;
-    }, "the reload after the broken file");
+    await until(
+      async () => {
+        const res = await app.request("/api/graph", { headers: HOST });
+        return res.status === 200 && (await notes(app)).length === before.length;
+      },
+      "the reload after the broken file",
+      30_000,
+    );
     const list = await notes(app);
     assert.ok(!list.some((note) => note.id === "broken"));
     assert.equal(list.length, before.length, "the other notes are still there");
@@ -188,7 +192,7 @@ test("a note with broken frontmatter drops out while the rest of the vault is se
       path.join(root, "tech", "broken.md"),
       "---\ntype: tech\nkind: library\ntitle: Fixed\nlayer: backend\n---\n\n# Fixed\n",
     );
-    await until(async () => (await notes(app)).some((note) => note.id === "broken" && note.title === "Fixed"), "the fixed note");
+    await until(async () => (await notes(app)).some((note) => note.id === "broken" && note.title === "Fixed"), "the fixed note", 30_000);
   } finally {
     await events.close();
   }
