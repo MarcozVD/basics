@@ -4,6 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { AgentId, AgentInfo } from "@marcozvd/basics-core";
+import { CompareDirectories } from "./compare-files.js";
 
 /**
  * Coding-agent CLIs Basics can run headless to plan a stack. Detection, model listing and the
@@ -203,7 +204,7 @@ export function listAgents(opts: ListAgentsOptions = {}): AgentInfo[] {
   });
 }
 
-export type AgentOutputFormat = "stream-json" | "json" | "text";
+export type AgentOutputFormat = "stream-json" | "json" | "text" | "codex-json";
 
 export interface AgentArgs {
   args: string[];
@@ -211,24 +212,29 @@ export interface AgentArgs {
 }
 
 /** Arguments for one headless run, always an array: the prompt is one argument, never a shell line. */
-export function agentArgs(agent: AgentId, prompt: string, model?: string): AgentArgs {
+export function agentArgs(agent: AgentId, prompt: string, model?: string, build = false): AgentArgs {
   const name = model?.trim();
   if (agent === "claude") {
     const args = ["-p", prompt];
     if (name && name !== "default") args.push("--model", name);
-    args.push("--output-format", "stream-json", "--verbose", "--allowedTools", ...CLAUDE_ALLOWED_TOOLS);
+    args.push("--output-format", "stream-json", "--verbose");
+    if (build) args.push("--dangerously-skip-permissions", "--strict-mcp-config");
+    else args.push("--allowedTools", ...CLAUDE_ALLOWED_TOOLS);
     return { args, format: "stream-json" };
   }
   if (agent === "opencode") {
     const args = ["run", prompt];
     if (name) args.push("-m", name);
     args.push("--format", "json");
+    if (build) args.push("--agent", "build");
     return { args, format: "json" };
   }
   const args = ["exec", prompt];
   if (name) args.push("-m", name);
-  args.push("--skip-git-repo-check", "--sandbox", "read-only");
-  return { args, format: "text" };
+  args.push("--skip-git-repo-check");
+  if (build) args.push("--full-auto", "-c", 'approval_policy="never"', "--json");
+  else args.push("--sandbox", "read-only");
+  return { args, format: build ? "codex-json" : "text" };
 }
 
 function textBlocks(content: unknown): string {
@@ -292,6 +298,7 @@ class JsonLinesParser implements StreamParser {
     private readonly finalOf?: (event: Record<string, unknown>) => string | undefined,
     /** Inserted before every part after the first, so whole parts do not glue together. */
     private readonly separator = "",
+    private readonly onEvent?: (event: Record<string, unknown>) => void,
   ) {}
 
   push(chunk: string): string {
@@ -325,6 +332,7 @@ class JsonLinesParser implements StreamParser {
       const parsed: unknown = JSON.parse(trimmed);
       if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return "";
       event = parsed as Record<string, unknown>;
+      this.onEvent?.(event);
     } catch {
       // A CLI that logs a plain line still streams it; the UI decides what to show.
       return this.emit(trimmed);
@@ -343,10 +351,20 @@ class JsonLinesParser implements StreamParser {
   }
 }
 
-function parserFor(format: AgentOutputFormat): StreamParser {
-  if (format === "stream-json") return new JsonLinesParser(claudeEventText, claudeFinalText);
+function parserFor(format: AgentOutputFormat, onEvent?: (event: Record<string, unknown>) => void): StreamParser {
+  if (format === "stream-json") return new JsonLinesParser(claudeEventText, claudeFinalText, "", onEvent);
+  if (format === "codex-json")
+    return new JsonLinesParser(
+      (event) => {
+        const item = event.item as { type?: string; text?: string } | undefined;
+        return event.type === "item.completed" && item?.type === "agent_message" ? (item.text ?? "") : "";
+      },
+      undefined,
+      "\n\n",
+      onEvent,
+    );
   // OpenCode emits whole text parts, not deltas: a blank line keeps them from gluing together.
-  if (format === "json") return new JsonLinesParser(opencodeEventText, undefined, "\n\n");
+  if (format === "json") return new JsonLinesParser(opencodeEventText, undefined, "\n\n", onEvent);
   return new RawParser();
 }
 
@@ -357,12 +375,23 @@ export interface AgentRunOptions {
   agent: AgentId;
   model?: string;
   prompt: string;
+  /** Compare only: allow file generation in the fresh workspace. Planner defaults stay read-only. */
+  build?: boolean;
+}
+
+export interface TokenUsage {
+  input: number;
+  output: number;
+  total: number;
 }
 
 export interface AgentRunResult {
   ok: boolean;
   text: string;
   error?: string;
+  tokens?: TokenUsage;
+  duration_ms?: number;
+  timed_out?: boolean;
 }
 
 export interface AgentRunCallbacks {
@@ -377,6 +406,9 @@ export interface AgentRunnerOptions {
   env?: NodeJS.ProcessEnv;
   /** Override the executable lookup (tests). */
   resolveExe?: (agent: AgentId) => string | undefined;
+  /** Compare retains the owned directory for measurements and performs link-safe cleanup itself. */
+  keep?: boolean;
+  prepare?: (dir: string) => { cwd?: string; env?: NodeJS.ProcessEnv; args?: string[] };
 }
 
 interface ActiveRun {
@@ -416,21 +448,64 @@ export class AgentRunner {
 
   start(opts: AgentRunOptions, callbacks: AgentRunCallbacks): string {
     if (this.active) throw new AgentBusyError("an agent is already running");
-    const exe = this.opts.resolveExe?.(opts.agent) ?? onPath(AGENT_BIN[opts.agent]);
+    const exe = this.opts.resolveExe ? this.opts.resolveExe(opts.agent) : onPath(AGENT_BIN[opts.agent]);
     if (!exe) throw new AgentUnavailableError(`${AGENT_NAMES[opts.agent]} is not installed (no "${AGENT_BIN[opts.agent]}" on PATH)`);
 
     const runId = randomUUID();
     const dir = fs.mkdtempSync(path.join(this.opts.tempRoot ?? os.tmpdir(), "basics-agent-"));
+    const owned = new CompareDirectories();
+    owned.own(dir);
+    const setupFailure = (error: unknown): never => {
+      if (!this.opts.keep) owned.remove(dir);
+      throw error;
+    };
     const target = spawnTarget(exe);
-    const { args, format } = agentArgs(opts.agent, opts.prompt, opts.model);
-    const parser = parserFor(format);
-    const child = spawn(target.command, [...target.prefix, ...args], {
-      cwd: dir,
-      shell: false,
-      windowsHide: true,
-      stdio: ["ignore", "pipe", "pipe"],
-      env: this.opts.env ?? process.env,
+    const { args, format } = agentArgs(opts.agent, opts.prompt, opts.model, opts.build);
+    let prepared: ReturnType<NonNullable<AgentRunnerOptions["prepare"]>>;
+    try {
+      prepared = this.opts.prepare?.(dir) ?? {};
+    } catch (error) {
+      // The compare owner retains cleanup responsibility even when setup fails.
+      return setupFailure(error);
+    }
+    const cwd = prepared.cwd ?? dir;
+    try {
+      const relative = path.relative(fs.realpathSync(dir), fs.realpathSync(cwd));
+      if (relative.startsWith("..") || path.isAbsolute(relative)) throw new Error("agent workspace must be inside its fresh run directory");
+    } catch (error) {
+      return setupFailure(error);
+    }
+    let usage: TokenUsage | undefined;
+    const parser = parserFor(format, (event) => {
+      const part = event.part as { tokens?: { input?: number; output?: number } } | undefined;
+      const counts = (
+        opts.agent === "opencode" && event.type === "step_finish"
+          ? part?.tokens
+          : event.type === "result" || event.type === "turn.completed"
+            ? event.usage
+            : undefined
+      ) as { input_tokens?: number; output_tokens?: number; input?: number; output?: number } | undefined;
+      if (!counts) return;
+      const input = counts.input_tokens ?? counts.input;
+      const output = counts.output_tokens ?? counts.output;
+      if (typeof input !== "number" || typeof output !== "number" || !Number.isFinite(input + output) || input < 0 || output < 0) return;
+      const sum = opts.agent !== "claude" ? usage : undefined;
+      usage = { input: (sum?.input ?? 0) + input, output: (sum?.output ?? 0) + output, total: (sum?.total ?? 0) + input + output };
     });
+    const started = Date.now();
+    let child: ChildProcess;
+    try {
+      child = spawn(target.command, [...target.prefix, ...args, ...(prepared.args ?? [])], {
+        cwd,
+        shell: false,
+        windowsHide: true,
+        stdio: ["ignore", "pipe", "pipe"],
+        env: prepared.env ?? this.opts.env ?? process.env,
+        detached: opts.build && process.platform !== "win32",
+      });
+    } catch (error) {
+      return setupFailure(error);
+    }
 
     const run: ActiveRun = { id: runId, child, dir, cancelled: false, timedOut: false };
     this.active = run;
@@ -439,7 +514,14 @@ export class AgentRunner {
     let settled = false;
     const timeout = setTimeout(() => {
       run.timedOut = true;
-      child.kill();
+      stopAgentProcess(child, opts.build);
+      if (opts.build) {
+        // A descendant may retain inherited pipes after the CLI exits. The deadline
+        // must still resolve the compare run rather than waiting forever for close.
+        child.stdout?.destroy();
+        child.stderr?.destroy();
+        settle(undefined, null);
+      }
     }, this.timeoutMs);
 
     const settle = (error?: string, code: number | null = null): void => {
@@ -449,22 +531,30 @@ export class AgentRunner {
       const trailing = parser.flush();
       if (trailing) callbacks.onChunk(runId, trailing);
       if (this.active?.id === runId) this.active = undefined;
+      let cleanupError: string | undefined;
       try {
-        fs.rmSync(dir, { recursive: true, force: true });
-      } catch {
-        // A locked temp directory is not worth failing the run over.
+        if (!this.opts.keep) owned.remove(dir);
+      } catch (error) {
+        cleanupError = `cleanup failed for ${dir}: ${String(error)}`;
       }
       const failure =
         error ??
         (run.cancelled
           ? "cancelled"
           : run.timedOut
-            ? "the agent timed out after 5 minutes"
+            ? opts.build
+              ? `the agent timed out after ${this.timeoutMs / 1000} seconds`
+              : "the agent timed out after 5 minutes"
             : code === 0
               ? undefined
               : exitError(code, stderr));
-      const result: AgentRunResult = { ok: !failure, text: parser.text() };
-      if (failure) result.error = failure;
+      const result: AgentRunResult = { ok: !failure && !cleanupError, text: parser.text() };
+      if (opts.build) {
+        result.duration_ms = Date.now() - started;
+        result.timed_out = run.timedOut;
+        if (usage) result.tokens = usage;
+      }
+      if (failure || cleanupError) result.error = [failure, cleanupError].filter(Boolean).join("; ");
       callbacks.onDone(runId, result);
     };
 
@@ -488,7 +578,25 @@ export class AgentRunner {
     const run = this.active;
     if (!run || run.id !== id) return false;
     run.cancelled = true;
-    run.child.kill();
+    stopAgentProcess(run.child, true);
     return true;
   }
+}
+
+/** Kill the compare process group/tree on timeout, without parsing a shell command. */
+export function stopAgentProcess(child: ChildProcess, tree = false): void {
+  if (tree && child.pid) {
+    if (process.platform === "win32") {
+      const killer = path.join(process.env.SystemRoot ?? "C:\\Windows", "System32", "taskkill.exe");
+      spawnSync(killer, ["/pid", String(child.pid), "/T", "/F"], { shell: false, windowsHide: true, stdio: "ignore", timeout: 5000 });
+    } else {
+      try {
+        process.kill(-child.pid, "SIGKILL");
+        return;
+      } catch {
+        /* Already exited. */
+      }
+    }
+  }
+  child.kill();
 }
