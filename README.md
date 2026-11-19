@@ -63,12 +63,27 @@ Other clients (Cursor, VS Code, Codex, OpenCode, Windsurf, oh-my-pi, Gemini CLI,
 
 Watch the full two-minute tour (Spanish narration): [basics-demo.mp4](https://marcozvd.github.io/basics/media/basics-demo.mp4).
 
+## Compare with and without Basics
+
+`basics compare` runs one coding task twice with your agent: once plain, and once with Basics connected through a read-only MCP server and the stack's instruction files. Each run starts in its own empty folder. The report shows the stack the agent chose, the project checks that passed, wall time, reported tokens and the files written.
+
+```bash
+basics --vault ~/basics-vault compare --sample rust-api/login-api --agent claude --yes
+```
+
+- `--agent` (required): `claude`, `opencode` or `codex`.
+- `--model`, `--runs` (repeats, default 1) and `--timeout` (seconds per condition, default 600).
+- `--sample <pack>/<task-id>` for an official sample task, or a quoted task in its place.
+- `--yes` approves the plan, `--keep` keeps the project folders and `--json` prints the report.
+
+Each agent run is a full session that uses your quota or credits. Compare shows the planned count first: two sessions by default, and `--yes` is required outside a terminal. Before you quote a result, read the [compare guide](https://marcozvd.github.io/basics/guide/compare.html). One run proves nothing, and stack match measures agreement with Basics' own recommendation, not code quality.
+
 ## Documentation
 
 Full documentation: **[marcozvd.github.io/basics](https://marcozvd.github.io/basics/)**
 
 - **Start** — [Getting started](https://marcozvd.github.io/basics/guide/getting-started.html) · [Concepts](https://marcozvd.github.io/basics/guide/concepts.html) · [Glossary](https://marcozvd.github.io/basics/guide/glossary.html) · [Comparison](https://marcozvd.github.io/basics/guide/comparison.html)
-- **Use** — [Notes](https://marcozvd.github.io/basics/guide/notes.html) · [Packs](https://marcozvd.github.io/basics/guide/packs.html) · [MCP clients](https://marcozvd.github.io/basics/guide/mcp-clients.html) · [Web UI](https://marcozvd.github.io/basics/guide/web-ui.html) · [Recommend](https://marcozvd.github.io/basics/guide/recommend.html) · [Projects and checks](https://marcozvd.github.io/basics/guide/projects-and-checks.html)
+- **Use:** [Notes](https://marcozvd.github.io/basics/guide/notes.html) · [Packs](https://marcozvd.github.io/basics/guide/packs.html) · [MCP clients](https://marcozvd.github.io/basics/guide/mcp-clients.html) · [Web UI](https://marcozvd.github.io/basics/guide/web-ui.html) · [Recommend](https://marcozvd.github.io/basics/guide/recommend.html) · [Projects and checks](https://marcozvd.github.io/basics/guide/projects-and-checks.html) · [Compare](https://marcozvd.github.io/basics/guide/compare.html)
 - **Operate** — [Security](https://marcozvd.github.io/basics/guide/security.html) · [Troubleshooting](https://marcozvd.github.io/basics/guide/troubleshooting.html) · [Stability](https://marcozvd.github.io/basics/guide/stability.html)
 - **Reference** — [CLI](https://marcozvd.github.io/basics/reference/cli.html) · [MCP tools](https://marcozvd.github.io/basics/reference/mcp-tools.html) · [Vault schema](https://marcozvd.github.io/basics/reference/schema.html)
 

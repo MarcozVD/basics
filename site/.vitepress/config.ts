@@ -122,6 +122,7 @@ export default defineConfig({
             { text: "Desktop app", link: "/guide/desktop" },
             { text: "Recommend", link: "/guide/recommend" },
             { text: "Projects and checks", link: "/guide/projects-and-checks" },
+            { text: "Compare runs", link: "/guide/compare" },
           ],
         },
         {
