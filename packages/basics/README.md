@@ -17,22 +17,26 @@ basics --help
 
 ## Quick start
 
+Requires Node.js 20.11 or newer. Connect Claude Code over stdio; no running server or web UI needed:
+
 ```bash
-basics init ~/basics-vault --yes   # create the vault with the official packs
-basics --vault ~/basics-vault ui   # web UI + HTTP API on http://127.0.0.1:4747
-basics doctor                      # check Node, config, vault, packs and embeddings
+# create a vault with the official packs
+npx @marcozvd/basics init ~/basics-vault --yes
+
+# connect Claude Code (use your vault's absolute path)
+claude mcp add --scope user basics -- npx -y --package @marcozvd/basics basics-mcp /absolute/path/to/basics-vault
 ```
 
-With the UI running, connect Claude Code:
+Ask your agent to recommend a stack. To review and approve proposals in the Inbox, open the web UI when needed:
+
+```bash
+npx @marcozvd/basics --vault ~/basics-vault ui
+```
+
+Alternatively, connect over HTTP while the UI is running:
 
 ```bash
 claude mcp add --transport http basics http://127.0.0.1:4747/mcp
-```
-
-Without the UI, the package also ships a stdio MCP server:
-
-```bash
-claude mcp add basics --scope user -- basics-mcp /absolute/path/to/my-vault
 ```
 
 Main commands: `basics init`, `list`, `validate`, `new`, `recommend`, `inbox`, `pack`, `export`, `detect`, `check`,
