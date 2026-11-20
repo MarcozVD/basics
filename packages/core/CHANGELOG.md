@@ -1,5 +1,27 @@
 # @marcozvd/basics-core
 
+## 1.9.0
+
+### Minor Changes
+
+- cdfb8e0: Compare coding-agent outputs with and without Basics from the app, review checks separately, follow live progress and revisit saved results. The demo includes one clearly labeled recorded comparison.
+- 30f983d: Detect Rust, Go and Dart dependencies from their project manifests. Add reproducible public-repository recommendation evaluation with separate datasets, reciprocal-rank metrics and recorded regression baselines.
+- 1efd0a9: Add English and Spanish Go API stack choices, request cancellation and concurrency practices, validation checks, a starting profile and four reusable comparison tasks.
+  
+  Share database notes across Python, Rust and Go without installing other language stacks. Ownership and version migrations preserve the accepted note text and fields, including local edits, through reviewable provenance-only updates. Keep pending work and edit conflict protection intact.
+- 149a183: Add English and Spanish Rust API stack notes, a ready-made profile and four reusable comparison tasks. Provide a validated reader for optional bilingual pack tasks while keeping note installation unchanged.
+  
+  Respect explicitly requested implementation languages in recommendation layers with matching tools, including testing and semantic recommendations, while preserving separate frontend stacks, neutral tools and named integrations. Keep existing matches when language filtering would otherwise empty a layer.
+- e5d48a5: Use accepted project outcomes as a small, bounded stack recommendation preference. Add an optional outcome (successful, failed or abandoned) to record_project_outcome, show contributing projects in score details and MCP responses, and add vault-local settings to turn project history off or change its strength (0 to 3).
+
+### Patch Changes
+
+- dddb7d2: Add bilingual Python data analysis and machine learning choices, starter profiles and sample comparison tasks. Share Python tooling across API and data projects, add analytical SQL with DuckDB, and preserve existing notes and local edits when updating shared packs.
+  
+  Recommendations also honor the language of explicitly named frameworks and packages, so a FastAPI service keeps Python backend and testing choices while mixed stacks retain their frontend and mobile options.
+  
+  Ordinary words that share technology names require clear stack context before influencing recommendations. Language phrases and matching platform context preserve requests such as a native iOS app in Swift.
+
 ## 1.8.0
 
 No changes in this release.

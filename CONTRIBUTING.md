@@ -78,7 +78,7 @@ numbers), per-language `description`, `requires` (pack dependencies) and `langua
 - Every declared language uses the same note ids, so switching language keeps links and `basics.json` stacks valid.
 - Notes are normal notes: they must pass `basics validate`.
 - Reference other notes by id with `[[wikilinks]]` and `practices` / `checks` lists.
-- Bump `version` on every change — `basics pack update` compares versions to propose the diff.
+- Bump `version` on every change. `basics pack update` compares versions to propose the diff.
 - Ids are global; a pack note that collides with an existing vault note is skipped at install.
 
 To propose a new pack, open a **Pack proposal** issue describing the stack it covers and who maintains it, or send a

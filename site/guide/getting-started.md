@@ -73,7 +73,7 @@ basics recommend "REST API to serve ML models"
 ```
 backend
   fastapi   8  kw=8 sem=— neg=0 lang=0
-      use: API REST o JSON async
+      use: async REST or JSON API
   python    2  kw=2 sem=— neg=0 lang=0
       best: data and ML ecosystem
 ```

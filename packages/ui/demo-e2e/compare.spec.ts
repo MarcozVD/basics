@@ -30,6 +30,17 @@ for (const width of [1280, 390]) {
       await expect(results.getByText("40,381", { exact: true })).toBeVisible();
       await results.getByText("Assistant output excerpt", { exact: true }).first().click();
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      if (width === 390) {
+        await page.evaluate(() => {
+          const main = document.getElementById("main-content");
+          if (main) main.scrollTop = 120;
+        });
+        const bar = await page.evaluate(() => ({
+          menuBottom: document.querySelector('[data-testid="sidebar-menu"]')?.getBoundingClientRect().bottom ?? 0,
+          mainTop: document.getElementById("main-content")?.getBoundingClientRect().top ?? 0,
+        }));
+        expect(bar.menuBottom).toBeLessThanOrEqual(bar.mainTop + 0.5);
+      }
       const columns = await results
         .locator(":scope > div")
         .evaluateAll((nodes) => nodes.map((node) => ({ x: node.getBoundingClientRect().x, y: node.getBoundingClientRect().y })));

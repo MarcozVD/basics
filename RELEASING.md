@@ -53,7 +53,7 @@ are collected into the next `vX.Y.0` release as usual.
    npm run version-packages
    ```
 
-   Both packages are in a fixed group, so they get the same version. Review the version bumps, the new
+   The three workspace packages (`@marcozvd/basics-core`, `@marcozvd/basics` and `@marcozvd/basics-ui`) are in one fixed group, so they get the same version. Review the version bumps, the new
    `packages/*/CHANGELOG.md` sections and the deleted `.changeset/*.md` files.
 
 3. Commit the release and push it:

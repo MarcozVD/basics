@@ -26,6 +26,8 @@ import { useAgents } from "@/lib/queries";
 
 const control =
   "min-h-9 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-ring disabled:opacity-50";
+/** Form fields match the selects and the task textarea: the shared pill input is for search boxes. */
+const fieldClasses = { field: "h-9 rounded-xl" };
 const historyKey = ["compare-history"];
 
 export function ComparePage() {
@@ -173,7 +175,14 @@ export function ComparePage() {
             </label>
             <label htmlFor="compare-model" className="grid gap-1.5 text-xs text-muted-foreground">
               {c.model}
-              <Input id="compare-model" list="compare-models" value={model} placeholder={c.defaultModel} onChange={setModel} />
+              <Input
+                id="compare-model"
+                classNames={fieldClasses}
+                list="compare-models"
+                value={model}
+                placeholder={c.defaultModel}
+                onChange={setModel}
+              />
               <datalist id="compare-models">
                 {agent?.models.map((model) => (
                   <option key={model} value={model} />
@@ -184,6 +193,7 @@ export function ComparePage() {
               {c.runs}
               <Input
                 id="compare-runs"
+                classNames={fieldClasses}
                 type="number"
                 min={1}
                 max={10}
@@ -196,6 +206,7 @@ export function ComparePage() {
               {c.timeout}
               <Input
                 id="compare-timeout"
+                classNames={fieldClasses}
                 type="number"
                 min={1}
                 max={3600}

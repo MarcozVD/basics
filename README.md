@@ -26,7 +26,7 @@ New to these words? See the [glossary](https://marcozvd.github.io/basics/guide/g
 
 **Try it:** [live demo](https://marcozvd.github.io/basics/demo/) in your browser, no install · [website](https://marcozvd.github.io/basics/)
 
-> **Status: 1.0** — see the [stability contract](https://marcozvd.github.io/basics/guide/stability.html).
+> **Status: 1.0**: see the [stability contract](https://marcozvd.github.io/basics/guide/stability.html).
 
 ## Quick start
 
@@ -50,14 +50,14 @@ Other clients (Cursor, VS Code, Codex, OpenCode, Windsurf, oh-my-pi, Gemini CLI,
 
 ## What it does
 
-- **A vault you can read** — layers, tech, practices, checks, profiles and projects as Markdown notes. No database, no lock-in.
-- **Agents that ask first** — agent writes become proposals in `inbox/` with a reason and a diff; you approve in the CLI or the UI.
+- **A vault you can read**: layers, tech, practices, checks, profiles and projects as Markdown notes. No database, no lock-in.
+- **Agents that ask first**: agent writes become proposals in `inbox/` with a reason and a diff; you approve in the CLI or the UI.
 - **Recommended stacks**: rank technologies per layer from a project description, by keywords or with optional local embeddings, with a small nudge from how your past projects went.
-- **From stack to project** — export `STACK.md`, `AGENTS.md`, `CLAUDE.md` and Cursor rules, then run the stack checks in the project.
-- **Packs** — official starter packs in English and Spanish, plus community packs from any GitHub repo; new notes and updates arrive as inbox proposals, never as silent writes.
-- **Local web UI and MCP** — a React UI with editor, graph, inbox diff and recommendation playground, plus MCP over HTTP or stdio.
-- **Desktop app** — the same UI and MCP server running in a standalone, tray-resident window with its own bundled Node runtime; no npm needed. See [Desktop app](https://marcozvd.github.io/basics/guide/desktop.html).
-- **Agent skill** — a `SKILL.md` that teaches Claude Code, OpenCode, Codex and the other agents `basics connect` sets up when to call each Basics tool. See [Agent skill](https://marcozvd.github.io/basics/guide/agent-skill.html).
+- **From stack to project**: export `STACK.md`, `AGENTS.md`, `CLAUDE.md` and Cursor rules, then run the stack checks in the project.
+- **Packs**: official starter packs in English and Spanish, plus community packs from any GitHub repo; new notes and updates arrive as inbox proposals, never as silent writes.
+- **Local web UI and MCP**: a React UI with editor, graph, inbox diff and recommendation playground, plus MCP over HTTP or stdio.
+- **Desktop app**: the same UI and MCP server running in a standalone, tray-resident window with its own bundled Node runtime; no npm needed. See [Desktop app](https://marcozvd.github.io/basics/guide/desktop.html).
+- **Agent skill**: a `SKILL.md` that teaches Claude Code, OpenCode, Codex and the other agents `basics connect` sets up when to call each Basics tool. See [Agent skill](https://marcozvd.github.io/basics/guide/agent-skill.html).
 
 ![An agent proposal reviewed in the Inbox, then a stack recommended and exported](site/public/media/basics-inbox-recommend.gif)
 
@@ -84,13 +84,13 @@ Each agent run is a full session that uses your quota or credits. Compare shows 
 
 Full documentation: **[marcozvd.github.io/basics](https://marcozvd.github.io/basics/)**
 
-- **Start** — [Getting started](https://marcozvd.github.io/basics/guide/getting-started.html) · [Concepts](https://marcozvd.github.io/basics/guide/concepts.html) · [Glossary](https://marcozvd.github.io/basics/guide/glossary.html) · [Comparison](https://marcozvd.github.io/basics/guide/comparison.html)
+- **Start**: [Getting started](https://marcozvd.github.io/basics/guide/getting-started.html) · [Concepts](https://marcozvd.github.io/basics/guide/concepts.html) · [Glossary](https://marcozvd.github.io/basics/guide/glossary.html) · [Comparison](https://marcozvd.github.io/basics/guide/comparison.html)
 - **Use:** [Notes](https://marcozvd.github.io/basics/guide/notes.html) · [Packs](https://marcozvd.github.io/basics/guide/packs.html) · [MCP clients](https://marcozvd.github.io/basics/guide/mcp-clients.html) · [Web UI](https://marcozvd.github.io/basics/guide/web-ui.html) · [Recommend](https://marcozvd.github.io/basics/guide/recommend.html) · [Projects and checks](https://marcozvd.github.io/basics/guide/projects-and-checks.html) · [Compare](https://marcozvd.github.io/basics/guide/compare.html)
-- **Operate** — [Security](https://marcozvd.github.io/basics/guide/security.html) · [Troubleshooting](https://marcozvd.github.io/basics/guide/troubleshooting.html) · [Stability](https://marcozvd.github.io/basics/guide/stability.html)
-- **Reference** — [CLI](https://marcozvd.github.io/basics/reference/cli.html) · [MCP tools](https://marcozvd.github.io/basics/reference/mcp-tools.html) · [Vault schema](https://marcozvd.github.io/basics/reference/schema.html)
+- **Operate**: [Security](https://marcozvd.github.io/basics/guide/security.html) · [Troubleshooting](https://marcozvd.github.io/basics/guide/troubleshooting.html) · [Stability](https://marcozvd.github.io/basics/guide/stability.html)
+- **Reference**: [CLI](https://marcozvd.github.io/basics/reference/cli.html) · [MCP tools](https://marcozvd.github.io/basics/reference/mcp-tools.html) · [Vault schema](https://marcozvd.github.io/basics/reference/schema.html)
 
 Contributions: [CONTRIBUTING.md](CONTRIBUTING.md). Security reports: [SECURITY.md](SECURITY.md).
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).

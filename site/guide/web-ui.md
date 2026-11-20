@@ -15,7 +15,7 @@ sees the edit and requests stay fast on large vaults.
 Navigation is a sidebar on the left by default: Home, Explore, Projects, Graph, Inbox (with the pending count), Recommend, Compare and
 Skills, with **Settings** at the bottom. The top of the sidebar holds the vault folder and a search button that opens the command
 palette. On windows 1280px and wider the sidebar shows the labels. From 768px to 1279px it is an icon rail, and hovering or
-focusing an item shows its name, shortcut and purpose. Below 768px the sidebar is hidden; a menu button opens it as a drawer.
+focusing an item shows its name, shortcut and purpose. Below 768px the sidebar is hidden; a menu button in a bar above the page opens it as a drawer, so the button never covers content.
 The collapse button or `Ctrl`/`⌘+B` switches between the full sidebar and the rail, and the choice is remembered in this browser.
 
 **Settings → General → Navigation** switches to **Floating**: the same items in a bar that you can move. Drag its grip (the

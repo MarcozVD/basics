@@ -32,21 +32,21 @@ const markdown = renderContext(vault, ["fastapi", "postgresql"]);
 
 ## API overview
 
-- **Vault** — `Vault.load(dir)` reads every note and validates it; `vault.get(id)`, `vault.byType(type)`,
+- **Vault**: `Vault.load(dir)` reads every note and validates it; `vault.get(id)`, `vault.byType(type)`,
   `vault.techInLayer(layer)` and `vault.getBacklinks(id)` query it. `vault.writeNote(id, data, body, { expectedHash })`
   writes atomically and throws `ConflictError` when the file changed on disk; `deleteNote` and `reload` complete the cycle.
-- **Inbox** — `vault.propose(...)`, `listProposals()`, `approve(id)`, `approveMany(filter)`, the deprecated
+- **Inbox**: `vault.propose(...)`, `listProposals()`, `approve(id)`, `approveMany(filter)`, the deprecated
   `approveAll({ pack, version })` and `reject(id)` implement the agent-proposal workflow. `approveMany` reports
   approved ids and per-proposal failures instead of aborting the whole batch.
-- **Search and navigation** — `search(vault, query)`, `listNotes(vault, { type, layer })`, `buildGraph(vault)`
+- **Search and navigation**: `search(vault, query)`, `listNotes(vault, { type, layer })`, `buildGraph(vault)`
   and `vaultStats(vault)`.
-- **Recommendation** — `recommend(vault, description, opts)` ranks candidates per layer with a score breakdown;
+- **Recommendation**: `recommend(vault, description, opts)` ranks candidates per layer with a score breakdown;
   `recommendHybrid(...)` adds a local embedding score; `renderContext(vault, techIds)` and `stackContext(...)` render
   markdown for agents and project files.
-- **Projects** — `detectStack(vault, dir)` reads `package.json`, `pyproject.toml` and `requirements*.txt`;
+- **Projects**: `detectStack(vault, dir)` reads `package.json`, `pyproject.toml` and `requirements*.txt`;
   `renderExport(...)` builds `STACK.md`, `AGENTS.md`, `CLAUDE.md` and Cursor rules; `inRange(version, since, until)`
   filters versioned practices and checks.
-- **Schema and config** — `noteSchema`, `noteJsonSchemas()`, `NOTE_TYPES`, `TYPE_DIRS`, `loadConfig()`,
+- **Schema and config**: `noteSchema`, `noteJsonSchemas()`, `NOTE_TYPES`, `TYPE_DIRS`, `loadConfig()`,
   `resolveVaultDir()`, plus pack helpers (`listPacks`, `installPack`, `updatePack`).
 
 ## Docs
@@ -59,4 +59,4 @@ Full documentation: [marcozvd.github.io/basics](https://marcozvd.github.io/basic
 
 ## License
 
-MIT — see [LICENSE](https://github.com/MarcozVD/basics/blob/main/LICENSE).
+MIT. See [LICENSE](https://github.com/MarcozVD/basics/blob/main/LICENSE).
