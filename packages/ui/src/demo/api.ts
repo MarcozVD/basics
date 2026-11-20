@@ -1,4 +1,5 @@
 import type { ActivityEvent, GraphData, NoteData, NoteDetail, NoteSummary, ProposalDetail, VaultStats } from "@marcozvd/basics-core";
+import recordedCompare from "../../../../scripts/demo/compare-recorded.json";
 import { snapshotKey } from "../../../../scripts/demo/key.mjs";
 
 export interface RecordedResponse {
@@ -168,6 +169,21 @@ export async function createDemoApi(snapshot: Snapshot, onChange: () => void = (
   return async function request(method: string, route: string, body?: unknown): Promise<Response> {
     const url = new URL(route, "https://demo.invalid");
     const path = url.pathname;
+    if (path === "/api/compare/samples" && method === "GET") return json([]);
+    if (path === "/api/compare/state" && method === "GET")
+      return json({ id: recordedCompare.id, active: false, progress: { phase: "finished" }, report: recordedCompare });
+    if (path === "/api/compare/history" && method === "GET")
+      return json([
+        {
+          id: recordedCompare.id,
+          at: recordedCompare.at,
+          task: recordedCompare.task,
+          agent: recordedCompare.agent,
+          model: recordedCompare.model,
+        },
+      ]);
+    if (path === `/api/compare/history/${recordedCompare.id}` && method === "GET") return json(recordedCompare);
+    if (path.startsWith("/api/compare/")) return json({ error: "read_only", message: "Recorded comparison only" }, 403);
     const input = (body ?? {}) as {
       id?: string;
       data?: NoteData;

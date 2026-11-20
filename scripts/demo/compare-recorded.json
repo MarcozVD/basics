@@ -1,0 +1,300 @@
+{
+  "schema_version": 1,
+  "id": "2026-11-18T22-37-35-130Z-706502d9-1a7b-447b-a397-6910b7b211ea",
+  "at": "2026-11-18T22:37:35.134Z",
+  "task": "Build a Python data analysis tool that cleans a local CSV and writes a summary report. Declare schema, null and duplicate rules, retain rejected-row counts and test malformed input. Use small synthetic fixtures and document local commands. No external services or private data.",
+  "sample": "data-ml/csv-report",
+  "agent": "claude",
+  "model": "haiku",
+  "runs": 1,
+  "timeout_ms": 600000,
+  "recommendation": {
+    "data": ["pandas"],
+    "testing": ["pandera"]
+  },
+  "mode": "keywords",
+  "results": [
+    {
+      "run": 1,
+      "condition": "without_basics",
+      "ok": true,
+      "timed_out": false,
+      "wall_ms": 181399,
+      "tokens": {
+        "input": 64,
+        "output": 40317,
+        "total": 40381
+      },
+      "stack_used": {},
+      "unknown_packages": [],
+      "stack_comparison": [
+        {
+          "layer": "data",
+          "expected": ["pandas"],
+          "used": [],
+          "match": false
+        },
+        {
+          "layer": "testing",
+          "expected": ["pandera"],
+          "used": [],
+          "match": false
+        }
+      ],
+      "stack_match": 0,
+      "checks": [
+        {
+          "id": "python-lint-types",
+          "command": "ruff check . && ruff format --check . && mypy .",
+          "status": "missing_tool",
+          "duration_ms": 0,
+          "output_tail": "command not found: ruff"
+        },
+        {
+          "id": "data-ml-tests",
+          "command": "pytest -q",
+          "status": "missing_tool",
+          "duration_ms": 0,
+          "output_tail": "command not found: pytest"
+        }
+      ],
+      "checks_passed": 0,
+      "files": {
+        "added": [
+          "README.md",
+          "csvclean/__init__.py",
+          "csvclean/__main__.py",
+          "csvclean/cleaner.py",
+          "csvclean/cli.py",
+          "csvclean/report.py",
+          "csvclean/schema.py",
+          "tests/__init__.py",
+          "tests/fixtures/orders.schema.json",
+          "tests/fixtures/orders_clean.csv",
+          "tests/fixtures/orders_malformed.csv",
+          "tests/fixtures/orders_messy.csv",
+          "tests/fixtures/orders_missing_column.csv",
+          "tests/test_csvclean.py"
+        ],
+        "changed": [],
+        "deleted": [],
+        "excluded": [],
+        "truncated": false
+      },
+      "output": "Built `csvclean`, a stdlib-only Python tool that validates a local CSV against a JSON schema, writes the cleaned rows, keeps rejected rows with reasons, and writes a summary report. All 36 tests pass, including with `ResourceWarning` as an error. The project is not a git repo, so nothing was committed.\n\n**What it does**\n- **Schema (JSON):** column types (`str`, `int`, `float`, `bool`, `date`), `nullable`, `min`/`max`, `allowed`, `max_length`. Null tokens, extra-column policy and duplicate rule (key columns or whole row, keep `first` or `last`). Unknown keys are an error, so a typo like `nulabl",
+      "cleanup_errors": []
+    },
+    {
+      "run": 1,
+      "condition": "with_basics",
+      "ok": true,
+      "timed_out": false,
+      "wall_ms": 244303,
+      "tokens": {
+        "input": 52,
+        "output": 39452,
+        "total": 39504
+      },
+      "stack_used": {
+        "data": ["pandas"],
+        "testing": ["pandera", "pytest"]
+      },
+      "unknown_packages": [
+        {
+          "ecosystem": "pypi",
+          "name": "ruff",
+          "version": "0.6.0"
+        },
+        {
+          "ecosystem": "pypi",
+          "name": "mypy",
+          "version": "1.11.0"
+        },
+        {
+          "ecosystem": "pypi",
+          "name": "pandas-stubs"
+        }
+      ],
+      "stack_comparison": [
+        {
+          "layer": "data",
+          "expected": ["pandas"],
+          "used": ["pandas"],
+          "match": true
+        },
+        {
+          "layer": "testing",
+          "expected": ["pandera"],
+          "used": ["pandera", "pytest"],
+          "match": true
+        }
+      ],
+      "stack_match": 1,
+      "checks": [
+        {
+          "id": "python-lint-types",
+          "command": "ruff check . && ruff format --check . && mypy .",
+          "status": "pass",
+          "duration_ms": 1472,
+          "output_tail": "All checks passed!\n15 files already formatted\nSuccess: no issues found in 11 source files\r\n"
+        },
+        {
+          "id": "data-ml-tests",
+          "command": "pytest -q",
+          "status": "pass",
+          "duration_ms": 3330,
+          "output_tail": "..............................................                           [100%]\r\n46 passed in 0.50s\r\n"
+        }
+      ],
+      "checks_passed": 2,
+      "files": {
+        "added": [
+          ".gitignore",
+          "README.md",
+          "pyproject.toml",
+          "ruff.toml",
+          "src/csvclean/__init__.py",
+          "src/csvclean/__main__.py",
+          "src/csvclean/clean.py",
+          "src/csvclean/cli.py",
+          "src/csvclean/report.py",
+          "src/csvclean/schema.py",
+          "tests/__init__.py",
+          "tests/conftest.py",
+          "tests/fixtures/empty.csv",
+          "tests/fixtures/orders_clean.csv",
+          "tests/fixtures/orders_malformed.csv",
+          "tests/fixtures/orders_missing_column.csv",
+          "tests/fixtures/orders_schema.json",
+          "tests/test_clean.py",
+          "tests/test_cli.py",
+          "tests/test_schema.py",
+          "uv.lock"
+        ],
+        "changed": [],
+        "deleted": [],
+        "excluded": [
+          ".mypy_cache",
+          ".pytest_cache",
+          ".ruff_cache",
+          ".venv",
+          "src/csvclean/__pycache__",
+          "src/csvclean.egg-info",
+          "tests/__pycache__"
+        ],
+        "truncated": false
+      },
+      "output": "Built `csvclean`, a Python tool that cleans a local CSV against a declared JSON schema and writes a summary report. All STACK checks pass: ruff lint, ruff format, mypy strict, and 46 pytest tests.\n\n**Where it lives:** `src/csvclean/` (`schema.py`, `clean.py`, `report.py`, `cli.py`), tests in `tests/`, synthetic fixtures in `tests/fixtures/`. Run/check commands are in `README.md`.\n\n**What it does**\n- **Schema:** declared in JSON (column types `str`/`int`/`float`/`date`, nullable, min/max, allowed values, composite key, null tokens). The loader rejects invalid schemas.\n- **Rules:** each row gets",
+      "cleanup_errors": []
+    }
+  ],
+  "summary": {
+    "without_basics": {
+      "runs": 1,
+      "successes": 1,
+      "wall_ms": {
+        "count": 1,
+        "mean": 181399,
+        "stddev": 0,
+        "min": 181399,
+        "max": 181399
+      },
+      "tokens_total": {
+        "count": 1,
+        "mean": 40381,
+        "stddev": 0,
+        "min": 40381,
+        "max": 40381
+      },
+      "checks_passed": {
+        "count": 1,
+        "mean": 0,
+        "stddev": 0,
+        "min": 0,
+        "max": 0
+      },
+      "stack_match": {
+        "count": 1,
+        "mean": 0,
+        "stddev": 0,
+        "min": 0,
+        "max": 0
+      },
+      "files_added": {
+        "count": 1,
+        "mean": 14,
+        "stddev": 0,
+        "min": 14,
+        "max": 14
+      },
+      "files_changed": {
+        "count": 1,
+        "mean": 0,
+        "stddev": 0,
+        "min": 0,
+        "max": 0
+      },
+      "files_deleted": {
+        "count": 1,
+        "mean": 0,
+        "stddev": 0,
+        "min": 0,
+        "max": 0
+      }
+    },
+    "with_basics": {
+      "runs": 1,
+      "successes": 1,
+      "wall_ms": {
+        "count": 1,
+        "mean": 244303,
+        "stddev": 0,
+        "min": 244303,
+        "max": 244303
+      },
+      "tokens_total": {
+        "count": 1,
+        "mean": 39504,
+        "stddev": 0,
+        "min": 39504,
+        "max": 39504
+      },
+      "checks_passed": {
+        "count": 1,
+        "mean": 2,
+        "stddev": 0,
+        "min": 2,
+        "max": 2
+      },
+      "stack_match": {
+        "count": 1,
+        "mean": 1,
+        "stddev": 0,
+        "min": 1,
+        "max": 1
+      },
+      "files_added": {
+        "count": 1,
+        "mean": 21,
+        "stddev": 0,
+        "min": 21,
+        "max": 21
+      },
+      "files_changed": {
+        "count": 1,
+        "mean": 0,
+        "stddev": 0,
+        "min": 0,
+        "max": 0
+      },
+      "files_deleted": {
+        "count": 1,
+        "mean": 0,
+        "stddev": 0,
+        "min": 0,
+        "max": 0
+      }
+    }
+  },
+  "recorded": true
+}
