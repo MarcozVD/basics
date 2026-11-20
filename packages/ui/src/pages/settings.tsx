@@ -1239,8 +1239,8 @@ export function SettingsPage() {
       </Reveal>
 
       <Reveal index={1}>
-        <div className="grid min-w-0 gap-6 lg:grid-cols-[180px_minmax(0,1fr)] lg:gap-10">
-          <nav aria-label={t("settings.sections")} className="lg:sticky lg:top-[calc(var(--nav-top,0px)+1rem)] lg:self-start">
+        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[180px_minmax(0,1fr)] lg:gap-10">
+          <nav aria-label={t("settings.sections")} className="min-w-0 lg:sticky lg:top-[calc(var(--nav-top,0px)+1rem)] lg:self-start">
             <ul className="flex gap-1 overflow-x-auto pb-1 lg:flex-col lg:overflow-visible lg:pb-0">
               {SECTIONS.map((section, index) => {
                 const current = section === active;
