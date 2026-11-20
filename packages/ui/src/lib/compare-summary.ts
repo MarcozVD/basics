@@ -1,4 +1,10 @@
-import type { CompareCondition, CompareReport } from "@marcozvd/basics-core";
+import {
+  type CompareCondition,
+  type CompareReport,
+  type LegacyCompareCondition,
+  normalizeCompareCondition,
+  summarizeAcceptance,
+} from "@marcozvd/basics-core/compare";
 
 function stats(values: number[]) {
   if (!values.length) return null;
@@ -6,8 +12,11 @@ function stats(values: number[]) {
   return { mean, stddev: Math.sqrt(values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / values.length) };
 }
 
-export function compareSummary(report: CompareReport, condition: CompareCondition) {
-  const runs = report.results.filter((result) => result.condition === condition);
+export function compareSummary(report: CompareReport, condition: CompareCondition | LegacyCompareCondition) {
+  const runs = report.results.filter(
+    (result) => normalizeCompareCondition(result.condition) === normalizeCompareCondition(condition) && !result.contaminated,
+  );
+  const acceptance = summarizeAcceptance(runs);
   return {
     layers: stats(runs.map((run) => run.stack_comparison.filter((layer) => layer.match).length)),
     layerTotal: stats(runs.map((run) => run.stack_comparison.length)),
@@ -16,6 +25,9 @@ export function compareSummary(report: CompareReport, condition: CompareConditio
     untrusted: stats(runs.map((run) => run.checks.filter((check) => check.status === "untrusted").length)),
     wall: stats(runs.map((run) => run.wall_ms / 1000)),
     tokens: stats(runs.flatMap((run) => (run.tokens ? [run.tokens.total] : []))),
+    mcp: stats(runs.flatMap((run) => (run.mcp_tool_calls ? [run.mcp_tool_calls.total] : []))),
+    acceptance: acceptance.acceptance_passed,
+    acceptanceAllPassed: acceptance.acceptance_all_passed,
   };
 }
 

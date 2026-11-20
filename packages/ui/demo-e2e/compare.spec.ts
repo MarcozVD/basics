@@ -24,8 +24,13 @@ for (const width of [1280, 390]) {
       await expect(summary).toContainText("0 of 2 layers");
       await expect(summary).toContainText("2 of 2 approved");
       await expect(results).toContainText("Used: none detected");
-      await expect(results.getByRole("heading", { name: "Without Basics", exact: true })).toBeVisible();
-      await expect(results.getByRole("heading", { name: "With Basics", exact: true })).toBeVisible();
+      await expect(results.getByRole("heading", { name: "No notes", exact: true })).toBeVisible();
+      await expect(results.getByRole("heading", { name: "Basics MCP + notes", exact: true })).toBeVisible();
+      await expect(summary.getByRole("columnheader", { name: "No notes", exact: true })).toBeVisible();
+      await expect(summary.getByRole("columnheader", { name: "Basics MCP + notes", exact: true })).toBeVisible();
+      await expect(summary.getByRole("columnheader", { name: "Exported notes", exact: true })).toHaveCount(0);
+      await expect(page.getByText("Not run in this recording: Exported notes.", { exact: true })).toBeVisible();
+      await expect(results.locator(":scope > div")).toHaveCount(2);
       await expect(results.getByText("Checks: 2/2", { exact: true })).toBeVisible();
       await expect(results.getByText("40,381", { exact: true })).toBeVisible();
       await results.getByText("Assistant output excerpt", { exact: true }).first().click();
@@ -48,7 +53,9 @@ for (const width of [1280, 390]) {
       await page.getByTestId("demo-notice").getByRole("combobox").selectOption("es");
       await expect(page.getByRole("heading", { name: "Comparar", exact: true })).toBeVisible();
       await expect(page.getByText("Una ejecución grabada", { exact: true })).toBeVisible();
-      await expect(results.getByRole("heading", { name: "Con Basics", exact: true })).toBeVisible();
+      await expect(results.getByRole("heading", { name: "Sin notas", exact: true })).toBeVisible();
+      await expect(results.getByRole("heading", { name: "MCP de Basics + notas", exact: true })).toBeVisible();
+      await expect(page.getByText("No se ejecutó en esta grabación: Notas exportadas.", { exact: true })).toBeVisible();
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
       // Keyboard disclosure and visible focus, including reduced-motion mode from the config.
       const disclosure = results.locator("details").first();
@@ -88,7 +95,16 @@ test("history omits an empty model and confirms deleting only one saved result",
             data.report.recorded = false;
             data.report.model = null;
             data.report.runs = 2;
-            data.report.results.push(...structuredClone(data.report.results).map((result: { run: number }) => ({ ...result, run: 2 })));
+            // Synthetic acceptance responses exercise the UI; the committed real
+            // recording remains unchanged and contains no acceptance measurements.
+            for (const result of data.report.results) result.acceptance = { status: "fail", passed: 3, failed: 1, duration_ms: 0 };
+            data.report.results.push(
+              ...structuredClone(data.report.results).map((result: { run: number }) => ({
+                ...result,
+                run: 2,
+                acceptance: { status: "pass", passed: 100, failed: 0, duration_ms: 0 },
+              })),
+            );
             if (deleted.length) delete data.report;
           } else if (Array.isArray(data)) {
             for (const item of data) item.model = null;
@@ -105,6 +121,8 @@ test("history omits an empty model and confirms deleting only one saved result",
   await expect(history).not.toContainText(/·\s*·/);
   await expect(page.getByTestId("compare-summary")).toContainText("Mean:");
   await expect(page.getByTestId("compare-summary")).toContainText("SD: 0");
+  await expect(page.getByTestId("compare-summary").getByRole("row", { name: /^Acceptance pass rate/ })).toContainText("87.5%");
+  await expect(page.getByTestId("compare-summary").getByRole("row", { name: /^Fully passing runs/ })).toContainText("50%");
   await history.getByRole("button", { name: /^Delete result:/ }).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog.getByRole("heading", { name: "Delete this result?", exact: true })).toBeVisible();

@@ -1291,10 +1291,14 @@ export function buildProgram(): Command {
 
   program
     .command("compare [task...]")
-    .description("compare generated projects without and with read-only Basics")
+    .description("compare generated projects with no notes, exported notes or read-only Basics")
     .requiredOption("--agent <agent>", "claude, opencode or codex")
     .option("--model <model>", "agent model")
     .option("--runs <count>", "runs per condition", "1")
+    .option("--conditions <list>", "ordered subset of none,agents-md,basics", "none,agents-md,basics")
+    .option("--acceptance-bundle <file>", "runner-owned JSON test bundle, extracted only after confirmed agent shutdown")
+    .option("--acceptance-command <command>", "separately approved command; stdout must be one JSON line {passed, failed}")
+    .option("--study-dir <dir>", "runner-owned study location monitored for contamination")
     .option("--timeout <seconds>", "timeout per condition in seconds", "600")
     .option("--sample <pack/task>", "bilingual sample task from an official pack")
     .option("--yes", "approve planned agent runs only; never trust check commands")
@@ -1308,6 +1312,10 @@ export function buildProgram(): Command {
           agent: CompareOptions["agent"];
           model?: string;
           runs: string;
+          conditions: string;
+          acceptanceBundle?: string;
+          acceptanceCommand?: string;
+          studyDir?: string;
           timeout: string;
           sample?: string;
           yes?: boolean;
@@ -1316,12 +1324,18 @@ export function buildProgram(): Command {
           json?: boolean;
         },
       ) => {
+        if (Boolean(opts.acceptanceBundle) !== Boolean(opts.acceptanceCommand))
+          throw new Error("provide --acceptance-bundle and --acceptance-command together");
         const report = await runComparison(
           load(),
           {
             ...opts,
             task: task.join(" "),
             runs: Number(opts.runs),
+            acceptance:
+              opts.acceptanceBundle && opts.acceptanceCommand
+                ? { bundle: opts.acceptanceBundle, command: opts.acceptanceCommand }
+                : undefined,
             timeoutMs: Number(opts.timeout) * 1000,
             language: loadConfig().language,
           },
@@ -1349,6 +1363,13 @@ export function buildProgram(): Command {
         else {
           for (const result of report.results) {
             console.log(
+              `  MCP calls: ${result.mcp_tool_calls ? JSON.stringify(result.mcp_tool_calls) : "not reported"}; shutdown confirmed=${result.shutdown_confirmed}; contaminated=${result.contaminated}`,
+            );
+            if (result.acceptance)
+              console.log(
+                `  acceptance: ${result.acceptance.status}; passed=${result.acceptance.passed ?? "unavailable"}; failed=${result.acceptance.failed ?? "unavailable"}; pass_rate=${result.acceptance.pass_rate ?? "unavailable"}; all_passed=${result.acceptance.all_passed ?? "unavailable"}${result.acceptance.reason ? `; ${result.acceptance.reason}` : ""}`,
+              );
+            console.log(
               `Run ${result.run} ${result.condition}: ${result.ok ? "completed" : "failed"}, ${result.wall_ms}ms, tokens (input + output, excluding cache)=${result.tokens?.total ?? "unavailable"}${result.tokens?.cache_read !== undefined ? `, cache_read=${result.tokens.cache_read}` : ""}${result.tokens?.cache_creation !== undefined ? `, cache_creation=${result.tokens.cache_creation}` : ""}`,
             );
             for (const layer of result.stack_comparison)
@@ -1365,10 +1386,14 @@ export function buildProgram(): Command {
             );
             if (result.error) console.log(`  error: ${result.error}`);
           }
-          for (const [condition, stats] of Object.entries(report.summary))
+          for (const [condition, stats] of Object.entries(report.summary)) {
+            console.log(
+              `  ${condition}: acceptance pass rate mean=${stats.acceptance_passed?.mean.toFixed(4) ?? "unavailable"}; fully passing run share=${stats.acceptance_all_passed?.mean.toFixed(4) ?? "unavailable"}`,
+            );
             console.log(
               `${condition}: ${stats.successes}/${stats.runs} completed; time mean=${stats.wall_ms?.mean.toFixed(0)}ms stddev=${stats.wall_ms?.stddev.toFixed(0)}ms; checks passed mean=${stats.checks_passed?.mean.toFixed(2)} stddev=${stats.checks_passed?.stddev.toFixed(2)}; tokens (input + output, excluding cache) mean=${stats.tokens_total?.mean.toFixed(0) ?? "unavailable"} stddev=${stats.tokens_total?.stddev.toFixed(0) ?? "unavailable"}; stack match mean=${stats.stack_match?.mean.toFixed(2) ?? "unavailable"} stddev=${stats.stack_match?.stddev.toFixed(2) ?? "unavailable"}; files added mean=${stats.files_added?.mean.toFixed(2)} stddev=${stats.files_added?.stddev.toFixed(2)} changed mean=${stats.files_changed?.mean.toFixed(2)} stddev=${stats.files_changed?.stddev.toFixed(2)} deleted mean=${stats.files_deleted?.mean.toFixed(2)} stddev=${stats.files_deleted?.stddev.toFixed(2)}`,
             );
+          }
           console.log(`Results: ${report.file}`);
           for (const result of report.results) if (result.directory) console.log(`Kept: ${result.directory}`);
         }

@@ -2,10 +2,70 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { type CompareState, Vault } from "@marcozvd/basics-core";
+import { type CompareReport, type CompareState, Vault } from "@marcozvd/basics-core";
 import { test, vi } from "vitest";
 import { CompareDirectories } from "../src/compare-files.js";
 import { createApp } from "../src/server/app.js";
+import { publicCompareReport } from "../src/server/compare.js";
+
+test("public JSON recomputes historical acceptance fractions and fully-passing shares consistently", () => {
+  const report = JSON.parse(
+    fs.readFileSync(path.resolve(import.meta.dirname, "../../../scripts/demo/compare-recorded.json"), "utf8"),
+  ) as CompareReport;
+  const first = report.results[0];
+  first.acceptance = { status: "fail", passed: 3, failed: 1, duration_ms: 0 };
+  report.results = [
+    first,
+    { ...first, run: 2, acceptance: { status: "pass", passed: 100, failed: 0, duration_ms: 0 } },
+    { ...first, run: 3, contaminated: true },
+  ];
+  const normalized = publicCompareReport(report, {});
+  assert.deepEqual(
+    normalized.results.map((result) => [result.acceptance?.pass_rate, result.acceptance?.all_passed]),
+    [
+      [0.75, false],
+      [1, true],
+      [0.75, false],
+    ],
+  );
+  assert.equal(normalized.summary.none.acceptance_passed?.mean, 0.875);
+  assert.equal(normalized.summary.none.acceptance_all_passed?.mean, 0.5);
+});
+
+test("legacy history normalizes condition names and leaves unreported metrics unavailable", () => {
+  const report = JSON.parse(
+    fs.readFileSync(path.resolve(import.meta.dirname, "../../../scripts/demo/compare-recorded.json"), "utf8"),
+  ) as CompareReport;
+  const normalized = publicCompareReport(report, {});
+  assert.deepEqual(normalized.conditions, ["none", "basics"]);
+  assert.deepEqual(
+    normalized.results.map((r) => r.condition),
+    ["none", "basics"],
+  );
+  assert.ok(normalized.results.every((r) => r.mcp_tool_calls === null && r.acceptance === null));
+  assert.ok(normalized.summary.none && normalized.summary.basics);
+  assert.equal(normalized.summary.with_basics, undefined);
+  report.results[0].shutdown_confirmed = false;
+  report.results[0].shutdown_diagnostics = {
+    reason: "Live POSIX process-group members remain",
+    processes: [{ pid: 4243, pgid: 4242, state: "S+" }],
+  };
+  assert.deepEqual(publicCompareReport(report, {}).results[0].shutdown_diagnostics, report.results[0].shutdown_diagnostics);
+});
+
+test("API condition subsets plan exact session count and reject invalid lists before launch", async () => {
+  const f = fixture();
+  try {
+    const base = { task: "dashboard", agent: "claude", runs: 2, timeoutMs: 5000 };
+    for (const conditions of [[], ["other"], ["none", "none"]]) assert.equal((await f.post("plan", { ...base, conditions })).status, 400);
+    const response = await f.post("plan", { ...base, conditions: ["basics", "agents-md"] });
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).run_count, 4);
+    assert.deepEqual(fs.readdirSync(f.runs), []);
+  } finally {
+    await f.cleanup();
+  }
+});
 
 const headers = { host: "localhost:4820", "content-type": "application/json" };
 function fixture(mode?: string) {
@@ -111,7 +171,7 @@ test("compare API validates plan/confirmation, streams every phase, reuses fake 
   try {
     assert.equal((await f.post("plan", { agent: "claude", runs: 0, timeoutMs: 5000 })).status, 400);
     const plan = await f.plan();
-    assert.equal(plan.run_count, 2);
+    assert.equal(plan.run_count, 3);
     assert.match(plan.checks[0].command, /verify.cjs/);
     assert.equal((await f.post("run", { plan: plan.id, confirmed: false })).status, 400);
     assert.equal((await f.post("run", { plan: plan.id, confirmed: true, approveChecks: true })).status, 202);
@@ -133,7 +193,7 @@ test("compare API validates plan/confirmation, streams every phase, reuses fake 
       assert.ok(output.includes(`"phase":"${phase}"`), phase);
     assert.deepEqual(
       state.report?.results.map((r) => r.checks_passed),
-      [0, 1],
+      [0, 1, 1],
     );
     assert.deepEqual(fs.readdirSync(f.runs), []);
     assert.equal(fs.existsSync(path.join(f.root, ".basics/trust.json")), false);

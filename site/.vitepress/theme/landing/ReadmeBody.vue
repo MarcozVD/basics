@@ -92,7 +92,7 @@ useReveal(revealRoot);
           <table class="recorded-compare">
             <caption>One recorded run: CSV report</caption>
             <thead><tr><th scope="col">Condition</th><th scope="col">Time</th><th scope="col">Checks passed</th><th scope="col">Stack agreement</th></tr></thead>
-            <tbody><tr v-for="result in comparison.results" :key="result.condition"><th scope="row">{{ result.condition === 'with_basics' ? 'With Basics' : 'Without Basics' }}</th><td>{{ (result.wall_ms / 1000).toFixed(1) }} s</td><td>{{ result.checks_passed }}/{{ result.checks.length }}</td><td>{{ result.stack_match === null ? 'Not reported' : `${Math.round(result.stack_match * 100)}%` }}</td></tr></tbody>
+            <tbody><tr v-for="result in comparison.results" :key="result.condition"><th scope="row">{{ result.condition === 'with_basics' ? 'Basics MCP + notes' : 'No notes' }}</th><td>{{ (result.wall_ms / 1000).toFixed(1) }} s</td><td>{{ result.checks_passed }}/{{ result.checks.length }}</td><td>{{ result.stack_match === null ? 'Not reported' : `${Math.round(result.stack_match * 100)}%` }}</td></tr></tbody>
           </table>
         </div>
         <p data-reveal="4"><a :href="withBase('/demo/compare/')">Inspect the recorded outputs and checks</a></p>

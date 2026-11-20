@@ -1,4 +1,4 @@
-import type { CompareReport } from "@marcozvd/basics-core";
+import { type CompareReport, reportConditions } from "@marcozvd/basics-core/compare";
 import { useI18n } from "@/i18n";
 import { compareCopy } from "@/lib/compare-copy";
 import { compareSummary } from "@/lib/compare-summary";
@@ -7,12 +7,13 @@ export function CompareSummary({ report }: { report: CompareReport }) {
   const { language } = useI18n();
   const c = compareCopy[language];
   const number = (value: number) => new Intl.NumberFormat(language, { maximumFractionDigits: 2 }).format(value);
-  const conditions = ["without_basics", "with_basics"] as const;
+  const conditions = reportConditions(report);
   const summaries = conditions.map((condition) => compareSummary(report, condition));
-  const labels = [c.stack, c.checksPassed, c.wall, c.tokens];
+  const labels = [c.stack, c.checksPassed, c.wall, c.tokens, c.mcpCalls, c.acceptanceRate, c.fullyPassingRuns];
+  const percent = (value: number) => new Intl.NumberFormat(language, { style: "percent", maximumFractionDigits: 2 }).format(value);
   return (
-    <div className="min-w-0 rounded-xl border border-border p-3" data-testid="compare-summary">
-      <table className="w-full table-fixed text-left text-xs">
+    <div className="min-w-0 overflow-x-auto rounded-xl border border-border p-3" data-testid="compare-summary">
+      <table className="w-full min-w-96 table-fixed text-left text-xs">
         <caption className="pb-3 text-left text-sm font-semibold">{c.summary}</caption>
         <thead>
           <tr>
@@ -31,14 +32,24 @@ export function CompareSummary({ report }: { report: CompareReport }) {
                 {label}
               </th>
               {summaries.map((summary, column) => {
-                const value = [summary.layers, summary.checks, summary.wall, summary.tokens][index];
+                const value = [
+                  summary.layers,
+                  summary.checks,
+                  summary.wall,
+                  summary.tokens,
+                  summary.mcp,
+                  summary.acceptance,
+                  summary.acceptanceAllPassed,
+                ][index];
                 const text = !value
                   ? c.unavailable
                   : index === 0
                     ? c.layersCount.replace("{matched}", number(value.mean)).replace("{total}", number(summary.layerTotal?.mean ?? 0))
                     : index === 1
                       ? c.checksCount.replace("{passed}", number(value.mean)).replace("{total}", number(summary.approved?.mean ?? 0))
-                      : `${number(value.mean)}${index === 2 ? " s" : ""}`;
+                      : index >= 5
+                        ? percent(value.mean)
+                        : `${number(value.mean)}${index === 2 ? " s" : ""}`;
                 return (
                   <td key={conditions[column]} className="py-2 pl-2 align-top tabular-nums">
                     <span>
@@ -47,7 +58,7 @@ export function CompareSummary({ report }: { report: CompareReport }) {
                     </span>
                     {report.runs > 1 && value ? (
                       <span className="mt-1 block text-muted-foreground">
-                        {c.spreadShort}: {number(value.stddev)}
+                        {c.spreadShort}: {index >= 5 ? percent(value.stddev) : number(value.stddev)}
                         {index === 2 ? " s" : ""}
                       </span>
                     ) : null}

@@ -1,22 +1,277 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { type Candidate, type Recommendation, trust, Vault } from "@marcozvd/basics-core";
+import { acceptanceMetrics, summarizeAcceptance } from "@marcozvd/basics-core/compare";
 import { test, vi } from "vitest";
+import { AgentProcessTree } from "../src/agent-process-tree.js";
 import { AgentRunner } from "../src/agents.js";
+import * as comparison from "../src/compare.js";
 import {
   type CompareDependencies,
   compareErrorMessage,
   expectedCompareStack,
   metricStats,
+  parseCompareConditions,
   resolveCompareTask,
   runComparison,
 } from "../src/compare.js";
+import { acceptanceResult, stageAcceptance } from "../src/compare-acceptance.js";
+import { prepareCompareEnvironment } from "../src/compare-environment.js";
 import { CompareDirectories, fileChanges, snapshotFiles } from "../src/compare-files.js";
 import { buildProgram } from "../src/program.js";
 
 const PACKS = path.resolve(import.meta.dirname, "../../../packs");
+
+test("CLI text and JSON expose the same per-run acceptance rates and fully-passing share", async () => {
+  const f = fixture();
+  const config = path.join(f.base, "config.json");
+  fs.writeFileSync(config, JSON.stringify({ vault: f.vault.root, language: "en", embeddings: false }));
+  vi.stubEnv("BASICS_CONFIG", config);
+  const report = JSON.parse(
+    fs.readFileSync(path.resolve(import.meta.dirname, "../../../scripts/demo/compare-recorded.json"), "utf8"),
+  ) as Awaited<ReturnType<typeof runComparison>>;
+  const first = report.results[0];
+  const acceptance = { status: "fail" as const, passed: 3, failed: 1, duration_ms: 0 };
+  first.condition = "none";
+  first.acceptance = { ...acceptance, ...acceptanceMetrics(acceptance) };
+  const full = { status: "pass" as const, passed: 100, failed: 0, duration_ms: 0 };
+  report.results = [first, { ...first, run: 2, acceptance: { ...full, ...acceptanceMetrics(full) } }];
+  report.summary = { none: { ...report.summary.without_basics, ...summarizeAcceptance(report.results) } };
+  const runner = vi.spyOn(comparison, "runComparison").mockResolvedValue(report);
+  const output = vi.spyOn(console, "log").mockImplementation(() => {});
+  try {
+    await buildProgram().parseAsync(["compare", "test", "--agent", "claude", "--yes"], { from: "user" });
+    const text = output.mock.calls.map((call) => call.join(" ")).join("\n");
+    assert.match(text, /pass_rate=0\.75; all_passed=false/);
+    assert.match(text, /acceptance pass rate mean=0\.8750; fully passing run share=0\.5000/);
+    output.mockClear();
+    await buildProgram().parseAsync(["compare", "test", "--agent", "claude", "--yes", "--json"], { from: "user" });
+    const json = JSON.parse(String(output.mock.calls[0][0]));
+    assert.equal(json.results[0].acceptance.pass_rate, 0.75);
+    assert.equal(json.results[0].acceptance.all_passed, false);
+    assert.equal(json.summary.none.acceptance_passed.mean, 0.875);
+    assert.equal(json.summary.none.acceptance_all_passed.mean, 0.5);
+  } finally {
+    runner.mockRestore();
+    output.mockRestore();
+    vi.unstubAllEnvs();
+    f.cleanup();
+  }
+});
+
+test("conditions validate before launch and preserve explicit order", () => {
+  assert.deepEqual(parseCompareConditions(undefined), ["none", "agents-md", "basics"]);
+  assert.deepEqual(parseCompareConditions("basics,none"), ["basics", "none"]);
+  for (const invalid of ["", "none,", "none,none", "with_basics", "other"])
+    assert.throws(() => parseCompareConditions(invalid), /conditions/);
+});
+
+test("agents-md exports equal basics byte for byte with every MCP configuration empty", () => {
+  const f = fixture();
+  try {
+    for (const agent of ["claude", "opencode", "codex"] as const) {
+      const prepared = ["agents-md", "basics"].map((condition) => {
+        const root = fs.mkdtempSync(path.join(f.tempRoot, "exports-"));
+        return prepareCompareEnvironment(root, agent, f.vault, ["react"], condition as "agents-md" | "basics", f.deps.env, f.authHome);
+      });
+      assert.deepEqual(snapshotFiles(prepared[0].project).files, snapshotFiles(prepared[1].project).files);
+      for (const file of ["AGENTS.md", "CLAUDE.md", "STACK.md"]) assert.ok(fs.existsSync(path.join(prepared[0].project, file)));
+      assert.deepEqual(JSON.parse(fs.readFileSync(path.join(prepared[0].control, "mcp.json"), "utf8")).mcpServers, {});
+      assert.deepEqual(JSON.parse(fs.readFileSync(path.join(prepared[0].control, "opencode.json"), "utf8")).mcp, {});
+      assert.equal(fs.readFileSync(path.join(prepared[0].env.CODEX_HOME, "config.toml"), "utf8"), "");
+    }
+  } finally {
+    f.cleanup();
+  }
+});
+
+test("all fake event formats deduplicate MCP calls and flag study reads for summary exclusion", async () => {
+  const f = fixture();
+  try {
+    for (const agent of ["claude", "opencode", "codex"] as const) {
+      const report = await runComparison(
+        f.vault,
+        { agent, task: "dashboard", conditions: ["basics"], yes: true, timeoutMs: 15000 },
+        { ...f.deps, env: { ...f.deps.env, FAKE_COMPARE_MODE: "mcp-events" } },
+      );
+      assert.deepEqual(report.results[0].mcp_tool_calls, { total: 1, by_tool: { get_note: 1 } });
+      assert.equal(report.results[0].contaminated, false);
+      const contaminated = await runComparison(
+        f.vault,
+        { agent, task: "dashboard", conditions: ["none"], studyDir: path.join(f.base, "study"), yes: true, timeoutMs: 15000 },
+        { ...f.deps, env: { ...f.deps.env, FAKE_COMPARE_MODE: "contamination" } },
+      );
+      assert.equal(contaminated.results[0].contaminated, true);
+      assert.equal(contaminated.summary.none.runs, 0);
+      assert.equal(contaminated.summary.none.contaminated_runs, 1);
+      assert.ok(!JSON.stringify(contaminated.results[0].contamination_reasons).includes(f.base));
+    }
+  } finally {
+    f.cleanup();
+  }
+}, 60000);
+
+test("acceptance count envelope rejects logs, malformed counts and inconsistent exits", () => {
+  assert.deepEqual(acceptanceResult('{"passed":2,"failed":0}\n', "pass", 4), { status: "pass", passed: 2, failed: 0, duration_ms: 4 });
+  assert.equal(acceptanceResult('{"passed":1,"failed":1}', "fail", 1).status, "fail");
+  for (const output of [
+    "",
+    'log\n{"passed":1,"failed":0}',
+    '{"passed":-1,"failed":0}',
+    '{"passed":1.5,"failed":0}',
+    '{"passed":1,"failed":0,"extra":1}',
+    '{"passed":9007199254740992,"failed":0}',
+  ])
+    assert.equal(acceptanceResult(output, "pass", 0).status, "error");
+  assert.equal(acceptanceResult('{"passed":1,"failed":0}', "fail", 0).status, "error");
+  assert.equal(acceptanceResult('{"passed":1,"failed":0}', "timeout", 0).status, "error");
+});
+
+test("acceptance extraction refuses traversal and agent-created destination", () => {
+  const f = fixture();
+  try {
+    const project = fs.mkdtempSync(path.join(f.tempRoot, "stage-"));
+    const bundle = path.join(f.base, "bundle.json");
+    fs.writeFileSync(bundle, JSON.stringify({ files: { "../escape": "unsafe" } }));
+    assert.throws(() => stageAcceptance({ bundle, command: "unused" }, project), /unsafe/);
+    assert.equal(fs.existsSync(path.join(project, ".basics-acceptance")), false);
+    fs.writeFileSync(bundle, JSON.stringify({ files: { "check.cjs": "test" } }));
+    fs.mkdirSync(path.join(project, ".basics-acceptance"));
+    assert.throws(() => stageAcceptance({ bundle, command: "unused" }, project), /exist/i);
+  } finally {
+    f.cleanup();
+  }
+});
+
+test("unconfirmed shutdown, timeout and cancellation never extract acceptance files", async () => {
+  const f = fixture();
+  try {
+    const hidden = path.join(f.base, "hidden");
+    fs.mkdirSync(hidden);
+    const bundle = path.join(hidden, "bundle.json");
+    fs.writeFileSync(bundle, JSON.stringify({ files: { "verify.cjs": "console.log(JSON.stringify({passed:1,failed:0}))" } }));
+    const acceptance = { bundle, command: `"${process.execPath.replaceAll("\\", "/")}" .basics-acceptance/verify.cjs` };
+    const original = AgentProcessTree.prototype.shutdown;
+    const unconfirmed = vi.spyOn(AgentProcessTree.prototype, "shutdown").mockImplementation(async function (this: AgentProcessTree) {
+      await original.call(this);
+      this.diagnostics = { reason: "Live POSIX process-group members remain", processes: [{ pid: 4243, pgid: 4242, state: "S+" }] };
+      return false;
+    });
+    try {
+      const report = await runComparison(
+        f.vault,
+        { agent: "claude", task: "dashboard", conditions: ["none"], yes: true, trustChecks: true, keep: true, acceptance },
+        f.deps,
+      );
+      assert.equal(report.results[0].shutdown_confirmed, false);
+      assert.equal(report.results[0].shutdown_diagnostics?.processes[0].state, "S+");
+      assert.match(report.results[0].acceptance!.reason!, /unconfirmed/);
+      assert.equal(fs.existsSync(path.join(report.results[0].directory!, ".basics-acceptance")), false);
+    } finally {
+      unconfirmed.mockRestore();
+    }
+    for (const cancel of [false, true]) {
+      const abort = new AbortController();
+      const timer = cancel ? setTimeout(() => abort.abort(), 250) : undefined;
+      try {
+        const report = await runComparison(
+          f.vault,
+          {
+            agent: "claude",
+            task: "dashboard",
+            conditions: ["none"],
+            yes: true,
+            trustChecks: true,
+            keep: true,
+            acceptance,
+            timeoutMs: cancel ? 10000 : 250,
+          },
+          { ...f.deps, signal: abort.signal, env: { ...f.deps.env, FAKE_COMPARE_MODE: "sleep" } },
+        );
+        assert.equal(report.results[0].acceptance?.status, "error");
+        assert.equal(fs.existsSync(path.join(report.results[0].directory!, ".basics-acceptance")), false);
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+  } finally {
+    f.cleanup();
+  }
+}, 40000);
+
+test("clean Windows exit and surviving grandchild both confirm shutdown before acceptance staging", async () => {
+  const f = fixture();
+  try {
+    const source = path.join(f.base, "hidden");
+    fs.mkdirSync(source);
+    const bundle = path.join(source, "bundle.json");
+    fs.writeFileSync(bundle, JSON.stringify({ files: { "verify.cjs": "console.log(JSON.stringify({passed:1,failed:0}));" } }));
+    const acceptance = { bundle, command: `"${process.execPath.replaceAll("\\", "/")}" .basics-acceptance/verify.cjs` };
+    for (const mode of [undefined, "grandchild"]) {
+      const report = await runComparison(
+        f.vault,
+        {
+          agent: "claude",
+          task: "dashboard",
+          conditions: ["none"],
+          yes: true,
+          trustChecks: true,
+          keep: true,
+          timeoutMs: 20000,
+          acceptance,
+        },
+        { ...f.deps, env: { ...f.deps.env, FAKE_COMPARE_MODE: mode } },
+      );
+      const result = report.results[0];
+      assert.equal(
+        result.shutdown_confirmed,
+        true,
+        JSON.stringify({ mode: mode ?? "clean", shutdown_diagnostics: result.shutdown_diagnostics }),
+      );
+      assert.equal(result.acceptance?.status, "pass", JSON.stringify(result.acceptance));
+      assert.deepEqual([result.acceptance?.passed, result.acceptance?.failed], [1, 0]);
+      assert.ok(fs.existsSync(path.join(result.directory!, ".basics-acceptance/verify.cjs")));
+      assert.ok(!result.files?.added.some((file) => file.startsWith(".basics-acceptance")));
+      const argv = fs.readFileSync(path.join(result.directory!, "argv.json"), "utf8");
+      assert.ok(!argv.includes(bundle) && !argv.includes(".basics-acceptance"));
+      assert.equal(fs.existsSync(path.join(source, "verify.cjs")), false, "bundle never extracted at its source");
+      if (mode)
+        for (const file of ["child-pid", "grandchild-pid"]) {
+          const pid = Number(fs.readFileSync(path.join(result.directory!, file), "utf8"));
+          try {
+            process.kill(pid, 0);
+          } catch (error) {
+            assert.equal((error as NodeJS.ErrnoException).code, "ESRCH");
+            continue;
+          }
+          if (process.platform === "win32") assert.fail(`Descendant ${pid} remains alive`);
+          // Darwin kill(pid, 0) also succeeds for zombies. A zombie has exited
+          // and cannot observe acceptance tests, even before launchd reaps it.
+          let state: string;
+          try {
+            state = execFileSync("/bin/ps", ["-p", String(pid), "-o", "stat="], { encoding: "utf8" }).trim();
+          } catch (error) {
+            const missing = error as { status?: number; stdout?: string };
+            if (missing.status === 1 && !String(missing.stdout ?? "").trim()) continue;
+            throw error;
+          }
+          assert.match(state, /^Z/, `Descendant ${pid} remains executable: ${state}`);
+        }
+    }
+    const denied = await runComparison(
+      f.vault,
+      { agent: "claude", task: "dashboard", conditions: ["none"], yes: true, keep: true, acceptance, timeoutMs: 15000 },
+      f.deps,
+    );
+    assert.match(denied.results[0].acceptance!.reason!, /not approved/);
+    assert.equal(fs.existsSync(path.join(denied.results[0].directory!, ".basics-acceptance")), false);
+  } finally {
+    f.cleanup();
+  }
+}, 60000);
 function fixture() {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), "basics-compare-test-"));
   const vaultRoot = path.join(base, "vault"),
@@ -127,7 +382,7 @@ test("confirmation refuses non-TTY, declined confirmation and missing agents bef
       /--yes/,
     );
     assert.equal(confirm.mock.calls.length, 0);
-    assert.match(announce.mock.calls[0][0], /2 agent runs/);
+    assert.match(announce.mock.calls[0][0], /3 agent runs/);
     await assert.rejects(runComparison(f.vault, { agent: "claude", task: "dashboard" }, { ...f.deps, isTTY: true, confirm }), /cancelled/);
     await assert.rejects(
       runComparison(f.vault, { agent: "claude", task: "dashboard", yes: true }, { ...f.deps, resolveExe: () => undefined }),
@@ -211,11 +466,11 @@ test("--trust-checks runs only invocation checks without persisting trust or imp
     assert.equal(report.trust_checks, true);
     assert.deepEqual(
       report.results.map((r) => r.checks[0].status),
-      ["fail", "pass"],
+      ["fail", "pass", "pass"],
     );
     assert.deepEqual(
       report.results.map((r) => r.checks_passed),
-      [0, 1],
+      [0, 1, 1],
     );
     assert.match(announce.mock.calls.map((call) => call[0]).join("\n"), /will run \(--trust-checks\).*verify.cjs/);
     assert.equal(fs.existsSync(path.join(f.vault.root, ".basics/trust.json")), false);
@@ -262,7 +517,7 @@ test("interactive check approval is separate: accept runs checks, decline or no 
       assert.equal(confirmChecks.mock.calls.length, approved === undefined ? 0 : 1);
       assert.deepEqual(
         report.results.map((r) => r.checks[0].status),
-        approved ? ["fail", "pass"] : ["untrusted", "untrusted"],
+        approved ? ["fail", "pass", "pass"] : ["untrusted", "untrusted", "untrusted"],
       );
       assert.equal(fs.readFileSync(trustFile, "utf8"), beforeTrust);
     }
@@ -275,7 +530,7 @@ test("interactive check approval is separate: accept runs checks, decline or no 
   }
 });
 
-test("sample usage events normalize provider input and preserve separate optional cache counts", async () => {
+test("sample usage events normalize provider input and preserve separate optional cache counts", { timeout: 60_000 }, async () => {
   const f = fixture();
   try {
     for (const agent of ["claude", "codex", "opencode"] as const) {
@@ -324,20 +579,20 @@ test("paired fake runs measure real checks, detected stack, tokens, diffs and re
       { ...f.deps, isTTY: true, confirm },
     );
     assert.equal(confirm.mock.calls.length, 1);
-    assert.equal(report.results.length, 4);
+    assert.equal(report.results.length, 6);
     for (const result of report.results) {
       assert.equal(result.ok, true);
       assert.equal(result.tokens?.total, 17);
       assert.equal(result.stack_match, 1);
       assert.deepEqual(result.stack_used, { frontend: ["react"] });
-      assert.equal(result.checks_passed, result.condition === "with_basics" ? 1 : 0);
+      assert.equal(result.checks_passed, result.condition !== "none" ? 1 : 0);
       assert.equal(result.files?.added.length, 3);
       assert.equal(result.files?.changed.length, 0);
       assert.ok(result.wall_ms >= 0);
       assert.deepEqual(result.cleanup_errors, []);
     }
-    assert.equal(report.summary.with_basics.wall_ms?.count, 2);
-    assert.equal(report.summary.with_basics.tokens_total?.mean, 17);
+    assert.equal(report.summary.basics.wall_ms?.count, 2);
+    assert.equal(report.summary.basics.tokens_total?.mean, 17);
     assert.deepEqual(metricStats([1, 3]), { count: 2, mean: 2, stddev: 1, min: 1, max: 3 });
     assert.deepEqual(fs.readdirSync(f.tempRoot), []);
     assert.ok(fs.existsSync(report.file));
@@ -363,7 +618,7 @@ test("keep retains only projects, isolates config and passes the whole shell-lik
         const argv = JSON.parse(fs.readFileSync(path.join(project, "argv.json"), "utf8"));
         assert.ok(argv.args[1].startsWith(task));
         assert.equal(argv.args.filter((arg: string) => arg.includes("OWNED")).length, 1);
-        assert.equal(argv.withBasics, result.condition === "with_basics");
+        assert.equal(argv.withBasics, result.condition !== "none");
         assert.equal(argv.initial.includes("AGENTS.md"), argv.withBasics);
         assert.equal(result.tokens?.total, 17);
         assert.ok(argv.args.includes("test-model"));
@@ -397,7 +652,7 @@ test("missing usage stays unavailable and nonzero agent exits remain failures wi
       { ...f.deps, env: { ...f.deps.env, FAKE_COMPARE_MODE: "no-tokens" } },
     );
     assert.ok(noUsage.results.every((result) => result.ok && result.tokens === null));
-    assert.equal(noUsage.summary.with_basics.tokens_total, null);
+    assert.equal(noUsage.summary.basics.tokens_total, null);
     const failed = await runComparison(
       f.vault,
       { agent: "claude", task: "dashboard", yes: true },
@@ -619,7 +874,9 @@ test("expected stack excludes score-zero and language/history-only layers", () =
   };
   assert.deepEqual(expectedCompareStack(advice), { positive: ["real"] });
 });
-test("CLI JSON output is a single report, planned count is separate, and --sample executes only the fake CLI", async () => {
+test("CLI JSON output is a single report, planned count is separate, and --sample executes only the fake CLI", {
+  timeout: 60_000,
+}, async () => {
   const f = fixture();
   const config = path.join(f.base, "config.json");
   fs.writeFileSync(config, JSON.stringify({ vault: f.vault.root, language: "en", embeddings: false }));
@@ -635,9 +892,9 @@ test("CLI JSON output is a single report, planned count is separate, and --sampl
     });
     assert.equal(output.mock.calls.length, 1);
     const report = JSON.parse(String(output.mock.calls[0][0]));
-    assert.equal(report.results.length, 2);
+    assert.equal(report.results.length, 3);
     assert.equal(report.sample, "rust-api/login-api");
-    assert.match(String(plan.mock.calls[0][0]), /2 agent runs/);
+    assert.match(String(plan.mock.calls[0][0]), /3 agent runs/);
     output.mockClear();
     await buildProgram().parseAsync(["compare", "dashboard", "--agent", "claude", "--yes", "--runs", "2"], { from: "user" });
     const text = output.mock.calls.map((call) => call.join(" ")).join("\n");
@@ -653,7 +910,7 @@ test("CLI JSON output is a single report, planned count is separate, and --sampl
     assert.equal(trustedReport.trust_checks, true);
     assert.deepEqual(
       trustedReport.results.map((result: { checks_passed: number }) => result.checks_passed),
-      [0, 1],
+      [0, 1, 1],
     );
     assert.equal(fs.existsSync(path.join(f.vault.root, ".basics/trust.json")), false);
   } finally {

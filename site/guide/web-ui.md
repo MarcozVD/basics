@@ -38,7 +38,7 @@ There are no page sidebars; secondary panels are overlays closed with `Esc`. You
 | **Settings** | Six sections: **General** (language, theme, navigation style and bar position, vault path; in the [desktop app](desktop) also **Open folder** and **Change folder**), **Startup**, **Agents** (connect or disconnect each coding agent and see the file change it makes; agents Basics does not find sit under **Other agents**, and **Other agent: manual setup** gives JSON, TOML, HTTP and command snippets to copy), **Search** (semantic search on or off; project history on or off, and its strength), **Updates** and **About**. Each change applies as soon as you pick it; there is no Save button. Startup and Updates are desktop-only; see [Desktop settings](desktop#desktop-settings). |
 | **Skills** | Every skill installed for your coding agents, grouped by area. One filter row holds the search and an agent select, with area chips beside it. Expand a row for its path, version and area control; the area control is where you change a skill's area, and **Changed by you** shows when you have. |
 | **Recommend** | Project description first; layers are one collapsed line (`All layers, 3 per layer`) that opens the layer chips and per-layer stepper. Once there is a result, the example prompts hide and the intro moves behind `?`. Profiles, then a shortlist with one section per layer: each tech is one card with its title and reasons (**Matches**, **Fits profile**, **Watch out**), and **Also fits** names its other layers. No scores show until you open a card's **Why**. Select techs, then export with the **STACK.md / AGENTS.md / CLAUDE.md / Cursor** tabs of the modal, each with copy or download. Shows whether the mode is **Keywords** or **Hybrid**. While a new ranking runs, the previous one stays on screen, dimmed. On an empty vault it asks you to install the starter packs first. An **Ask an agent** run is kept per browser tab: it keeps going when you leave the page, and the Recommend item in the navigation (sidebar or floating bar) shows its progress. |
-| **Compare** | Runs the same task with and without Basics from the browser and shows both results side by side. Starting a run asks you to confirm the agent runs and, separately, to approve any checks. See [Compare](#compare). |
+| **Compare** | Runs the same task under up to three conditions from the browser and shows the results side by side: no notes, exported notes, and Basics MCP plus notes. Starting a run asks you to confirm the agent runs and, separately, to approve any checks and the acceptance command. See [Compare](#compare). |
 
 Each screen's one-line intro sits under its title until the screen has content, then moves behind the `?` in the header. Settings keeps its intro behind the `?`. Its `×` hides the intro for that screen in this browser, and the `?` still shows it.
 
@@ -78,11 +78,15 @@ own task** and describe what the agent should build. Pick the agent and, if you 
 to the agent. **Runs per condition** accepts 1 to 10, and **Timeout per condition (seconds)** accepts 1 to 3600. **Review run**
 prepares the plan on the server. The form stays locked while a comparison is being prepared or runs.
 
+**Choose the conditions.** Three checkboxes select **No notes**, **Exported notes** and **Basics MCP + notes**. All three are on by default, and at least one must stay on. The CLI equivalent is `--conditions`.
+
+**Acceptance tests (optional).** Open the **Acceptance tests** section to give an **Acceptance bundle path**, the path of a JSON bundle on this computer, and an **Acceptance command**. Give both or neither. **Study directory to monitor** names a folder that is watched for contamination. The [CLI guide](./compare.md#acceptance-tests) explains the bundle format and the rules.
+
 **Confirm the agent runs.** The first dialog says how many agent runs will start. Each one uses your agent account's usual
 quota and may incur provider charges. Basics cannot predict the cost, so the dialog shows no amount.
 
-**Approve checks separately.** The second step lists each check ID and its command. The **Approve listed checks for this run**
-checkbox is off by default. Without it, the checks stay untrusted and do not run, and the agent runs still go ahead. Approval
+**Approve checks separately.** The second step lists each check ID and its command, including `acceptance` when you set one. The **Approve listed checks for this run**
+checkbox is off by default. Without it, the checks stay untrusted and do not run, and the agent runs still go ahead. The acceptance result is then an error, and nothing is extracted. Approval
 covers this comparison only and is never saved as vault trust, the same as `--trust-checks` on the command line.
 
 **Watch and cancel.** Progress moves through Planned, Agent running, Checking output, Condition finished and Finished, and it
@@ -94,31 +98,35 @@ Only one comparison runs at a time, cancellation and cleanup included. A start i
 when the review is more than five minutes old, or when the check commands changed. The page then shows "Comparison unavailable";
 review the run again.
 
-**Read the result.** The **At a glance** table sits above the detailed cards and compares Without Basics with With Basics on:
+**Read the result.** The **At a glance** table sits above the detailed cards and compares the conditions you ran on:
 
 - stack agreement, as "N of M layers";
 - checks passed, as "N of M approved", with unapproved commands counted separately;
 - wall time, in seconds;
-- tokens (input + output, excluding cache).
+- tokens (input + output, excluding cache);
+- Basics MCP calls, as a total per run, shown as "Not reported" when the agent did not report them;
+- acceptance pass rate and fully passing runs, when you set an acceptance command.
 
 With repeated runs, each figure also shows the mean and the standard deviation (SD). A figure the CLI did not report reads
 "Not reported", never zero.
 
-Below the table, the two cards sit side by side on a wide screen and stack on a narrow one. For each run, a card shows the
+Below the table, one card per condition sits side by side on a wide screen and stacks on a narrow one. For each run, a card shows the
 recommended and the used technologies per layer, with a match or no-match mark ("Used: none detected" when nothing was found);
-every check's status and command; wall time; tokens, with cache read and cache creation on their own rows when reported; added,
+every check's status and command; the acceptance result, with its pass rate, all-passed flag, counts or reason; Basics MCP calls by tool; wall time; tokens, with cache read and cache creation on their own rows when reported; added,
 changed, deleted and excluded files; and an excerpt of the assistant's output, up to 3000 characters. Check output and file
 lists open with keyboard-operable disclosures.
+
+**Contaminated and unconfirmed runs.** A run flagged as contaminated shows the notice "Contaminated: excluded from analysis", and its figures are left out of the table. A run whose agent processes could not be confirmed stopped shows "Process-tree shutdown unconfirmed". Read both before you quote a figure.
 
 **History.** The list shows up to the 200 latest saved comparisons, with their date, agent and model. Open one to read its cards
 again. **Delete result** asks "Delete this result?" and says that only this saved result is deleted, while project files and
 vault notes stay intact. Cancel keeps it. Deleting removes only that one JSON file.
 
 **Limits.** The limits in the [CLI guide](./compare.md#limits) apply here too: one run proves nothing, stack agreement is not
-quality, and token totals are counts, not a bill.
+quality, and token totals are counts, not a bill. The page does not isolate the agent: it runs as your user, so contamination detection can miss indirect reads.
 
 **The landing page.** The Compare section of the landing page and the Compare page of the demo show one recorded Claude Haiku
-run on a CSV report task, with and without Basics. It is a static snapshot. No agent runs in the demo, and it is not evidence of
+run on a CSV report task, with and without Basics. It is a static snapshot. The demo's Compare page shows the two recorded conditions as No notes and Basics MCP plus notes, and labels Exported notes as not run in this recording, with no numbers. No agent runs in the demo, and it is not evidence of
 a general improvement.
 
 ## Shortcuts
