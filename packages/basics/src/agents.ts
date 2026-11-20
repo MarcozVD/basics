@@ -3,7 +3,9 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import type { AgentId, AgentInfo } from "@marcozvd/basics-core";
+import type { AgentId, AgentInfo, McpToolCalls } from "@marcozvd/basics-core";
+import { AgentObservations } from "./agent-observations.js";
+import { AgentProcessTree, waitForAgentExit } from "./agent-process-tree.js";
 import { CompareDirectories } from "./compare-files.js";
 
 /**
@@ -335,6 +337,7 @@ class JsonLinesParser implements StreamParser {
       this.onEvent?.(event);
     } catch {
       // A CLI that logs a plain line still streams it; the UI decides what to show.
+      this.onEvent?.({ type: "basics.invalid-stream" });
       return this.emit(trimmed);
     }
     const final = this.finalOf?.(event);
@@ -389,6 +392,10 @@ export interface TokenUsage {
 }
 
 export interface AgentRunResult {
+  mcp_tool_calls?: McpToolCalls | null;
+  contaminated?: boolean;
+  contamination_reasons?: string[];
+  shutdown_confirmed?: boolean;
   ok: boolean;
   text: string;
   error?: string;
@@ -403,6 +410,7 @@ export interface AgentRunCallbacks {
 }
 
 export interface AgentRunnerOptions {
+  protectedPaths?: string[];
   /** Parent of the fresh, empty per-run directory. Default: the OS temp directory. */
   tempRoot?: string;
   timeoutMs?: number;
@@ -420,6 +428,7 @@ interface ActiveRun {
   dir: string;
   cancelled: boolean;
   timedOut: boolean;
+  stop: () => void;
 }
 
 function exitError(code: number | null, stderr: string): string {
@@ -479,7 +488,9 @@ export class AgentRunner {
       return setupFailure(error);
     }
     let usage: TokenUsage | undefined;
+    const observations = new AgentObservations(opts.agent, cwd, this.opts.protectedPaths);
     const parser = parserFor(format, (event) => {
+      if (opts.build) observations.observe(event);
       const part = event.part as { tokens?: { input?: number; output?: number } } | undefined;
       const counts = (
         opts.agent === "opencode" && event.type === "step_finish"
@@ -538,27 +549,30 @@ export class AgentRunner {
       return setupFailure(error);
     }
 
-    const run: ActiveRun = { id: runId, child, dir, cancelled: false, timedOut: false };
+    const tree = opts.build ? new AgentProcessTree(child) : undefined;
+    const run: ActiveRun = { id: runId, child, dir, cancelled: false, timedOut: false, stop: () => void settle() };
     this.active = run;
 
     let stderr = "";
     let settled = false;
     const timeout = setTimeout(() => {
       run.timedOut = true;
-      stopAgentProcess(child, opts.build);
-      if (opts.build) {
-        // A descendant may retain inherited pipes after the CLI exits. The deadline
-        // must still resolve the compare run rather than waiting forever for close.
-        child.stdout?.destroy();
-        child.stderr?.destroy();
-        settle(undefined, null);
-      }
+      void settle();
     }, this.timeoutMs);
 
-    const settle = (error?: string, code: number | null = null): void => {
+    const settle = async (error?: string, code: number | null = null): Promise<void> => {
       if (settled) return;
       settled = true;
       clearTimeout(timeout);
+      const shutdownConfirmed = tree ? await tree.shutdown() : undefined;
+      if (!opts.build && (run.cancelled || run.timedOut)) {
+        stopAgentProcess(child);
+        await waitForAgentExit(child);
+      }
+      if (opts.build) {
+        child.stdout?.destroy();
+        child.stderr?.destroy();
+      }
       const trailing = parser.flush();
       if (trailing) callbacks.onChunk(runId, trailing);
       if (this.active?.id === runId) this.active = undefined;
@@ -581,6 +595,10 @@ export class AgentRunner {
               : exitError(code, stderr));
       const result: AgentRunResult = { ok: !failure && !cleanupError, text: parser.text() };
       if (opts.build) {
+        result.shutdown_confirmed = shutdownConfirmed;
+        result.mcp_tool_calls = observations.calls(!run.cancelled && !run.timedOut);
+        result.contaminated = observations.contamination.length > 0;
+        result.contamination_reasons = observations.contamination;
         result.duration_ms = Date.now() - started;
         result.timed_out = run.timedOut;
         if (usage) result.tokens = usage;
@@ -600,6 +618,7 @@ export class AgentRunner {
     });
     child.on("error", (err) => settle(`could not start ${AGENT_NAMES[opts.agent]}: ${err.message}`));
     child.on("close", (code) => settle(undefined, code));
+    if (opts.build) child.on("exit", (code) => void settle(undefined, code));
 
     return runId;
   }
@@ -609,7 +628,7 @@ export class AgentRunner {
     const run = this.active;
     if (!run || run.id !== id) return false;
     run.cancelled = true;
-    stopAgentProcess(run.child, true);
+    run.stop();
     return true;
   }
 }
