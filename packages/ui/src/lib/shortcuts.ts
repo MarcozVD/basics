@@ -9,6 +9,7 @@ export const SHORTCUT_ROUTES: Record<string, string> = {
   g: "/graph",
   i: "/inbox",
   r: "/recommend",
+  c: "/compare",
   k: "/skills",
 };
 

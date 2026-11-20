@@ -4,6 +4,7 @@
 import {
   Copy,
   FolderKanban,
+  GitCompareArrows,
   House,
   Inbox as InboxIcon,
   Languages,
@@ -218,6 +219,7 @@ export function AppCommandPalette() {
       { to: "/graph", labelKey: "nav.graph", icon: Waypoints, hint: "G G" },
       { to: "/inbox", labelKey: "nav.inbox", icon: InboxIcon, hint: "G I" },
       { to: "/recommend", labelKey: "nav.recommend", icon: Sparkles, hint: "G R" },
+      { to: "/compare", labelKey: "nav.compare", icon: GitCompareArrows, hint: "G C" },
       { to: "/skills", labelKey: "nav.skills", icon: Puzzle, hint: "G K" },
       { to: "/settings", labelKey: "nav.settings", icon: SettingsIcon, hint: SETTINGS_HINT },
     ];

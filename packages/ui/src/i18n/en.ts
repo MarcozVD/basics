@@ -1,4 +1,6 @@
 export const en = {
+  "nav.compare": "Compare",
+  "nav.compare.purpose": "Compare the same agent task with and without your Basics notes.",
   "app.name": "Basics",
   "nav.primary": "Primary",
   "nav.home": "Home",

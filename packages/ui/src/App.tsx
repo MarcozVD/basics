@@ -20,6 +20,7 @@ const InboxPage = lazy(() => routeModules.inbox().then((module) => ({ default: m
 const ProjectsPage = lazy(() => routeModules.projects().then((module) => ({ default: module.ProjectsPage })));
 const ProposalPage = lazy(() => routeModules.proposal().then((module) => ({ default: module.ProposalPage })));
 const RecommendPage = lazy(() => routeModules.recommend().then((module) => ({ default: module.RecommendPage })));
+const ComparePage = lazy(() => routeModules.compare().then((module) => ({ default: module.ComparePage })));
 const SkillsPage = lazy(() => routeModules.skills().then((module) => ({ default: module.SkillsPage })));
 const SettingsPage = lazy(() => routeModules.settings().then((module) => ({ default: module.SettingsPage })));
 
@@ -136,6 +137,14 @@ const router = createBrowserRouter([
         ),
       },
       { path: "*", element: <NotFoundPage /> },
+      {
+        path: "compare",
+        element: (
+          <Lazy>
+            <ComparePage />
+          </Lazy>
+        ),
+      },
     ],
   },
 ]);

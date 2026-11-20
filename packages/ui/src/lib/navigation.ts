@@ -97,7 +97,7 @@ export const DOCK_SPACE = DOCK_HEIGHT + 24;
 /** Space a page keeps clear beside a vertical bar. */
 export const DOCK_SPACE_VERTICAL = DOCK_WIDTH + 24;
 /** Under this panel height a vertical bar would not fit, so it falls back to the bottom. */
-export const DOCK_VERTICAL_MIN = 530;
+export const DOCK_VERTICAL_MIN = 578;
 
 /** A left/right bar falls back to the bottom when the panel is too short to hold it. */
 export function resolveDockEdge(edge: DockEdge, availableHeight: number): DockEdge {

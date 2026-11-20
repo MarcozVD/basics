@@ -33,6 +33,24 @@ import type {
 
 export type Language = "en" | "es";
 
+import type { ComparePlan, CompareReport, CompareRequest, CompareState } from "@marcozvd/basics-core";
+export interface CompareSample {
+  sample: string;
+  title: Record<string, string>;
+  prompt: Record<string, string>;
+}
+export type CompareHistory = Pick<CompareReport, "id" | "at" | "task" | "agent" | "model">[];
+export const getCompareSamples = () => request<CompareSample[]>("/api/compare/samples");
+export const getCompareHistory = () => request<CompareHistory>("/api/compare/history");
+export const getCompareState = () => request<CompareState | null>("/api/compare/state");
+export const getCompareReport = (id: string) => request<CompareReport>(`/api/compare/history/${encodeURIComponent(id)}`);
+export const deleteCompareReport = (id: string) => request<void>(`/api/compare/history/${encodeURIComponent(id)}`, { method: "DELETE" });
+export const planCompare = (body: CompareRequest) =>
+  request<ComparePlan>("/api/compare/plan", { method: "POST", body: JSON.stringify(body) });
+export const startCompare = (plan: string, approveChecks: boolean) =>
+  request<{ id: string }>("/api/compare/run", { method: "POST", body: JSON.stringify({ plan, confirmed: true, approveChecks }) });
+export const cancelCompare = (id: string) => request("/api/compare/cancel", { method: "POST", body: JSON.stringify({ id }) });
+
 export interface AppConfig {
   language: Language;
 }
