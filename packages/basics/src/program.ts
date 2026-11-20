@@ -1367,7 +1367,7 @@ export function buildProgram(): Command {
             );
             if (result.acceptance)
               console.log(
-                `  acceptance: ${result.acceptance.status}; passed=${result.acceptance.passed ?? "unavailable"}; failed=${result.acceptance.failed ?? "unavailable"}${result.acceptance.reason ? `; ${result.acceptance.reason}` : ""}`,
+                `  acceptance: ${result.acceptance.status}; passed=${result.acceptance.passed ?? "unavailable"}; failed=${result.acceptance.failed ?? "unavailable"}; pass_rate=${result.acceptance.pass_rate ?? "unavailable"}; all_passed=${result.acceptance.all_passed ?? "unavailable"}${result.acceptance.reason ? `; ${result.acceptance.reason}` : ""}`,
               );
             console.log(
               `Run ${result.run} ${result.condition}: ${result.ok ? "completed" : "failed"}, ${result.wall_ms}ms, tokens (input + output, excluding cache)=${result.tokens?.total ?? "unavailable"}${result.tokens?.cache_read !== undefined ? `, cache_read=${result.tokens.cache_read}` : ""}${result.tokens?.cache_creation !== undefined ? `, cache_creation=${result.tokens.cache_creation}` : ""}`,
@@ -1386,10 +1386,14 @@ export function buildProgram(): Command {
             );
             if (result.error) console.log(`  error: ${result.error}`);
           }
-          for (const [condition, stats] of Object.entries(report.summary))
+          for (const [condition, stats] of Object.entries(report.summary)) {
+            console.log(
+              `  ${condition}: acceptance pass rate mean=${stats.acceptance_passed?.mean.toFixed(4) ?? "unavailable"}; fully passing run share=${stats.acceptance_all_passed?.mean.toFixed(4) ?? "unavailable"}`,
+            );
             console.log(
               `${condition}: ${stats.successes}/${stats.runs} completed; time mean=${stats.wall_ms?.mean.toFixed(0)}ms stddev=${stats.wall_ms?.stddev.toFixed(0)}ms; checks passed mean=${stats.checks_passed?.mean.toFixed(2)} stddev=${stats.checks_passed?.stddev.toFixed(2)}; tokens (input + output, excluding cache) mean=${stats.tokens_total?.mean.toFixed(0) ?? "unavailable"} stddev=${stats.tokens_total?.stddev.toFixed(0) ?? "unavailable"}; stack match mean=${stats.stack_match?.mean.toFixed(2) ?? "unavailable"} stddev=${stats.stack_match?.stddev.toFixed(2) ?? "unavailable"}; files added mean=${stats.files_added?.mean.toFixed(2)} stddev=${stats.files_added?.stddev.toFixed(2)} changed mean=${stats.files_changed?.mean.toFixed(2)} stddev=${stats.files_changed?.stddev.toFixed(2)} deleted mean=${stats.files_deleted?.mean.toFixed(2)} stddev=${stats.files_deleted?.stddev.toFixed(2)}`,
             );
+          }
           console.log(`Results: ${report.file}`);
           for (const result of report.results) if (result.directory) console.log(`Kept: ${result.directory}`);
         }

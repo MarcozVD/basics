@@ -1,4 +1,6 @@
 import {
+  type AcceptanceResult,
+  acceptanceMetrics,
   COMPARE_CONDITIONS,
   type CompareCondition,
   type ComparePlan,
@@ -98,6 +100,15 @@ export function ComparePage() {
   }
   const number = (value: number | null | undefined) =>
     value === null || value === undefined ? c.unavailable : new Intl.NumberFormat(language, { maximumFractionDigits: 2 }).format(value);
+  const acceptanceText = (result: AcceptanceResult) => {
+    const { pass_rate, all_passed } = acceptanceMetrics(result);
+    const rate =
+      pass_rate === null
+        ? c.unavailable
+        : new Intl.NumberFormat(language, { style: "percent", maximumFractionDigits: 2 }).format(pass_rate);
+    const flag = all_passed === null ? c.unavailable : all_passed ? c.statuses.pass : c.statuses.fail;
+    return `${c.acceptanceRate}: ${rate} · ${c.acceptanceAllPassed}: ${flag}`;
+  };
   return (
     <Page className={PAGE_SECTIONS}>
       <PageHeader
@@ -401,6 +412,7 @@ export function ComparePage() {
                           {result.acceptance.status === "error" ? c.phases.error : c.statuses[result.acceptance.status]} · {c.passed}:{" "}
                           {number(result.acceptance.passed)} · {c.failed}: {number(result.acceptance.failed)}
                         </p>
+                        <p>{acceptanceText(result.acceptance)}</p>
                         {result.acceptance.reason ? (
                           <p className="mt-1 break-words text-muted-foreground">{result.acceptance.reason}</p>
                         ) : null}

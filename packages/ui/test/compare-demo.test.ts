@@ -48,6 +48,21 @@ describe("recorded compare data", () => {
     for (const model of [null, "", "  "]) expect(compareHistoryMeta("claude", model, "today")).toBe("claude · today");
     expect(compareHistoryMeta("claude", "haiku", "today")).toBe("claude · haiku · today");
   });
+  it("shows mean per-run test pass rates and fully passing run shares, excluding contaminated or unmeasured results", () => {
+    const report = structuredClone(recording) as unknown as CompareReport;
+    const first = report.results[0];
+    first.acceptance = { status: "fail", passed: 3, failed: 1, duration_ms: 0 };
+    report.results = [
+      first,
+      { ...first, run: 2, acceptance: { status: "pass", passed: 100, failed: 0, duration_ms: 0 } },
+      { ...first, run: 3, contaminated: true },
+      { ...first, run: 4, acceptance: null },
+    ];
+    const summary = compareSummary(report, "none");
+    expect(summary.acceptance?.mean).toBe(0.875);
+    expect(summary.acceptance?.count).toBe(2);
+    expect(summary.acceptanceAllPassed?.mean).toBe(0.5);
+  });
   it("keeps legacy demo metrics, shows available conditions only and excludes contaminated runs", () => {
     const report = structuredClone(recording) as unknown as CompareReport;
     expect(reportConditions(report)).toEqual(["none", "basics"]);

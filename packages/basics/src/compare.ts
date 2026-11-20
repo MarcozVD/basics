@@ -20,6 +20,7 @@ import {
   stackContext,
   type Vault,
 } from "@marcozvd/basics-core";
+import { acceptanceMetrics, summarizeAcceptance } from "@marcozvd/basics-core/compare";
 import { AgentProcessTree } from "./agent-process-tree.js";
 import { AGENT_IDS, AgentRunner, type AgentRunResult, AgentUnavailableError, onPath, type TokenUsage } from "./agents.js";
 import { acceptanceResult, stageAcceptance, validateAcceptance } from "./compare-acceptance.js";
@@ -489,7 +490,7 @@ export async function runComparison(vault: Vault, options: CompareOptions, deps:
           run,
           condition,
           mcp_tool_calls: agent.mcp_tool_calls ?? null,
-          acceptance,
+          acceptance: acceptance ? { ...acceptance, ...acceptanceMetrics(acceptance) } : null,
           contaminated: agent.contaminated ?? false,
           contamination_reasons: agent.contamination_reasons ?? [],
           shutdown_confirmed: agent.shutdown_confirmed ?? false,
@@ -537,9 +538,7 @@ export async function runComparison(vault: Vault, options: CompareOptions, deps:
           successes: selected.filter((r) => r.ok).length,
           contaminated_runs: all.length - selected.length,
           mcp_tool_calls: metricStats(selected.flatMap((r) => (r.mcp_tool_calls ? [r.mcp_tool_calls.total] : []))),
-          acceptance_passed: metricStats(
-            selected.flatMap((r) => (r.acceptance && r.acceptance.status !== "error" ? [r.acceptance.status === "pass" ? 1 : 0] : [])),
-          ),
+          ...summarizeAcceptance(selected),
           wall_ms: metricStats(selected.map((r) => r.wall_ms)),
           tokens_total: metricStats(selected.flatMap((r) => (r.tokens ? [r.tokens.total] : []))),
           checks_passed: metricStats(selected.map((r) => r.checks_passed)),

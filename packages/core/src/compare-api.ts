@@ -24,6 +24,47 @@ export interface AcceptanceResult {
   failed: number | null;
   reason?: string;
   duration_ms: number;
+  pass_rate?: number | null;
+  all_passed?: boolean | null;
+}
+/** Counts are authoritative, including for history written before derived metrics existed. */
+export function acceptanceMetrics(result: AcceptanceResult | null | undefined): { pass_rate: number | null; all_passed: boolean | null } {
+  const passed = result?.passed,
+    failed = result?.failed;
+  if (
+    !result ||
+    result.status === "error" ||
+    passed == null ||
+    failed == null ||
+    !Number.isSafeInteger(passed) ||
+    !Number.isSafeInteger(failed) ||
+    passed < 0 ||
+    failed < 0 ||
+    passed + failed === 0
+  )
+    return { pass_rate: null, all_passed: null };
+  return { pass_rate: passed / (passed + failed), all_passed: failed === 0 };
+}
+export function summarizeAcceptance(results: Pick<CompareResult, "acceptance" | "contaminated">[]) {
+  const measured = results
+    .filter((result) => !result.contaminated)
+    .map((result) => acceptanceMetrics(result.acceptance))
+    .filter((value) => value.pass_rate !== null);
+  const stats = (values: number[]): CompareStats | null => {
+    if (!values.length) return null;
+    const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
+    return {
+      count: values.length,
+      mean,
+      stddev: Math.sqrt(values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / values.length),
+      min: Math.min(...values),
+      max: Math.max(...values),
+    };
+  };
+  return {
+    acceptance_passed: stats(measured.map((value) => value.pass_rate!)),
+    acceptance_all_passed: stats(measured.map((value) => (value.all_passed ? 1 : 0))),
+  };
 }
 export type CompareCheckStatus = "pass" | "fail" | "skip" | "timeout" | "missing_tool" | "untrusted";
 export interface CompareRequest {
@@ -104,7 +145,10 @@ export interface CompareReport {
       files_changed: CompareStats | null;
       files_deleted: CompareStats | null;
       mcp_tool_calls?: CompareStats | null;
+      /** Per-run passed/(passed+failed); mean is unweighted across measured, uncontaminated runs. */
       acceptance_passed?: CompareStats | null;
+      /** Per-run 0/1 all-passed flag; mean is the share of measured runs fully passing. */
+      acceptance_all_passed?: CompareStats | null;
       contaminated_runs?: number;
     }
   >;

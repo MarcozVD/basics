@@ -10,6 +10,7 @@ import {
   readPackTasks,
   type Vault,
 } from "@marcozvd/basics-core";
+import { acceptanceMetrics, summarizeAcceptance } from "@marcozvd/basics-core/compare";
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { z } from "zod";
@@ -68,14 +69,23 @@ export function publicCompareReport(report: CompareReport, env: NodeJS.ProcessEn
     summary: Object.fromEntries(
       Object.entries(report.summary).map(([condition, value]) => [
         normalizeCompareCondition(condition as Parameters<typeof normalizeCompareCondition>[0]),
-        value,
+        {
+          ...value,
+          ...summarizeAcceptance(
+            report.results.filter(
+              (r) =>
+                normalizeCompareCondition(r.condition) ===
+                normalizeCompareCondition(condition as Parameters<typeof normalizeCompareCondition>[0]),
+            ),
+          ),
+        },
       ]),
     ),
     results: report.results.map((r) => ({
       run: r.run,
       condition: normalizeCompareCondition(r.condition),
       mcp_tool_calls: r.mcp_tool_calls ?? null,
-      acceptance: r.acceptance ?? null,
+      acceptance: r.acceptance ? { ...r.acceptance, ...acceptanceMetrics(r.acceptance) } : null,
       contaminated: r.contaminated ?? false,
       contamination_reasons: r.contamination_reasons ?? [],
       shutdown_confirmed: r.shutdown_confirmed,

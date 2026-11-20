@@ -3,9 +3,11 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { type Candidate, type Recommendation, trust, Vault } from "@marcozvd/basics-core";
+import { acceptanceMetrics, summarizeAcceptance } from "@marcozvd/basics-core/compare";
 import { test, vi } from "vitest";
 import { AgentProcessTree } from "../src/agent-process-tree.js";
 import { AgentRunner } from "../src/agents.js";
+import * as comparison from "../src/compare.js";
 import {
   type CompareDependencies,
   compareErrorMessage,
@@ -21,6 +23,43 @@ import { CompareDirectories, fileChanges, snapshotFiles } from "../src/compare-f
 import { buildProgram } from "../src/program.js";
 
 const PACKS = path.resolve(import.meta.dirname, "../../../packs");
+
+test("CLI text and JSON expose the same per-run acceptance rates and fully-passing share", async () => {
+  const f = fixture();
+  const config = path.join(f.base, "config.json");
+  fs.writeFileSync(config, JSON.stringify({ vault: f.vault.root, language: "en", embeddings: false }));
+  vi.stubEnv("BASICS_CONFIG", config);
+  const report = JSON.parse(
+    fs.readFileSync(path.resolve(import.meta.dirname, "../../../scripts/demo/compare-recorded.json"), "utf8"),
+  ) as Awaited<ReturnType<typeof runComparison>>;
+  const first = report.results[0];
+  const acceptance = { status: "fail" as const, passed: 3, failed: 1, duration_ms: 0 };
+  first.condition = "none";
+  first.acceptance = { ...acceptance, ...acceptanceMetrics(acceptance) };
+  const full = { status: "pass" as const, passed: 100, failed: 0, duration_ms: 0 };
+  report.results = [first, { ...first, run: 2, acceptance: { ...full, ...acceptanceMetrics(full) } }];
+  report.summary = { none: { ...report.summary.without_basics, ...summarizeAcceptance(report.results) } };
+  const runner = vi.spyOn(comparison, "runComparison").mockResolvedValue(report);
+  const output = vi.spyOn(console, "log").mockImplementation(() => {});
+  try {
+    await buildProgram().parseAsync(["compare", "test", "--agent", "claude", "--yes"], { from: "user" });
+    const text = output.mock.calls.map((call) => call.join(" ")).join("\n");
+    assert.match(text, /pass_rate=0\.75; all_passed=false/);
+    assert.match(text, /acceptance pass rate mean=0\.8750; fully passing run share=0\.5000/);
+    output.mockClear();
+    await buildProgram().parseAsync(["compare", "test", "--agent", "claude", "--yes", "--json"], { from: "user" });
+    const json = JSON.parse(String(output.mock.calls[0][0]));
+    assert.equal(json.results[0].acceptance.pass_rate, 0.75);
+    assert.equal(json.results[0].acceptance.all_passed, false);
+    assert.equal(json.summary.none.acceptance_passed.mean, 0.875);
+    assert.equal(json.summary.none.acceptance_all_passed.mean, 0.5);
+  } finally {
+    runner.mockRestore();
+    output.mockRestore();
+    vi.unstubAllEnvs();
+    f.cleanup();
+  }
+});
 
 test("conditions validate before launch and preserve explicit order", () => {
   assert.deepEqual(parseCompareConditions(undefined), ["none", "agents-md", "basics"]);

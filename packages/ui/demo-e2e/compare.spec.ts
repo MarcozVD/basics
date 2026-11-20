@@ -95,7 +95,16 @@ test("history omits an empty model and confirms deleting only one saved result",
             data.report.recorded = false;
             data.report.model = null;
             data.report.runs = 2;
-            data.report.results.push(...structuredClone(data.report.results).map((result: { run: number }) => ({ ...result, run: 2 })));
+            // Synthetic acceptance responses exercise the UI; the committed real
+            // recording remains unchanged and contains no acceptance measurements.
+            for (const result of data.report.results) result.acceptance = { status: "fail", passed: 3, failed: 1, duration_ms: 0 };
+            data.report.results.push(
+              ...structuredClone(data.report.results).map((result: { run: number }) => ({
+                ...result,
+                run: 2,
+                acceptance: { status: "pass", passed: 100, failed: 0, duration_ms: 0 },
+              })),
+            );
             if (deleted.length) delete data.report;
           } else if (Array.isArray(data)) {
             for (const item of data) item.model = null;
@@ -112,6 +121,8 @@ test("history omits an empty model and confirms deleting only one saved result",
   await expect(history).not.toContainText(/·\s*·/);
   await expect(page.getByTestId("compare-summary")).toContainText("Mean:");
   await expect(page.getByTestId("compare-summary")).toContainText("SD: 0");
+  await expect(page.getByTestId("compare-summary").getByRole("row", { name: /^Acceptance pass rate/ })).toContainText("87.5%");
+  await expect(page.getByTestId("compare-summary").getByRole("row", { name: /^Fully passing runs/ })).toContainText("50%");
   await history.getByRole("button", { name: /^Delete result:/ }).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog.getByRole("heading", { name: "Delete this result?", exact: true })).toBeVisible();

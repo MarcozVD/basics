@@ -8,6 +8,30 @@ import { CompareDirectories } from "../src/compare-files.js";
 import { createApp } from "../src/server/app.js";
 import { publicCompareReport } from "../src/server/compare.js";
 
+test("public JSON recomputes historical acceptance fractions and fully-passing shares consistently", () => {
+  const report = JSON.parse(
+    fs.readFileSync(path.resolve(import.meta.dirname, "../../../scripts/demo/compare-recorded.json"), "utf8"),
+  ) as CompareReport;
+  const first = report.results[0];
+  first.acceptance = { status: "fail", passed: 3, failed: 1, duration_ms: 0 };
+  report.results = [
+    first,
+    { ...first, run: 2, acceptance: { status: "pass", passed: 100, failed: 0, duration_ms: 0 } },
+    { ...first, run: 3, contaminated: true },
+  ];
+  const normalized = publicCompareReport(report, {});
+  assert.deepEqual(
+    normalized.results.map((result) => [result.acceptance?.pass_rate, result.acceptance?.all_passed]),
+    [
+      [0.75, false],
+      [1, true],
+      [0.75, false],
+    ],
+  );
+  assert.equal(normalized.summary.none.acceptance_passed?.mean, 0.875);
+  assert.equal(normalized.summary.none.acceptance_all_passed?.mean, 0.5);
+});
+
 test("legacy history normalizes condition names and leaves unreported metrics unavailable", () => {
   const report = JSON.parse(
     fs.readFileSync(path.resolve(import.meta.dirname, "../../../scripts/demo/compare-recorded.json"), "utf8"),
