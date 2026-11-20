@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import type { AgentId } from "@marcozvd/basics-core";
+import type { AgentId, CompareCondition } from "@marcozvd/basics-core";
 import { renderExport, type Vault } from "@marcozvd/basics-core";
 import { connectSnippets } from "./connect.js";
 
@@ -10,10 +10,12 @@ export function prepareCompareEnvironment(
   agent: AgentId,
   vault: Vault,
   stack: string[],
-  withBasics: boolean,
+  condition: CompareCondition,
   inherited = process.env,
   authHome?: string,
+  protectedPaths: string[] = [],
 ) {
+  const withBasics = condition === "basics";
   const sourceHome = authHome ?? os.homedir();
   const project = path.join(root, "project"),
     control = path.join(root, "control"),
@@ -35,6 +37,14 @@ export function prepareCompareEnvironment(
     BASICS_CACHE: path.join(control, "basics-cache"),
     BASICS_DIR: undefined,
   };
+  // Remove runner-owned location hints, including npm's INIT_CWD and script
+  // variables. This is accidental-exposure prevention, not a filesystem sandbox.
+  const forbidden = protectedPaths.map((p) => path.resolve(p).replaceAll("\\", "/").toLowerCase());
+  for (const [key, value] of Object.entries(env)) {
+    if (typeof value !== "string") continue;
+    const normalized = value.replaceAll("\\", "/").toLowerCase();
+    if (forbidden.some((p) => normalized.includes(p))) delete (env as NodeJS.ProcessEnv)[key];
+  }
   fs.writeFileSync(env.BASICS_CONFIG, JSON.stringify({ embeddings: false }));
   // Copy only credential stores, never user MCP/skills/settings; remove control even with --keep.
   const copyAuth = (source: string, target: string) => {
@@ -75,7 +85,7 @@ export function prepareCompareEnvironment(
   fs.mkdirSync(env.CODEX_HOME, { recursive: true });
   const codex = withBasics ? `${snippets.toml.replace(/\]\s*$/, ', "--read-only"]')}\n` : "";
   fs.writeFileSync(path.join(env.CODEX_HOME, "config.toml"), codex);
-  if (withBasics)
+  if (condition !== "none")
     for (const file of renderExport(vault, stack, ["agents", "claude", "cursor"], () => null)) {
       const dest = path.join(project, file.path);
       fs.mkdirSync(path.dirname(dest), { recursive: true });

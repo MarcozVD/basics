@@ -1291,10 +1291,14 @@ export function buildProgram(): Command {
 
   program
     .command("compare [task...]")
-    .description("compare generated projects without and with read-only Basics")
+    .description("compare generated projects with no notes, exported notes or read-only Basics")
     .requiredOption("--agent <agent>", "claude, opencode or codex")
     .option("--model <model>", "agent model")
     .option("--runs <count>", "runs per condition", "1")
+    .option("--conditions <list>", "ordered subset of none,agents-md,basics", "none,agents-md,basics")
+    .option("--acceptance-bundle <file>", "runner-owned JSON test bundle, extracted only after confirmed agent shutdown")
+    .option("--acceptance-command <command>", "separately approved command; stdout must be one JSON line {passed, failed}")
+    .option("--study-dir <dir>", "runner-owned study location monitored for contamination")
     .option("--timeout <seconds>", "timeout per condition in seconds", "600")
     .option("--sample <pack/task>", "bilingual sample task from an official pack")
     .option("--yes", "approve planned agent runs only; never trust check commands")
@@ -1308,6 +1312,10 @@ export function buildProgram(): Command {
           agent: CompareOptions["agent"];
           model?: string;
           runs: string;
+          conditions: string;
+          acceptanceBundle?: string;
+          acceptanceCommand?: string;
+          studyDir?: string;
           timeout: string;
           sample?: string;
           yes?: boolean;
@@ -1316,12 +1324,18 @@ export function buildProgram(): Command {
           json?: boolean;
         },
       ) => {
+        if (Boolean(opts.acceptanceBundle) !== Boolean(opts.acceptanceCommand))
+          throw new Error("provide --acceptance-bundle and --acceptance-command together");
         const report = await runComparison(
           load(),
           {
             ...opts,
             task: task.join(" "),
             runs: Number(opts.runs),
+            acceptance:
+              opts.acceptanceBundle && opts.acceptanceCommand
+                ? { bundle: opts.acceptanceBundle, command: opts.acceptanceCommand }
+                : undefined,
             timeoutMs: Number(opts.timeout) * 1000,
             language: loadConfig().language,
           },
@@ -1348,6 +1362,13 @@ export function buildProgram(): Command {
         if (opts.json) console.log(JSON.stringify(report, null, 2));
         else {
           for (const result of report.results) {
+            console.log(
+              `  MCP calls: ${result.mcp_tool_calls ? JSON.stringify(result.mcp_tool_calls) : "not reported"}; shutdown confirmed=${result.shutdown_confirmed}; contaminated=${result.contaminated}`,
+            );
+            if (result.acceptance)
+              console.log(
+                `  acceptance: ${result.acceptance.status}; passed=${result.acceptance.passed ?? "unavailable"}; failed=${result.acceptance.failed ?? "unavailable"}${result.acceptance.reason ? `; ${result.acceptance.reason}` : ""}`,
+              );
             console.log(
               `Run ${result.run} ${result.condition}: ${result.ok ? "completed" : "failed"}, ${result.wall_ms}ms, tokens (input + output, excluding cache)=${result.tokens?.total ?? "unavailable"}${result.tokens?.cache_read !== undefined ? `, cache_read=${result.tokens.cache_read}` : ""}${result.tokens?.cache_creation !== undefined ? `, cache_creation=${result.tokens.cache_creation}` : ""}`,
             );

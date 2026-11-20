@@ -1,7 +1,15 @@
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { type CompareReport, type CompareState, loadConfig, readPackTasks, type Vault } from "@marcozvd/basics-core";
+import {
+  COMPARE_CONDITIONS,
+  type CompareReport,
+  type CompareState,
+  loadConfig,
+  normalizeCompareCondition,
+  readPackTasks,
+  type Vault,
+} from "@marcozvd/basics-core";
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { z } from "zod";
@@ -14,6 +22,14 @@ const requestSchema = z
     agent: z.enum(["claude", "opencode", "codex"]),
     model: z.string().trim().max(200).optional(),
     runs: z.number().int().min(1).max(10),
+    conditions: z
+      .array(z.enum(COMPARE_CONDITIONS))
+      .min(1)
+      .max(3)
+      .refine((v) => new Set(v).size === v.length)
+      .optional(),
+    acceptance: z.strictObject({ bundle: z.string().min(1), command: z.string().trim().min(1) }).optional(),
+    studyDir: z.string().min(1).optional(),
     timeoutMs: z.number().int().min(1000).max(3_600_000),
   })
   .strict()
@@ -35,6 +51,8 @@ export function publicCompareReport(report: CompareReport, env: NodeJS.ProcessEn
   };
   return clean({
     schema_version: report.schema_version,
+    conditions: report.conditions ?? [...new Set(report.results.map((r) => normalizeCompareCondition(r.condition)))],
+    validity_note: report.validity_note,
     id: report.id,
     at: report.at,
     task: report.task,
@@ -47,10 +65,20 @@ export function publicCompareReport(report: CompareReport, env: NodeJS.ProcessEn
     recorded: report.recorded,
     cancelled: report.cancelled,
     recommendation: report.recommendation,
-    summary: report.summary,
+    summary: Object.fromEntries(
+      Object.entries(report.summary).map(([condition, value]) => [
+        normalizeCompareCondition(condition as Parameters<typeof normalizeCompareCondition>[0]),
+        value,
+      ]),
+    ),
     results: report.results.map((r) => ({
       run: r.run,
-      condition: r.condition,
+      condition: normalizeCompareCondition(r.condition),
+      mcp_tool_calls: r.mcp_tool_calls ?? null,
+      acceptance: r.acceptance ?? null,
+      contaminated: r.contaminated ?? false,
+      contamination_reasons: r.contamination_reasons ?? [],
+      shutdown_confirmed: r.shutdown_confirmed,
       ok: r.ok,
       error: compareErrorMessage(r.error, report.agent),
       timed_out: r.timed_out,
@@ -141,7 +169,7 @@ export function createCompareApi(vault: () => Vault, deps: CompareDependencies) 
     }
     const id = randomUUID();
     pending = { id, at: Date.now(), options, fingerprint: JSON.stringify(plan.commands) };
-    return c.json({ id, task: plan.task.prompt, run_count: plan.runs * 2, checks: plan.commands });
+    return c.json({ id, task: plan.task.prompt, run_count: plan.runs * plan.conditions.length, checks: plan.commands });
   });
   app.post("/run", async (c) => {
     const body = z

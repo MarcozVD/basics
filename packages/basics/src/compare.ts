@@ -3,24 +3,34 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import {
+  type AcceptanceResult,
+  type AcceptanceSpec,
   type AgentId,
   atomicWrite,
   basicsDir,
+  COMPARE_CONDITIONS,
+  type CompareCondition,
   type CompareProgress,
   detectStack,
   isTrusted,
+  type McpToolCalls,
   type Recommendation,
   readPackTasks,
   recommend,
   stackContext,
   type Vault,
 } from "@marcozvd/basics-core";
-import { AGENT_IDS, AgentRunner, type AgentRunResult, AgentUnavailableError, onPath, stopAgentProcess, type TokenUsage } from "./agents.js";
+import { AgentProcessTree } from "./agent-process-tree.js";
+import { AGENT_IDS, AgentRunner, type AgentRunResult, AgentUnavailableError, onPath, type TokenUsage } from "./agents.js";
+import { acceptanceResult, stageAcceptance, validateAcceptance } from "./compare-acceptance.js";
 import { prepareCompareEnvironment } from "./compare-environment.js";
 import { assertNoExternalOutputLinks, CompareDirectories, fileChanges, snapshotFiles } from "./compare-files.js";
 
 export const DEFAULT_COMPARE_TIMEOUT_MS = 10 * 60 * 1000;
 export interface CompareOptions {
+  conditions?: CompareCondition[] | string;
+  acceptance?: AcceptanceSpec;
+  studyDir?: string;
   task?: string;
   sample?: string;
   agent: AgentId;
@@ -78,7 +88,12 @@ interface CheckResult {
 }
 export interface CompareRunResult {
   run: number;
-  condition: "without_basics" | "with_basics";
+  condition: CompareCondition;
+  mcp_tool_calls: McpToolCalls | null;
+  acceptance: AcceptanceResult | null;
+  contaminated: boolean;
+  contamination_reasons: string[];
+  shutdown_confirmed: boolean;
   ok: boolean;
   error?: string;
   timed_out: boolean;
@@ -151,13 +166,15 @@ function executeCheck(
   env: NodeJS.ProcessEnv,
   timeout: number,
   signal?: AbortSignal,
-): Promise<Omit<CheckResult, "id">> {
+): Promise<Omit<CheckResult, "id"> & { stdout?: string; truncated?: boolean }> {
   env = checkEnvironment(cwd, env);
   const missing = missingPrimaryTool(command, cwd, env);
   if (missing) return Promise.resolve({ command, status: "missing_tool", duration_ms: 0, output_tail: `command not found: ${missing}` });
   return new Promise((resolve) => {
     const started = Date.now();
     let tail = "",
+      stdout = "",
+      truncated = false,
       timedOut = false,
       settled = false;
     const child = spawn(command, {
@@ -170,30 +187,40 @@ function executeCheck(
     });
     const timer = setTimeout(() => {
       timedOut = true;
-      stopAgentProcess(child, true);
+      void finish(null);
     }, timeout);
     const abort = () => {
-      stopAgentProcess(child, true);
-      child.stdout?.destroy();
-      child.stderr?.destroy();
-      finish(null);
+      void finish(null);
     };
-    const finish = (code: number | null) => {
+    const tree = new AgentProcessTree(child);
+    const finish = async (code: number | null) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
       signal?.removeEventListener("abort", abort);
+      await tree.shutdown();
+      child.stdout?.destroy();
+      child.stderr?.destroy();
       resolve({
         command,
         status: timedOut ? "timeout" : code === 0 ? "pass" : code === 127 || code === 9009 ? "missing_tool" : "fail",
         duration_ms: Date.now() - started,
         output_tail: tail,
+        stdout,
+        truncated,
       });
     };
     const capture = (chunk: Buffer) => {
       tail = (tail + chunk.toString()).slice(-4000);
     };
-    child.stdout?.on("data", capture);
+    child.stdout?.on("data", (chunk: Buffer) => {
+      stdout += chunk.toString();
+      if (stdout.length > 64_000) {
+        truncated = true;
+        stdout = stdout.slice(0, 64_000);
+      }
+      capture(chunk);
+    });
     child.stderr?.on("data", capture);
     child.on("error", (error) => {
       tail = error.message;
@@ -204,11 +231,22 @@ function executeCheck(
     if (signal?.aborted) abort();
   });
 }
-export function planComparison(vault: Vault, options: CompareOptions, deps: Pick<CompareDependencies, "packsDir">) {
+export function parseCompareConditions(value: CompareOptions["conditions"]): CompareCondition[] {
+  const selected = typeof value === "string" ? value.split(",").map((c) => c.trim()) : (value ?? [...COMPARE_CONDITIONS]);
+  if (
+    !selected.length ||
+    selected.some((c) => !COMPARE_CONDITIONS.includes(c as CompareCondition)) ||
+    new Set(selected).size !== selected.length
+  )
+    throw new Error("--conditions must be a nonempty, unique subset of none,agents-md,basics");
+  return selected as CompareCondition[];
+}
+export function planComparison(vault: Vault, options: CompareOptions, deps: Pick<CompareDependencies, "packsDir" | "tempRoot">) {
+  const conditions = parseCompareConditions(options.conditions);
   const runs = options.runs ?? 1,
     timeout = options.timeoutMs ?? DEFAULT_COMPARE_TIMEOUT_MS;
   if (!AGENT_IDS.includes(options.agent)) throw new Error("--agent must be claude, opencode or codex");
-  if (!Number.isSafeInteger(runs) || !Number.isSafeInteger(runs * 2) || runs < 1)
+  if (!Number.isSafeInteger(runs) || !Number.isSafeInteger(runs * conditions.length) || runs < 1)
     throw new Error("--runs must be a positive integer within the safe count limit");
   if (!Number.isFinite(timeout) || timeout <= 0 || timeout > 2_147_483_647)
     throw new Error("--timeout must be positive seconds within the timer limit");
@@ -220,13 +258,23 @@ export function planComparison(vault: Vault, options: CompareOptions, deps: Pick
   const commands = checks.flatMap((check) =>
     check.data.type === "check" && check.data.command ? [{ id: check.id, command: check.data.command }] : [],
   );
-  return { runs, timeout, task, advice, expected, stack, checks, commands };
+  if (options.acceptance) {
+    validateAcceptance(options.acceptance);
+    const bundle = fs.realpathSync(options.acceptance.bundle);
+    for (const exposed of [vault.root, deps.tempRoot].filter((p): p is string => Boolean(p))) {
+      const relative = path.relative(fs.realpathSync(exposed), bundle);
+      if (relative === "" || (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative)))
+        throw new Error("acceptance bundle must be outside the vault and run directories");
+    }
+    commands.unshift({ id: "acceptance", command: options.acceptance.command });
+  }
+  return { runs, timeout, conditions, task, advice, expected, stack, checks, commands };
 }
 export async function runComparison(vault: Vault, options: CompareOptions, deps: CompareDependencies) {
-  const { runs, timeout, task, advice, expected, stack, checks, commands } = planComparison(vault, options, deps);
+  const { runs, timeout, conditions, task, advice, expected, stack, checks, commands } = planComparison(vault, options, deps);
   const interactive = deps.isTTY ?? process.stdin.isTTY;
   deps.announce?.(
-    `Planned: ${runs * 2} agent runs (${runs} without Basics, ${runs} with Basics). Timeout: ${timeout / 1000}s per condition. --yes approves agent runs only. --trust-checks approves listed checks in these fresh run directories for this invocation only; no vault trust is saved.`,
+    `Planned: ${runs * conditions.length} agent runs (${conditions.join(", ")}; ${runs} per condition). Timeout: ${timeout / 1000}s per condition. --yes approves agent runs only. --trust-checks approves listed checks in these fresh run directories for this invocation only; no vault trust is saved.`,
   );
   for (const check of commands)
     deps.announce?.(
@@ -251,7 +299,7 @@ export async function runComparison(vault: Vault, options: CompareOptions, deps:
   let interrupted = false;
   const prompt = `${task.prompt}\n\nImplement working files in the current project directory. Use supplied project instructions and available tools. Do not modify files outside this project or edit agent settings. Knowledge servers are read-only. Run relevant checks and finish with a brief summary.`;
   runsLoop: for (let run = 1; run <= runs; run++)
-    for (const condition of ["without_basics", "with_basics"] as const) {
+    for (const condition of conditions) {
       if (deps.signal?.aborted) {
         interrupted = true;
         break runsLoop;
@@ -261,17 +309,41 @@ export async function runComparison(vault: Vault, options: CompareOptions, deps:
       let prepared: ReturnType<typeof prepareCompareEnvironment> | undefined;
       let before: ReturnType<typeof snapshotFiles> | undefined;
       const cleanupErrors: string[] = [];
+      const conditionStarted = Date.now();
+      const deadline = conditionStarted + timeout;
+      const protectedPaths = [
+        options.studyDir,
+        options.acceptance?.bundle,
+        options.acceptance ? path.dirname(path.resolve(options.acceptance.bundle)) : undefined,
+      ].filter((p): p is string => Boolean(p));
       try {
         const runner = new AgentRunner({
           timeoutMs: timeout,
           tempRoot: deps.tempRoot,
           keep: true,
+          protectedPaths,
           resolveExe: () => executable,
           prepare: (dir) => {
             root = dir;
             directories.own(dir);
-            prepared = prepareCompareEnvironment(dir, options.agent, vault, stack, condition === "with_basics", deps.env, deps.authHome);
+            prepared = prepareCompareEnvironment(dir, options.agent, vault, stack, condition, deps.env, deps.authHome, protectedPaths);
             directories.own(prepared.control);
+            if (options.acceptance || options.studyDir) {
+              const exposed = [prompt];
+              const readText = (directory: string) => {
+                for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+                  const file = path.join(directory, entry.name);
+                  if (entry.isDirectory()) readText(file);
+                  else if (entry.isFile() && !["auth.json", ".credentials.json"].includes(entry.name))
+                    exposed.push(fs.readFileSync(file, "utf8"));
+                }
+              };
+              readText(prepared.project);
+              readText(prepared.control);
+              const normalized = exposed.join("\n").replaceAll("\\", "/").toLowerCase();
+              if (protectedPaths.some((p) => normalized.includes(path.resolve(p).replaceAll("\\", "/").toLowerCase())))
+                throw new Error("study or acceptance location would be exposed to the agent");
+            }
             before = snapshotFiles(prepared.project);
             deps.announce?.(`Check directory: ${prepared.project}`);
             for (const check of checks)
@@ -310,10 +382,48 @@ export async function runComparison(vault: Vault, options: CompareOptions, deps:
         let detected: ReturnType<typeof detectStack> | undefined;
         let files: ReturnType<typeof fileChanges> | undefined;
         let measurementError: string | undefined;
+        let acceptance: AcceptanceResult | null = null;
         try {
           assertNoExternalOutputLinks(root);
           detected = detectStack(vault, prepared.project);
-          const deadline = Date.now() + Math.max(0, timeout - (agent.duration_ms ?? 0));
+          // Snapshot before harness extraction so acceptance files are not agent output.
+          files = fileChanges(before, snapshotFiles(prepared.project));
+          if (options.acceptance) {
+            const reason = !checksApproved
+              ? "Acceptance command not approved"
+              : !agent.shutdown_confirmed
+                ? "Agent process-tree shutdown unconfirmed"
+                : !agent.ok || deps.signal?.aborted
+                  ? "Agent failed, timed out or was cancelled"
+                  : Date.now() >= deadline
+                    ? "No acceptance time remaining"
+                    : undefined;
+            if (reason) acceptance = { status: "error", passed: null, failed: null, reason, duration_ms: 0 };
+            else {
+              const start = Date.now();
+              try {
+                stageAcceptance(options.acceptance, prepared.project);
+                if (Date.now() >= deadline) throw new Error("No acceptance time remaining after extraction");
+                const measured = await executeCheck(
+                  options.acceptance.command,
+                  prepared.project,
+                  prepared.env,
+                  deadline - Date.now(),
+                  deps.signal,
+                );
+                acceptance = acceptanceResult(measured.stdout ?? "", measured.status, Date.now() - start, measured.truncated);
+              } catch (error) {
+                acceptance = {
+                  status: "error",
+                  passed: null,
+                  failed: null,
+                  reason: compareErrorMessage(String(error), options.agent),
+                  duration_ms: Date.now() - start,
+                };
+              }
+            }
+            assertNoExternalOutputLinks(root);
+          }
           for (const check of checks) {
             if (deps.signal?.aborted) {
               interrupted = true;
@@ -337,16 +447,28 @@ export async function runComparison(vault: Vault, options: CompareOptions, deps:
               continue;
             }
             deps.progress?.({ phase: "checks", run, condition, check: check.id });
+            const {
+              stdout: _stdout,
+              truncated: _truncated,
+              ...checkResult
+            } = await executeCheck(check.data.command, prepared.project, prepared.env, Math.max(1, deadline - Date.now()), deps.signal);
             runChecks.push({
               id: check.id,
-              ...(await executeCheck(check.data.command, prepared.project, prepared.env, Math.max(1, deadline - Date.now()), deps.signal)),
+              ...checkResult,
             });
             deps.progress?.({ phase: "checks", run, condition, check: check.id, status: runChecks.at(-1)!.status });
             assertNoExternalOutputLinks(root);
           }
-          files = fileChanges(before, snapshotFiles(prepared.project));
         } catch (error) {
           measurementError = error instanceof Error ? error.message : String(error);
+          if (options.acceptance && !acceptance)
+            acceptance = {
+              status: "error",
+              passed: null,
+              failed: null,
+              reason: "Unsafe or unreadable agent output; acceptance not staged",
+              duration_ms: 0,
+            };
         }
         const used: Record<string, string[]> = {};
         for (const tech of detected?.techs ?? []) {
@@ -366,6 +488,11 @@ export async function runComparison(vault: Vault, options: CompareOptions, deps:
         results.push({
           run,
           condition,
+          mcp_tool_calls: agent.mcp_tool_calls ?? null,
+          acceptance,
+          contaminated: agent.contaminated ?? false,
+          contamination_reasons: agent.contamination_reasons ?? [],
+          shutdown_confirmed: agent.shutdown_confirmed ?? false,
           ok: agent.ok && !measurementError && !deps.signal?.aborted,
           error: compareErrorMessage(agent.error ?? measurementError, options.agent),
           timed_out: agent.timed_out ?? false,
@@ -400,13 +527,19 @@ export async function runComparison(vault: Vault, options: CompareOptions, deps:
       }
     }
   const summary = Object.fromEntries(
-    (["without_basics", "with_basics"] as const).map((condition) => {
-      const selected = results.filter((result) => result.condition === condition);
+    conditions.map((condition) => {
+      const all = results.filter((result) => result.condition === condition);
+      const selected = all.filter((result) => !result.contaminated);
       return [
         condition,
         {
           runs: selected.length,
           successes: selected.filter((r) => r.ok).length,
+          contaminated_runs: all.length - selected.length,
+          mcp_tool_calls: metricStats(selected.flatMap((r) => (r.mcp_tool_calls ? [r.mcp_tool_calls.total] : []))),
+          acceptance_passed: metricStats(
+            selected.flatMap((r) => (r.acceptance && r.acceptance.status !== "error" ? [r.acceptance.status === "pass" ? 1 : 0] : [])),
+          ),
           wall_ms: metricStats(selected.map((r) => r.wall_ms)),
           tokens_total: metricStats(selected.flatMap((r) => (r.tokens ? [r.tokens.total] : []))),
           checks_passed: metricStats(selected.map((r) => r.checks_passed)),
@@ -438,6 +571,9 @@ export async function runComparison(vault: Vault, options: CompareOptions, deps:
   const file = path.join(storage, `${id}.json`);
   const report = {
     schema_version: 1,
+    conditions,
+    validity_note:
+      "Acceptance bundles are staged after shutdown. No enforced filesystem isolation; event-based contamination detection can miss indirect or unreported reads. Contaminated runs are excluded from summaries.",
     id,
     at: new Date().toISOString(),
     task: task.prompt,
