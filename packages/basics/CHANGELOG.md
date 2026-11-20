@@ -1,5 +1,41 @@
 # @marcozvd/basics
 
+## 1.9.0
+
+### Minor Changes
+
+- 1b1400d: Guide first-time users through opening a vault, installing a pack, connecting an agent and approving a proposal with a live, dismissible checklist. Explain the setup terms and link empty states to the glossary in English and Spanish.
+- 38ff837: Add basics compare to measure generated projects with and without read-only Basics context, including isolated runs, confirmation, timeouts, saved results, sample tasks and repeated-run summaries.
+- cdfb8e0: Compare coding-agent outputs with and without Basics from the app, review checks separately, follow live progress and revisit saved results. The demo includes one clearly labeled recorded comparison.
+- 30f983d: Detect Rust, Go and Dart dependencies from their project manifests. Add reproducible public-repository recommendation evaluation with separate datasets, reciprocal-rank metrics and recorded regression baselines.
+- dddb7d2: Add bilingual Python data analysis and machine learning choices, starter profiles and sample comparison tasks. Share Python tooling across API and data projects, add analytical SQL with DuckDB, and preserve existing notes and local edits when updating shared packs.
+  
+  Recommendations also honor the language of explicitly named frameworks and packages, so a FastAPI service keeps Python backend and testing choices while mixed stacks retain their frontend and mobile options.
+  
+  Ordinary words that share technology names require clear stack context before influencing recommendations. Language phrases and matching platform context preserve requests such as a native iOS app in Swift.
+- 1efd0a9: Add English and Spanish Go API stack choices, request cancellation and concurrency practices, validation checks, a starting profile and four reusable comparison tasks.
+  
+  Share database notes across Python, Rust and Go without installing other language stacks. Ownership and version migrations preserve the accepted note text and fields, including local edits, through reviewable provenance-only updates. Keep pending work and edit conflict protection intact.
+- a6deead: Add bilingual mobile framework, state, storage and testing choices with React Native and Flutter profiles and four comparison tasks. Separate native app choices into a mobile layer and share TypeScript notes across web and mobile without installing the web stack. Existing updates preserve local edits through reviewable ownership changes.
+- 149a183: Add English and Spanish Rust API stack notes, a ready-made profile and four reusable comparison tasks. Provide a validated reader for optional bilingual pack tasks while keeping note installation unchanged.
+  
+  Respect explicitly requested implementation languages in recommendation layers with matching tools, including testing and semantic recommendations, while preserving separate frontend stacks, neutral tools and named integrations. Keep existing matches when language filtering would otherwise empty a layer.
+- e5d48a5: Use accepted project outcomes as a small, bounded stack recommendation preference. Add an optional outcome (successful, failed or abandoned) to record_project_outcome, show contributing projects in score details and MCP responses, and add vault-local settings to turn project history off or change its strength (0 to 3).
+
+### Patch Changes
+
+- fef1eec: Fix Explore filters and sort doing nothing when the UI runs under a base path, such as the docs demo.
+- 8fb4660: The free graph packs each note type into concentric rows, so large vaults stay compact on screen instead of spreading into very wide rings. Note types still run in order from the centre outward. Labels that would overlap stay hidden until you hover over, search for or select a note.
+- fadce53: Add a static interactive app demo to the documentation site, with local review and editing that reset on reload.
+- c0e75bf: Keep the mobile menu button in its own bar above the page, so it never covers scrolled content on any screen. Align the Compare model, runs and timeout fields with the other form controls, and wrap Settings copy inside the panel at 390 px.
+- Updated dependencies [cdfb8e0]
+- Updated dependencies [30f983d]
+- Updated dependencies [dddb7d2]
+- Updated dependencies [1efd0a9]
+- Updated dependencies [149a183]
+- Updated dependencies [e5d48a5]
+  - @marcozvd/basics-core@1.9.0
+
 ## 1.8.0
 
 ### Minor Changes
