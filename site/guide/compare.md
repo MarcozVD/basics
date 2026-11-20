@@ -156,7 +156,7 @@ The `.basics/` folder is git-ignored, either by its `*` rule or by a `/compare/`
 `schema_version` 1. It records the task, the sample, the agent, the model, the runs, the timeout, the conditions, whether
 check commands were approved (`trust_checks`), the recommended stack, the recommendation mode and a `validity_note` that
 repeats the main limits. It also holds one entry per run, with its metrics, token counts, checks, file lists, Basics MCP
-calls (`mcp_tool_calls`), acceptance result (`acceptance`), contamination flag (`contaminated` and
+calls (`mcp_tool_calls`), acceptance result (`acceptance`, with `pass_rate` and `all_passed`), contamination flag (`contaminated` and
 `contamination_reasons`), shutdown status (`shutdown_confirmed`), the agent's final text (its last 100,000 characters) and,
 with `--keep`, the path of the kept folder. Finally it has a summary per condition, with the number of runs that were not
 contaminated and `contaminated_runs` for the ones left out. Share the file with its settings, because agent, model, runs,
@@ -166,7 +166,7 @@ Results saved by earlier versions name the conditions `without_basics` and `with
 `none` and `basics`, and their Basics MCP calls and acceptance fields show as not reported.
 
 Plain output prints a block per run with its token count, stack lines, checks, file counts and, when configured, the
-acceptance result, then one summary line per condition. `--json` prints the same report as one JSON document.
+acceptance result, then one summary line per condition, with the acceptance pass rate and fully passing share when configured. `--json` prints the same report as one JSON document.
 
 ## Metrics
 
@@ -180,7 +180,7 @@ Each run records these measures. The limits matter as much as the values.
 | Tokens | Input and output tokens: the total is input without cache plus output, for every agent. `unavailable` when the CLI reports no usage. | The total leaves out cache reads and writes, so it undercounts the tokens a run processed. It is a count, not a cost, and not a bill. When the CLI reports them, `cache_read` and `cache_creation` are kept next to the total and never added to it. Compare totals only within the same agent and model. |
 | Files | Files added, changed and deleted, from a snapshot taken after setup. Files Basics exported at the start are not counted as added, and neither are the acceptance files extracted for the run. Dependency, virtualenv, cache, build and coverage folders are left out. Their paths are listed under `excluded` in the JSON. | A count, not a quality measure. A snapshot stops after 10,000 files, and files over 10 MiB are skipped. The JSON marks such a snapshot as truncated. |
 | Basics MCP calls | The Basics MCP tool calls the agent made in the run, in total and by tool, read from the agent's event stream. Failed attempts count, and events that repeat one call count once. `0` means the agent reported tool calls and none reached Basics. `null` means the agent did not report tool calls, its output could not be read reliably, or the run was cancelled or timed out. | Only as complete as the agent's own event stream. Some agent outputs do not report tool calls at all, for example Claude Code output without its tool events or OpenCode text-only output. Read `null` as not reported, never as zero. |
-| Acceptance tests | The pass and fail counts from the acceptance command, when you configure one. `pass` means the command exited with code 0 and reported no failed tests. `fail` means it reported failed tests. `error` means the tests did not run, or the output was not the required JSON line, and the reason is recorded. See [Acceptance tests](#acceptance-tests). | The counts are what your command reports. Errors are never counted as passes or failures. The tests stay out of the project until the agent exits, but the agent is not isolated from them (see [Limits](#limits)). |
+| Acceptance tests | The pass and fail counts from the acceptance command, when you configure one. `pass` means the command exited with code 0 and reported no failed tests. `fail` means it reported failed tests. `error` means the tests did not run, or the output was not the required JSON line, and the reason is recorded. Each run also gets a pass rate, passed divided by passed plus failed, and an all-passed flag that is true only when no test failed. See [Acceptance tests](#acceptance-tests). | The counts are what your command reports. Errors are never counted as passes or failures. The tests stay out of the project until the agent exits, but the agent is not isolated from them (see [Limits](#limits)). |
 | Contamination | Whether the agent's events show that it read or ran something in a study or acceptance location from outside the project. A flagged run stays in the result file with its reasons, and it is left out of every summary number. | It sees only what the agent's event stream reports. A clean result is not proof of isolation. See [Contamination](#contamination). |
 
 ### Repeated runs
@@ -230,8 +230,7 @@ second question in a terminal, the approval checkbox in the web UI, or `--trust-
 approval the result is `error`, with the reason `Acceptance command not approved`, and nothing is extracted.
 
 **Time and results.** The command runs before the vault checks, with the time left in that condition's `--timeout`. Each run
-records its acceptance result next to its checks. The JSON summary's `acceptance_passed` is the mean of 1 for each `pass` and
-0 for each `fail`, over the runs whose result is not `error`. The web UI shows the average number of passed tests per run.
+records its acceptance result next to its checks, with `pass_rate` (passed divided by passed plus failed) and `all_passed`. The JSON summary's `acceptance_passed` is the unweighted mean of those pass rates, and `acceptance_all_passed` is the share of runs in which every test passed. Both leave out contaminated runs, errors and runs with no tests. The web UI shows the same two figures as **Acceptance pass rate** and **Fully passing runs**.
 Files extracted for acceptance are not counted as the agent's output.
 
 ## Contamination

@@ -105,14 +105,14 @@ review the run again.
 - wall time, in seconds;
 - tokens (input + output, excluding cache);
 - Basics MCP calls, as a total per run, shown as "Not reported" when the agent did not report them;
-- acceptance tests passed, when you set an acceptance command.
+- acceptance pass rate and fully passing runs, when you set an acceptance command.
 
 With repeated runs, each figure also shows the mean and the standard deviation (SD). A figure the CLI did not report reads
 "Not reported", never zero.
 
 Below the table, one card per condition sits side by side on a wide screen and stacks on a narrow one. For each run, a card shows the
 recommended and the used technologies per layer, with a match or no-match mark ("Used: none detected" when nothing was found);
-every check's status and command; the acceptance result, with its counts or reason; Basics MCP calls by tool; wall time; tokens, with cache read and cache creation on their own rows when reported; added,
+every check's status and command; the acceptance result, with its pass rate, all-passed flag, counts or reason; Basics MCP calls by tool; wall time; tokens, with cache read and cache creation on their own rows when reported; added,
 changed, deleted and excluded files; and an excerpt of the assistant's output, up to 3000 characters. Check output and file
 lists open with keyboard-operable disclosures.
 
