@@ -347,12 +347,27 @@ export function Layout({ notice }: { notice?: ReactNode } = {}) {
             data-testid="content-panel"
             className="relative m-2 flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-card"
           >
+            {mobile ? (
+              // Reserved bar: the menu button never floats over scrolling content.
+              <div data-testid="mobile-bar" className="flex h-12 shrink-0 items-center px-2">
+                <button
+                  type="button"
+                  data-testid="sidebar-menu"
+                  aria-label={t("nav.openMenu")}
+                  aria-expanded={menuOpen}
+                  onClick={() => setMenuOpen(true)}
+                  className="grid size-9 place-items-center rounded-lg border border-border bg-card text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                >
+                  <Menu className="size-5" aria-hidden="true" />
+                </button>
+              </div>
+            ) : null}
             <main
               ref={scrollRef}
               id="main-content"
               tabIndex={-1}
               style={mainStyle}
-              className="min-h-0 flex-1 overflow-x-clip overflow-y-auto outline-none max-md:pt-12"
+              className="min-h-0 flex-1 overflow-x-clip overflow-y-auto outline-none"
             >
               <AnimatePresence mode="popLayout" initial={false} custom={transitionCustom}>
                 <motion.div
@@ -371,19 +386,6 @@ export function Layout({ notice }: { notice?: ReactNode } = {}) {
             </main>
 
             {floating ? <FloatingNav edge={edge} onEdgeChange={setDockEdge} /> : null}
-
-            {mobile ? (
-              <button
-                type="button"
-                data-testid="sidebar-menu"
-                aria-label={t("nav.openMenu")}
-                aria-expanded={menuOpen}
-                onClick={() => setMenuOpen(true)}
-                className="absolute top-2 left-2 z-30 grid size-9 place-items-center rounded-lg border border-border bg-card/80 text-muted-foreground backdrop-blur transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-              >
-                <Menu className="size-5" aria-hidden="true" />
-              </button>
-            ) : null}
           </div>
         </div>
 
