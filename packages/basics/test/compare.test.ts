@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -156,6 +157,7 @@ test("unconfirmed shutdown, timeout and cancellation never extract acceptance fi
     const original = AgentProcessTree.prototype.shutdown;
     const unconfirmed = vi.spyOn(AgentProcessTree.prototype, "shutdown").mockImplementation(async function (this: AgentProcessTree) {
       await original.call(this);
+      this.diagnostics = { reason: "Live POSIX process-group members remain", processes: [{ pid: 4243, pgid: 4242, state: "S+" }] };
       return false;
     });
     try {
@@ -165,6 +167,7 @@ test("unconfirmed shutdown, timeout and cancellation never extract acceptance fi
         f.deps,
       );
       assert.equal(report.results[0].shutdown_confirmed, false);
+      assert.equal(report.results[0].shutdown_diagnostics?.processes[0].state, "S+");
       assert.match(report.results[0].acceptance!.reason!, /unconfirmed/);
       assert.equal(fs.existsSync(path.join(report.results[0].directory!, ".basics-acceptance")), false);
     } finally {
@@ -223,7 +226,11 @@ test("clean Windows exit and surviving grandchild both confirm shutdown before a
         { ...f.deps, env: { ...f.deps.env, FAKE_COMPARE_MODE: mode } },
       );
       const result = report.results[0];
-      assert.equal(result.shutdown_confirmed, true);
+      assert.equal(
+        result.shutdown_confirmed,
+        true,
+        JSON.stringify({ mode: mode ?? "clean", shutdown_diagnostics: result.shutdown_diagnostics }),
+      );
       assert.equal(result.acceptance?.status, "pass", JSON.stringify(result.acceptance));
       assert.deepEqual([result.acceptance?.passed, result.acceptance?.failed], [1, 0]);
       assert.ok(fs.existsSync(path.join(result.directory!, ".basics-acceptance/verify.cjs")));
@@ -234,7 +241,24 @@ test("clean Windows exit and surviving grandchild both confirm shutdown before a
       if (mode)
         for (const file of ["child-pid", "grandchild-pid"]) {
           const pid = Number(fs.readFileSync(path.join(result.directory!, file), "utf8"));
-          assert.throws(() => process.kill(pid, 0));
+          try {
+            process.kill(pid, 0);
+          } catch (error) {
+            assert.equal((error as NodeJS.ErrnoException).code, "ESRCH");
+            continue;
+          }
+          if (process.platform === "win32") assert.fail(`Descendant ${pid} remains alive`);
+          // Darwin kill(pid, 0) also succeeds for zombies. A zombie has exited
+          // and cannot observe acceptance tests, even before launchd reaps it.
+          let state: string;
+          try {
+            state = execFileSync("/bin/ps", ["-p", String(pid), "-o", "stat="], { encoding: "utf8" }).trim();
+          } catch (error) {
+            const missing = error as { status?: number; stdout?: string };
+            if (missing.status === 1 && !String(missing.stdout ?? "").trim()) continue;
+            throw error;
+          }
+          assert.match(state, /^Z/, `Descendant ${pid} remains executable: ${state}`);
         }
     }
     const denied = await runComparison(

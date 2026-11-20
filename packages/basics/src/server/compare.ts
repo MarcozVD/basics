@@ -89,6 +89,7 @@ export function publicCompareReport(report: CompareReport, env: NodeJS.ProcessEn
       contaminated: r.contaminated ?? false,
       contamination_reasons: r.contamination_reasons ?? [],
       shutdown_confirmed: r.shutdown_confirmed,
+      shutdown_diagnostics: r.shutdown_diagnostics,
       ok: r.ok,
       error: compareErrorMessage(r.error, report.agent),
       timed_out: r.timed_out,

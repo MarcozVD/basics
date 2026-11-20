@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import type { AgentId, AgentInfo, McpToolCalls } from "@marcozvd/basics-core";
+import type { AgentId, AgentInfo, McpToolCalls, ShutdownDiagnostics } from "@marcozvd/basics-core";
 import { AgentObservations } from "./agent-observations.js";
 import { AgentProcessTree, waitForAgentExit } from "./agent-process-tree.js";
 import { CompareDirectories } from "./compare-files.js";
@@ -396,6 +396,7 @@ export interface AgentRunResult {
   contaminated?: boolean;
   contamination_reasons?: string[];
   shutdown_confirmed?: boolean;
+  shutdown_diagnostics?: ShutdownDiagnostics;
   ok: boolean;
   text: string;
   error?: string;
@@ -596,6 +597,7 @@ export class AgentRunner {
       const result: AgentRunResult = { ok: !failure && !cleanupError, text: parser.text() };
       if (opts.build) {
         result.shutdown_confirmed = shutdownConfirmed;
+        if (!shutdownConfirmed) result.shutdown_diagnostics = tree?.diagnostics;
         result.mcp_tool_calls = observations.calls(!run.cancelled && !run.timedOut);
         result.contaminated = observations.contamination.length > 0;
         result.contamination_reasons = observations.contamination;

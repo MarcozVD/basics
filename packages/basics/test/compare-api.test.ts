@@ -45,6 +45,12 @@ test("legacy history normalizes condition names and leaves unreported metrics un
   assert.ok(normalized.results.every((r) => r.mcp_tool_calls === null && r.acceptance === null));
   assert.ok(normalized.summary.none && normalized.summary.basics);
   assert.equal(normalized.summary.with_basics, undefined);
+  report.results[0].shutdown_confirmed = false;
+  report.results[0].shutdown_diagnostics = {
+    reason: "Live POSIX process-group members remain",
+    processes: [{ pid: 4243, pgid: 4242, state: "S+" }],
+  };
+  assert.deepEqual(publicCompareReport(report, {}).results[0].shutdown_diagnostics, report.results[0].shutdown_diagnostics);
 });
 
 test("API condition subsets plan exact session count and reject invalid lists before launch", async () => {

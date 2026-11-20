@@ -17,6 +17,7 @@ import {
   type Recommendation,
   readPackTasks,
   recommend,
+  type ShutdownDiagnostics,
   stackContext,
   type Vault,
 } from "@marcozvd/basics-core";
@@ -95,6 +96,7 @@ export interface CompareRunResult {
   contaminated: boolean;
   contamination_reasons: string[];
   shutdown_confirmed: boolean;
+  shutdown_diagnostics?: ShutdownDiagnostics;
   ok: boolean;
   error?: string;
   timed_out: boolean;
@@ -494,6 +496,7 @@ export async function runComparison(vault: Vault, options: CompareOptions, deps:
           contaminated: agent.contaminated ?? false,
           contamination_reasons: agent.contamination_reasons ?? [],
           shutdown_confirmed: agent.shutdown_confirmed ?? false,
+          shutdown_diagnostics: agent.shutdown_diagnostics,
           ok: agent.ok && !measurementError && !deps.signal?.aborted,
           error: compareErrorMessage(agent.error ?? measurementError, options.agent),
           timed_out: agent.timed_out ?? false,

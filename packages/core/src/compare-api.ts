@@ -13,6 +13,12 @@ export interface McpToolCalls {
   total: number;
   by_tool: Record<string, number>;
 }
+export interface ShutdownDiagnostics {
+  reason: string;
+  signal_error?: string;
+  snapshot_error?: string;
+  processes: { pid: number; pgid?: number; state: string }[];
+}
 export interface AcceptanceSpec {
   /** Runner-owned JSON bundle: {files: {relativePath: UTF8Content}}. Never sent to agents. */
   bundle: string;
@@ -100,6 +106,7 @@ export interface CompareResult {
   contaminated?: boolean;
   contamination_reasons?: string[];
   shutdown_confirmed?: boolean;
+  shutdown_diagnostics?: ShutdownDiagnostics;
   ok: boolean;
   error?: string;
   timed_out: boolean;

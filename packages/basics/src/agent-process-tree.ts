@@ -1,5 +1,7 @@
 import { type ChildProcess, execFile, spawnSync } from "node:child_process";
 import path from "node:path";
+import type { ShutdownDiagnostics } from "@marcozvd/basics-core/compare";
+import { shutdownPosixGroup } from "./agent-posix-tree.js";
 
 interface WindowsProcess {
   ProcessId: number;
@@ -37,6 +39,7 @@ function windowsProcesses(): Promise<WindowsProcess[]> {
 
 /** Track while alive and recheck after exit; filesystem visibility is unrelated. */
 export class AgentProcessTree {
+  diagnostics?: ShutdownDiagnostics;
   private readonly descendants = new Map<number, string>();
   private pending: Promise<WindowsProcess[]> | undefined;
   private readonly timer: ReturnType<typeof setInterval> | undefined;
@@ -87,21 +90,9 @@ export class AgentProcessTree {
     clearInterval(this.timer);
     if (!this.child.pid) return true;
     if (process.platform !== "win32") {
-      try {
-        process.kill(-this.child.pid, "SIGKILL");
-      } catch {
-        /* Already exited. */
-      }
-      const deadline = Date.now() + 2000;
-      do {
-        try {
-          process.kill(-this.child.pid, 0);
-        } catch (error) {
-          return (error as NodeJS.ErrnoException).code === "ESRCH";
-        }
-        await new Promise((resolve) => setTimeout(resolve, 25));
-      } while (Date.now() < deadline);
-      return false;
+      const result = await shutdownPosixGroup(this.child.pid);
+      this.diagnostics = result.diagnostics;
+      return result.confirmed;
     }
     try {
       if (this.pending) await this.pending;
@@ -117,6 +108,10 @@ export class AgentProcessTree {
             this.descendants.get(row.ProcessId) === row.Created,
         );
         if (!survivors.length) return true;
+        this.diagnostics = {
+          reason: "Windows process-tree members remain",
+          processes: survivors.slice(0, 32).map((row) => ({ pid: row.ProcessId, state: "running" })),
+        };
         for (const row of survivors) {
           // Snapshot immediately precedes kill; only tracked identities are selected.
           spawnSync(
@@ -128,6 +123,7 @@ export class AgentProcessTree {
         await new Promise((resolve) => setTimeout(resolve, 50));
       } while (Date.now() < deadline);
     } catch {
+      this.diagnostics = { reason: "Windows process snapshot unavailable", processes: [{ pid: this.child.pid, state: "unknown" }] };
       // Snapshot access can be denied (notably in the Codex sandbox). Still stop
       // the owned root/tree; lack of proof must never leave our agent running.
       spawnSync(path.join(process.env.SystemRoot ?? "C:\\Windows", "System32/taskkill.exe"), ["/pid", String(this.child.pid), "/T", "/F"], {
