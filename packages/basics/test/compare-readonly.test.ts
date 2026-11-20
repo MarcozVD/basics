@@ -22,7 +22,7 @@ test("generated connect configuration starts the built read-only stdio server", 
     "claude",
     Vault.load(vaultRoot),
     ["fastapi"],
-    true,
+    "basics",
     process.env,
     path.join(base, "unused-auth"),
   );

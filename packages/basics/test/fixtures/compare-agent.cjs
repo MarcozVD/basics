@@ -38,7 +38,50 @@ if (mode === "sleep") {
       process.platform === "win32" ? "junction" : "dir",
     );
   }
-  const emit = (event) => process.stdout.write(`${JSON.stringify(event)}\n`);
+  const emit = (event) => {
+    // A large ignored field forces JSON lines across stdout chunks in parser tests.
+    if (mode === "mcp-events") event.fixturePadding = "x".repeat(80_000);
+    process.stdout.write(`${JSON.stringify(event)}\n`);
+  };
+  if (mode === "mcp-events" || mode === "contamination") {
+    const outside = path.resolve(__dirname, "../study/secret.txt");
+    const tool = mode === "contamination" ? "Read" : "mcp__basics__get_note";
+    if (args[0] === "-p") {
+      const block = {
+        type: "tool_use",
+        id: "call-1",
+        name: tool,
+        input: mode === "contamination" ? { file_path: outside } : { id: "react" },
+      };
+      emit({
+        type: "assistant",
+        message: { content: [block, block, { type: "tool_use", id: "other", name: "Read", input: { file_path: "package.json" } }] },
+      });
+    } else if (args[0] === "exec") {
+      const item =
+        mode === "contamination"
+          ? { id: "call-1", type: "command_execution", command: `cat "${outside}"` }
+          : { id: "call-1", type: "mcp_tool_call", server: "basics", tool: "get_note", status: "failed" };
+      emit({ type: "item.started", item });
+      emit({ type: "item.completed", item });
+    } else {
+      const part = {
+        id: "part-1",
+        type: "tool",
+        callID: "call-1",
+        tool: mode === "contamination" ? "read" : "basics_get_note",
+        state: { status: "error", input: mode === "contamination" ? { file_path: outside } : { id: "react" } },
+      };
+      emit({ type: "tool_use", part });
+      emit({ type: "tool_use", part });
+    }
+  }
+  if (mode === "grandchild") {
+    const childScript = `const child=require('node:child_process').spawn(process.execPath,['-e','setTimeout(()=>{},3000)'],{stdio:'ignore'});require('node:fs').writeFileSync('grandchild-pid',String(child.pid));setTimeout(()=>{},2500);`;
+    const child = require("node:child_process").spawn(process.execPath, ["-e", childScript], { stdio: "ignore" });
+    fs.writeFileSync("child-pid", String(child.pid));
+    setTimeout(() => process.exit(0), 1200);
+  }
   if (args[0] === "-p")
     emit({
       type: "result",
