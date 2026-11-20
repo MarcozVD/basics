@@ -294,7 +294,7 @@ basics recommend [options] <description...>
 
 ### `basics compare`
 
-compare generated projects without and with read-only Basics
+compare generated projects with no notes, exported notes or read-only Basics
 
 ```
 basics compare [options] [task...]
@@ -305,6 +305,10 @@ basics compare [options] [task...]
 | `--agent <agent>` | claude, opencode or codex (required) | — |
 | `--model <model>` | agent model | — |
 | `--runs <count>` | runs per condition | `1` |
+| `--conditions <list>` | ordered subset of none,agents-md,basics | `none,agents-md,basics` |
+| `--acceptance-bundle <file>` | runner-owned JSON test bundle, extracted only after confirmed agent shutdown | — |
+| `--acceptance-command <command>` | separately approved command; stdout must be one JSON line {passed, failed} | — |
+| `--study-dir <dir>` | runner-owned study location monitored for contamination | — |
 | `--timeout <seconds>` | timeout per condition in seconds | `600` |
 | `--sample <pack/task>` | bilingual sample task from an official pack | — |
 | `--yes` | approve planned agent runs only; never trust check commands | — |

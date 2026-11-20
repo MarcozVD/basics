@@ -70,20 +70,23 @@ Watch the full two-minute tour (Spanish narration): [basics-demo.mp4](https://ma
 
 ## Compare with and without Basics
 
-`basics compare` runs one coding task twice with your agent: once plain, and once with Basics connected through a read-only MCP server and the stack's instruction files. Each run starts in its own empty folder. The report shows the stack the agent chose, the project checks that passed, wall time, reported tokens and the files written.
+`basics compare` runs one coding task with your agent under up to three conditions: **No notes** (an empty folder), **Exported notes** (the same `STACK.md`, `AGENTS.md`, `CLAUDE.md` and Cursor rules, with no MCP server) and **Basics MCP + notes** (the same files plus a read-only Basics MCP server). Each run starts in its own empty folder. The report shows the stack the agent chose, the project checks that passed, wall time, reported tokens, the files written and the Basics MCP tool calls. The count is `null`, not zero, when the agent does not report its tool calls.
 
 ```bash
 basics --vault ~/basics-vault compare --sample rust-api/login-api --agent claude --yes
 ```
 
 - `--agent` (required): `claude`, `opencode` or `codex`.
+- `--conditions` (default `none,agents-md,basics`): an ordered subset of those three.
 - `--model`, `--runs` (repeats, default 1) and `--timeout` (seconds per condition, default 600).
 - `--sample <pack>/<task-id>` for an official sample task, or a quoted task in its place.
-- `--yes` approves the agent runs. It never approves check commands.
-- `--trust-checks` approves the listed vault check commands for that invocation only. Nothing is saved to trust.
+- `--yes` approves the agent runs. It never approves check commands or the acceptance command.
+- `--trust-checks` approves the listed vault check commands and the acceptance command for that invocation only. Nothing is saved to trust.
+- `--acceptance-bundle <file>` with `--acceptance-command <command>`: hidden acceptance tests. Basics extracts the JSON bundle only after the agent has exited and its process tree is confirmed stopped. The command must print one JSON line `{passed, failed}`.
+- `--study-dir <dir>`: a study folder to watch. A run that reads or runs something in it from outside the project is marked contaminated and left out of the summaries.
 - `--keep` keeps the project folders and `--json` prints the report.
 
-Each agent run is a full session that uses your quota or credits. Compare shows the planned count first: two sessions by default, and `--yes` is required outside a terminal. Before you quote a result, read the [compare guide](https://marcozvd.github.io/basics/guide/compare.html). One run proves nothing, and stack match measures agreement with Basics' own recommendation, not code quality. The web UI runs the same comparisons on a Compare page (`g` then `c`), with live progress, cancel and saved history.
+Each agent run is a full session that uses your quota or credits. Compare shows the planned count first: three sessions per repeat by default, and `--yes` is required outside a terminal. Before you quote a result, read the [compare guide](https://marcozvd.github.io/basics/guide/compare.html). One run proves nothing, and stack match measures agreement with Basics' own recommendation, not code quality. Compare does not enforce isolation: the agent runs as your user and can read what your account can read, so the contamination flag can miss indirect reads. The web UI runs the same comparisons on a Compare page (`g` then `c`), with live progress, cancel and saved history.
 
 ## Documentation
 

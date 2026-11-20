@@ -70,20 +70,23 @@ Mira el recorrido completo de dos minutos (narración en español): [basics-demo
 
 ## Comparar con y sin Basics
 
-`basics compare` ejecuta una misma tarea de código dos veces con tu agente: una vez sin Basics, y otra con Basics conectado mediante un servidor MCP de solo lectura y los archivos de instrucciones del stack. Cada ejecución empieza en su propia carpeta vacía. El informe muestra el stack que eligió el agente, los checks del proyecto que pasaron, el tiempo, los tokens reportados y los archivos escritos.
+`basics compare` ejecuta una misma tarea de código con tu agente en hasta tres condiciones: **Sin notas** (una carpeta vacía), **Notas exportadas** (los mismos `STACK.md`, `AGENTS.md`, `CLAUDE.md` y reglas de Cursor, sin servidor MCP) y **MCP de Basics + notas** (los mismos archivos más un servidor MCP de Basics de solo lectura). Cada ejecución empieza en su propia carpeta vacía. El informe muestra el stack que eligió el agente, los checks del proyecto que pasaron, el tiempo, los tokens reportados, los archivos escritos y las llamadas MCP de Basics. El número es `null`, no cero, cuando el agente no reporta sus llamadas.
 
 ```bash
 basics --vault ~/basics-vault compare --sample rust-api/login-api --agent claude --yes
 ```
 
 - `--agent` (obligatorio): `claude`, `opencode` o `codex`.
+- `--conditions` (por defecto `none,agents-md,basics`): un subconjunto ordenado de esas tres.
 - `--model`, `--runs` (repeticiones, por defecto 1) y `--timeout` (segundos por condición, por defecto 600).
 - `--sample <pack>/<task-id>` para una tarea de ejemplo oficial, o una tarea entre comillas en su lugar.
-- `--yes` aprueba las ejecuciones del agente. Nunca aprueba los comandos de checks.
-- `--trust-checks` aprueba los comandos de checks del vault que se listan, solo para esta ejecución de compare. No se guarda nada como confianza.
+- `--yes` aprueba las ejecuciones del agente. Nunca aprueba los comandos de checks ni el comando de aceptación.
+- `--trust-checks` aprueba los comandos de checks del vault que se listan y el comando de aceptación, solo para esta ejecución de compare. No se guarda nada como confianza.
+- `--acceptance-bundle <archivo>` con `--acceptance-command <comando>`: pruebas de aceptación ocultas. Basics extrae el paquete JSON solo después de que el agente termine y se confirme que su árbol de procesos se detuvo. El comando debe imprimir una línea JSON `{passed, failed}`.
+- `--study-dir <carpeta>`: una carpeta de estudio que se vigila. Una ejecución que lee algo de ella o lo ejecuta desde fuera del proyecto se marca como contaminada y queda fuera de los resúmenes.
 - `--keep` conserva las carpetas de los proyectos y `--json` imprime el informe.
 
-Cada ejecución del agente es una sesión completa que consume tu cuota o tus créditos. Compare muestra primero el número de sesiones previsto: por defecto son dos, y fuera de una terminal se necesita `--yes`. Antes de citar un resultado, lee la [guía de compare (en inglés)](https://marcozvd.github.io/basics/guide/compare.html). Una sola ejecución no demuestra nada, y la coincidencia de stack mide el acuerdo con la recomendación propia de Basics, no la calidad del código. La interfaz web tiene las mismas ejecuciones en una página Comparar (`g` y luego `c`), con progreso en vivo, cancelación e historial guardado.
+Cada ejecución del agente es una sesión completa que consume tu cuota o tus créditos. Compare muestra primero el número de sesiones previsto: por defecto son tres por repetición, y fuera de una terminal se necesita `--yes`. Antes de citar un resultado, lee la [guía de compare (en inglés)](https://marcozvd.github.io/basics/guide/compare.html). Una sola ejecución no demuestra nada, y la coincidencia de stack mide el acuerdo con la recomendación propia de Basics, no la calidad del código. Compare no impone aislamiento: el agente se ejecuta con tu usuario y puede leer lo que tu cuenta puede leer, así que la marca de contaminación puede pasar por alto lecturas indirectas. La interfaz web tiene las mismas ejecuciones en una página Comparar (`g` y luego `c`), con progreso en vivo, cancelación e historial guardado.
 
 ## Documentación
 
