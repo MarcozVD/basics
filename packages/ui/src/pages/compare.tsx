@@ -1,4 +1,12 @@
-import type { ComparePlan, CompareReport, CompareState } from "@marcozvd/basics-core";
+import {
+  COMPARE_CONDITIONS,
+  type CompareCondition,
+  type ComparePlan,
+  type CompareReport,
+  type CompareState,
+  normalizeCompareCondition,
+  reportConditions,
+} from "@marcozvd/basics-core/compare";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { CompareSummary } from "@/components/compare-summary";
@@ -46,6 +54,10 @@ export function ComparePage() {
   const [agentId, setAgentId] = useState("");
   const [model, setModel] = useState("");
   const [runs, setRuns] = useState(1);
+  const [conditions, setConditions] = useState<CompareCondition[]>([...COMPARE_CONDITIONS]);
+  const [acceptanceBundle, setAcceptanceBundle] = useState("");
+  const [acceptanceCommand, setAcceptanceCommand] = useState("");
+  const [studyDir, setStudyDir] = useState("");
   const [timeout, setTimeoutSeconds] = useState(600);
   const [plan, setPlan] = useState<ComparePlan | null>(null);
   const [step, setStep] = useState<"runs" | "checks">("runs");
@@ -99,10 +111,15 @@ export function ComparePage() {
           {c.error}
         </p>
       ) : null}
-      {recorded ? (
+      {recorded && report ? (
         <div role="note" className="rounded-xl border border-border p-4 text-sm">
           <strong>{c.recorded}</strong>
           <p className="mt-1 text-muted-foreground">{c.recordedHelp}</p>
+          {COMPARE_CONDITIONS.filter((condition) => !reportConditions(report).includes(condition)).map((condition) => (
+            <p key={condition} className="mt-1 text-muted-foreground">
+              {c.recordingNotRun.replace("{condition}", c[condition])}
+            </p>
+          ))}
         </div>
       ) : null}
       {report?.cancelled ? (
@@ -121,6 +138,9 @@ export function ComparePage() {
               agent: agent.id,
               model: model || undefined,
               runs,
+              conditions,
+              acceptance: acceptanceBundle && acceptanceCommand ? { bundle: acceptanceBundle, command: acceptanceCommand } : undefined,
+              studyDir: studyDir || undefined,
               timeoutMs: timeout * 1000,
             });
             setPlan(next);
@@ -130,6 +150,52 @@ export function ComparePage() {
         }}
       >
         <fieldset disabled={active || busy || recorded} className="grid min-w-0 gap-4">
+          <fieldset className="flex flex-wrap gap-4">
+            <legend className="mb-2 text-xs text-muted-foreground">{c.conditions}</legend>
+            {COMPARE_CONDITIONS.map((condition) => (
+              <label key={condition} className="flex min-h-9 items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="accent-primary focus-visible:outline-2 focus-visible:outline-ring"
+                  checked={conditions.includes(condition)}
+                  onChange={(event) =>
+                    setConditions((current) =>
+                      event.target.checked ? [...current, condition] : current.filter((value) => value !== condition),
+                    )
+                  }
+                />
+                {c[condition]}
+              </label>
+            ))}
+          </fieldset>
+          <details className="min-w-0 text-xs">
+            <summary className="min-h-9 cursor-pointer rounded focus-visible:outline-2 focus-visible:outline-ring">{c.acceptance}</summary>
+            <p className="mb-3 text-muted-foreground">{c.acceptanceHelp}</p>
+            <div className="grid gap-3">
+              <label className="grid gap-1.5">
+                {c.acceptanceBundle}
+                <input
+                  className={control}
+                  value={acceptanceBundle}
+                  required={Boolean(acceptanceCommand)}
+                  onChange={(event) => setAcceptanceBundle(event.target.value)}
+                />
+              </label>
+              <label className="grid gap-1.5">
+                {c.acceptanceCommand}
+                <input
+                  className={control}
+                  value={acceptanceCommand}
+                  required={Boolean(acceptanceBundle)}
+                  onChange={(event) => setAcceptanceCommand(event.target.value)}
+                />
+              </label>
+              <label className="grid gap-1.5">
+                {c.studyDir}
+                <input className={control} value={studyDir} onChange={(event) => setStudyDir(event.target.value)} />
+              </label>
+            </div>
+          </details>
           <label className="grid gap-1.5 text-xs text-muted-foreground">
             {c.sample}
             <select className={control} value={sample} onChange={(event) => setSample(event.target.value)}>
@@ -218,7 +284,7 @@ export function ComparePage() {
           </div>
         </fieldset>
         <div className="flex flex-wrap items-center gap-3">
-          <Button type="submit" size="sm" disabled={!agent || active || busy || recorded}>
+          <Button type="submit" size="sm" disabled={!agent || !conditions.length || active || busy || recorded}>
             {c.prepare}
           </Button>
           {!agent && !recorded ? <p className="text-xs text-muted-foreground">{c.noAgents}</p> : null}
@@ -262,9 +328,10 @@ export function ComparePage() {
         </section>
       ) : null}
       {report ? <CompareSummary report={report} /> : null}
+      {report ? <p className="text-xs text-muted-foreground">{c.validityHelp}</p> : null}
       {report ? (
         <section className="grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-2" aria-label={c.title} data-testid="compare-results">
-          {(["without_basics", "with_basics"] as const).map((condition) => (
+          {reportConditions(report).map((condition) => (
             <div key={condition} className="min-w-0 rounded-2xl border border-border p-4">
               <h2 className="text-base font-semibold">{c[condition]}</h2>
               {report.runs > 1 ? (
@@ -287,12 +354,18 @@ export function ComparePage() {
                 </dl>
               ) : null}
               {report.results
-                .filter((result) => result.condition === condition)
+                .filter((result) => normalizeCompareCondition(result.condition) === condition)
                 .map((result) => (
                   <article key={result.run} className="mt-4 min-w-0 border-t border-border pt-4 text-sm">
                     <h3 className="font-medium">
                       {c.run} {result.run}
                     </h3>
+                    {result.contaminated ? (
+                      <p role="status" className="mt-2 text-destructive">
+                        {c.contaminated}
+                      </p>
+                    ) : null}
+                    {result.shutdown_confirmed === false ? <p className="mt-2 text-muted-foreground">{c.shutdownUnconfirmed}</p> : null}
                     {!result.ok ? (
                       <p role="status" className="text-destructive">
                         {result.timed_out ? c.statuses.timeout : c.phases.error}
@@ -304,6 +377,7 @@ export function ComparePage() {
                         [c.tokens, number(result.tokens?.total)],
                         [c.cacheRead, number(result.tokens?.cache_read)],
                         [c.cacheCreation, number(result.tokens?.cache_creation)],
+                        [c.mcpCalls, number(result.mcp_tool_calls?.total)],
                       ].map(([label, value]) => (
                         <div key={label} className="flex flex-wrap justify-between gap-x-3">
                           <dt className="text-muted-foreground">{label}</dt>
@@ -311,6 +385,29 @@ export function ComparePage() {
                         </div>
                       ))}
                     </dl>
+                    {result.mcp_tool_calls ? (
+                      <ul className="mt-2 grid gap-1 text-xs">
+                        {Object.entries(result.mcp_tool_calls.by_tool).map(([tool, count]) => (
+                          <li key={tool} className="break-all">
+                            <code>{tool}</code>: {number(count)}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                    <h4 className="mt-4 font-medium">{c.acceptance}</h4>
+                    {result.acceptance ? (
+                      <div className="mt-2 text-xs">
+                        <p>
+                          {result.acceptance.status === "error" ? c.phases.error : c.statuses[result.acceptance.status]} · {c.passed}:{" "}
+                          {number(result.acceptance.passed)} · {c.failed}: {number(result.acceptance.failed)}
+                        </p>
+                        {result.acceptance.reason ? (
+                          <p className="mt-1 break-words text-muted-foreground">{result.acceptance.reason}</p>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <p className="mt-2 text-xs text-muted-foreground">{c.unavailable}</p>
+                    )}
                     <h4 className="mt-4 font-medium">{c.stack}</h4>
                     <ul className="mt-2 grid gap-2 text-xs">
                       {result.stack_comparison.map((layer) => (
