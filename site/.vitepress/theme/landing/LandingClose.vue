@@ -104,7 +104,7 @@ useReveal(revealRoot);
     <section class="landing-install" aria-labelledby="landing-install-title" data-testid="landing-install">
       <h2 id="landing-install-title" data-reveal="0">Start with what you know.</h2>
       <p>Quick start with Node.js 20.11 or newer: create a vault, then connect Claude Code over stdio. No running server or web UI needed.</p>
-      <div class="landing-install-command"><code>npx @marcozvd/basics init ~/basics-vault --yes<br />claude mcp add basics -- npx -y --package @marcozvd/basics basics-mcp /absolute/path/to/basics-vault</code></div>
+      <div class="landing-install-command"><code>npx @marcozvd/basics init ~/basics-vault --yes<br />claude mcp add --scope user basics -- npx -y --package @marcozvd/basics basics-mcp /absolute/path/to/basics-vault</code></div>
       <p>Use your vault's absolute path. Open the UI when you want to review proposals. Alternatively, connect over HTTP while the UI is running:</p>
       <div class="landing-install-command"><code>npx @marcozvd/basics --vault ~/basics-vault ui<br />claude mcp add --transport http basics http://127.0.0.1:4747/mcp</code></div>
       <a class="landing-download" data-reveal="1" :href="release">Download desktop <span aria-hidden="true">→</span></a>

@@ -35,7 +35,7 @@ Requiere Node.js 20.11 o posterior. Conecta Claude Code por stdio; no hace falta
 npx @marcozvd/basics init ~/basics-vault --yes
 
 # conecta Claude Code (usa la ruta absoluta de tu vault)
-claude mcp add basics -- npx -y --package @marcozvd/basics basics-mcp /ruta/absoluta/a/basics-vault
+claude mcp add --scope user basics -- npx -y --package @marcozvd/basics basics-mcp /ruta/absoluta/a/basics-vault
 ```
 
 Pídele a tu agente que recomiende un stack. Para revisar y aprobar propuestas en el Inbox, abre la interfaz web cuando la necesites:

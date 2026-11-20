@@ -41,10 +41,10 @@ The vault path is resolved as: `--vault <dir>` > `BASICS_DIR` > `vault` in the c
 Claude Code can start Basics on demand. No running server or web UI needed:
 
 ```bash
-claude mcp add basics -- npx -y --package @marcozvd/basics basics-mcp /absolute/path/to/my-vault
+claude mcp add --scope user basics -- npx -y --package @marcozvd/basics basics-mcp /absolute/path/to/my-vault
 ```
 
-Replace the path with your vault's absolute path. The `basics-mcp` executable serves MCP over stdio.
+Replace the path with your vault's absolute path. `--scope user` makes the server available in every project. The `basics-mcp` executable serves MCP over stdio.
 
 Every other client (Claude Desktop, Cursor, VS Code, Codex CLI, OpenCode, Windsurf, oh-my-pi, Gemini CLI, Qwen Code, Kimi CLI, Goose, Amp) is covered in
 [MCP clients](./mcp-clients.md). Any other agent gets copyable snippets from `basics connect --print`.
