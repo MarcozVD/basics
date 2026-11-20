@@ -26,25 +26,30 @@ Empieza con packs oficiales (conjuntos de notas ya hechos) y pídele a Basics qu
 
 **Pruébalo:** [demo en vivo](https://marcozvd.github.io/basics/demo/) en tu navegador, sin instalar nada · [sitio web](https://marcozvd.github.io/basics/)
 
-> **Estado: 1.0**: consulta el [contrato de estabilidad](https://marcozvd.github.io/basics/guide/stability.html).
-
 ## Inicio rápido
+
+Requiere Node.js 20.11 o posterior. Conecta Claude Code por stdio; no hace falta mantener un servidor ni la interfaz web en marcha:
 
 ```bash
 # crea un vault con los packs oficiales
 npx @marcozvd/basics init ~/basics-vault --yes
 
-# abre la interfaz web local (también sirve MCP por HTTP)
+# conecta Claude Code (usa la ruta absoluta de tu vault)
+claude mcp add basics -- npx -y --package @marcozvd/basics basics-mcp /ruta/absoluta/a/basics-vault
+```
+
+Pídele a tu agente que recomiende un stack. Para revisar y aprobar propuestas en el Inbox, abre la interfaz web cuando la necesites:
+
+```bash
 npx @marcozvd/basics --vault ~/basics-vault ui
 ```
 
-Con la UI en marcha, conecta Claude Code:
+Como alternativa, conecta por HTTP mientras la UI esté en marcha:
 
 ```bash
 claude mcp add --transport http basics http://127.0.0.1:4747/mcp
 ```
 
-Pídele a tu agente que recomiende un stack y revisa en el Inbox lo que proponga.
 El resto de clientes (Cursor, VS Code, Codex, OpenCode, Windsurf, oh-my-pi, Gemini CLI, Qwen Code, Kimi CLI, Goose, Amp) están en
 [Clientes MCP](https://marcozvd.github.io/basics/guide/mcp-clients.html). Cualquier otro agente recibe fragmentos para copiar con `basics connect --print`.
 
@@ -61,7 +66,7 @@ El resto de clientes (Cursor, VS Code, Codex, OpenCode, Windsurf, oh-my-pi, Gemi
 
 ![Una propuesta del agente revisada en el Inbox y luego un stack recomendado y exportado](site/public/media/basics-inbox-recommend.gif)
 
-Mira el recorrido completo de dos minutos: [basics-demo.mp4](https://marcozvd.github.io/basics/media/basics-demo.mp4).
+Mira el recorrido completo de dos minutos (narración en español): [basics-demo.mp4](https://marcozvd.github.io/basics/media/basics-demo.mp4).
 
 ## Comparar con y sin Basics
 

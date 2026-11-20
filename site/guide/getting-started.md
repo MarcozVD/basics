@@ -36,6 +36,19 @@ Without a terminal it behaves like `--yes`.
 
 The vault path is resolved as: `--vault <dir>` > `BASICS_DIR` > `vault` in the config > `~/basics-vault`.
 
+## Connect an agent
+
+Claude Code can start Basics on demand. No running server or web UI needed:
+
+```bash
+claude mcp add basics -- npx -y --package @marcozvd/basics basics-mcp /absolute/path/to/my-vault
+```
+
+Replace the path with your vault's absolute path. The `basics-mcp` executable serves MCP over stdio.
+
+Every other client (Claude Desktop, Cursor, VS Code, Codex CLI, OpenCode, Windsurf, oh-my-pi, Gemini CLI, Qwen Code, Kimi CLI, Goose, Amp) is covered in
+[MCP clients](./mcp-clients.md). Any other agent gets copyable snippets from `basics connect --print`.
+
 ## Open the web UI
 
 ```bash
@@ -44,25 +57,14 @@ basics ui --port 5000        # another port
 basics ui --no-open          # do not open the browser
 ```
 
-The UI reads and writes the same files as the CLI, so both stay in sync. Leave it running while you work: it also
-serves MCP over HTTP at `http://127.0.0.1:4747/mcp`.
+Open the UI when you want to review proposals or edit notes. It reads and writes the same files as the CLI, so both stay in sync.
+As an alternative to stdio, it also serves MCP over HTTP at `http://127.0.0.1:4747/mcp`.
 
-## Connect an agent
-
-Claude Code, with the UI running:
+For HTTP, keep the UI running and connect Claude Code:
 
 ```bash
 claude mcp add --transport http basics http://127.0.0.1:4747/mcp
 ```
-
-Or connect over stdio without the UI:
-
-```bash
-claude mcp add basics --scope user -- basics-mcp /absolute/path/to/my-vault
-```
-
-Every other client (Claude Desktop, Cursor, VS Code, Codex CLI, OpenCode, Windsurf, oh-my-pi, Gemini CLI, Qwen Code, Kimi CLI, Goose, Amp) is covered in
-[MCP clients](./mcp-clients.md). Any other agent gets copyable snippets from `basics connect --print`.
 
 ## First recommendation
 

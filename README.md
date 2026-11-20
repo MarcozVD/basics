@@ -26,25 +26,30 @@ New to these words? See the [glossary](https://marcozvd.github.io/basics/guide/g
 
 **Try it:** [live demo](https://marcozvd.github.io/basics/demo/) in your browser, no install · [website](https://marcozvd.github.io/basics/)
 
-> **Status: 1.0**: see the [stability contract](https://marcozvd.github.io/basics/guide/stability.html).
-
 ## Quick start
+
+Requires Node.js 20.11 or newer. Connect Claude Code over stdio; no running server or web UI needed:
 
 ```bash
 # create a vault with the official packs
 npx @marcozvd/basics init ~/basics-vault --yes
 
-# open the local web UI (it also serves MCP over HTTP)
+# connect Claude Code (use your vault's absolute path)
+claude mcp add basics -- npx -y --package @marcozvd/basics basics-mcp /absolute/path/to/basics-vault
+```
+
+Ask your agent to recommend a stack. To review and approve proposals in the Inbox, open the web UI when needed:
+
+```bash
 npx @marcozvd/basics --vault ~/basics-vault ui
 ```
 
-With the UI running, connect Claude Code:
+Alternatively, connect over HTTP while the UI is running:
 
 ```bash
 claude mcp add --transport http basics http://127.0.0.1:4747/mcp
 ```
 
-Ask your agent to recommend a stack, then review and approve what it proposes in the Inbox.
 Other clients (Cursor, VS Code, Codex, OpenCode, Windsurf, oh-my-pi, Gemini CLI, Qwen Code, Kimi CLI, Goose, Amp) are covered in
 [MCP clients](https://marcozvd.github.io/basics/guide/mcp-clients.html). Any other agent gets copyable snippets from `basics connect --print`.
 
