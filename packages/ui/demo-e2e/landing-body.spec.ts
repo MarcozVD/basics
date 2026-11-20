@@ -76,6 +76,8 @@ test("README contains matching app parts and generated transcripts and a sticky 
   const body = page.getByTestId("landing-readme");
   await expect(body.getByRole("heading", { level: 2 })).toHaveCount(7);
   await expect(body.getByRole("heading", { level: 2 }).last()).toHaveAccessibleName("Compare the same task, both ways");
+  const comparison = body.getByRole("table", { name: "One recorded run: CSV report", exact: true });
+  await expect(comparison.getByRole("rowheader")).toHaveText(["No notes", "Basics MCP + notes"]);
   await expect(body.getByRole("img", { name: "The Basics review loop", exact: true })).toHaveCount(1);
   await expect(body.locator('.app-part[data-part="proposal"]')).toHaveCount(1);
   await expect(body).toContainText(content.exported.tree);
