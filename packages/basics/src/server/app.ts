@@ -56,6 +56,7 @@ import { type Context, Hono, type Next } from "hono";
 import { streamSSE } from "hono/streaming";
 import { ZodError, z } from "zod";
 import { AGENT_DECISION_SUFFIX, AgentBusyError, AgentRunner, AgentUnavailableError, listAgents } from "../agents.js";
+import type { CompareDependencies } from "../compare.js";
 import { CONNECT_CLIENTS, connect, connectStatus, disconnect } from "../connect.js";
 import {
   createEmbedder,
@@ -69,6 +70,7 @@ import { createMcpServer, planStackPrompt } from "../mcp/tools.js";
 import { packsDir } from "../packs-dir.js";
 import { getRecommender } from "../recommender.js";
 import { isSkillKey, SKILL_AREAS, scanSkills } from "../skills.js";
+import { createCompareApi } from "./compare.js";
 import type { EventHub } from "./events.js";
 
 const { version } = createRequire(import.meta.url)("../../package.json") as { version: string };
@@ -195,6 +197,8 @@ export function createApp(opts: {
   uiDir?: string;
   events?: EventHub;
   agents?: AgentRunner;
+  compare?: Partial<CompareDependencies>;
+  onClose?: (close: () => Promise<void>) => void;
   /** Shared vault cache; the app's own watcher drives its invalidation. */
   cache?: VaultCache;
 }): Hono {
@@ -284,6 +288,9 @@ export function createApp(opts: {
     vault();
     return c.json({ ok: true, version, vault: opts.root });
   });
+  const compare = createCompareApi(vault, { packsDir: packsDir(), ...opts.compare });
+  app.route("/api/compare", compare.app);
+  opts.onClose?.(compare.close);
 
   app.get("/api/layers", (c) => {
     const layers = cache.memo("layers", (v) => {

@@ -1,5 +1,6 @@
 export * from "./activity.js";
 export * from "./api.js";
+export * from "./compare-api.js";
 export * from "./config.js";
 export * from "./detect.js";
 export * from "./embeddings.js";

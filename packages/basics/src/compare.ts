@@ -6,6 +6,7 @@ import {
   type AgentId,
   atomicWrite,
   basicsDir,
+  type CompareProgress,
   detectStack,
   isTrusted,
   type Recommendation,
@@ -41,6 +42,8 @@ export interface CompareDependencies {
   confirm?: () => Promise<boolean>;
   confirmChecks?: (checks: { id: string; command: string }[]) => Promise<boolean>;
   announce?: (message: string) => void;
+  signal?: AbortSignal;
+  progress?: (event: CompareProgress) => void;
 }
 export function resolveCompareTask(options: CompareOptions, packs: string) {
   if (options.task?.trim() && options.sample) throw new Error("provide a task or --sample, not both");
@@ -102,6 +105,21 @@ export function expectedCompareStack(advice: Recommendation): Record<string, str
     }),
   );
 }
+/** Shared by newly saved checks and public legacy-history responses. Paths belong only in --keep metadata. */
+export function untrustedCheckHint(stack: string[], id: string): string {
+  return `Review the listed commands and rerun compare with --trust-checks to approve checks for that invocation only. --yes never grants check trust. Alternatively, use --keep to retain the project, run basics export --stack ${stack.join(",")} in the project if basics.json is missing, then basics check <project> --only ${id} --trust with the same vault.`;
+}
+
+/** Keep agent identity and diagnostic text, but never persist executable/workspace paths in errors. */
+export function compareErrorMessage(error: string | undefined, agent: AgentId): string | undefined {
+  if (!error) return undefined;
+  const message = error
+    .replace(/(["'])(?:[A-Za-z]:[\\/]|\/|\\\\)[^\r\n]*?\1/g, "<path>")
+    .replace(/(?:\b[A-Za-z]:[\\/]|\\\\)[^\r\n"'<>]*/g, "<path>")
+    .replace(/(^|[\s(=])\/[^\r\n"'<>]*/gm, "$1<path>");
+  return message.startsWith(`${agent}: `) ? message : `${agent}: ${message}`;
+}
+
 function checkEnvironment(project: string, inherited: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const local = [".venv/Scripts", ".venv/bin", "venv/Scripts", "venv/bin", "node_modules/.bin"]
     .map((dir) => path.join(project, dir))
@@ -127,7 +145,13 @@ function missingPrimaryTool(command: string, cwd: string, env: NodeJS.ProcessEnv
     ? undefined
     : tool;
 }
-function executeCheck(command: string, cwd: string, env: NodeJS.ProcessEnv, timeout: number): Promise<Omit<CheckResult, "id">> {
+function executeCheck(
+  command: string,
+  cwd: string,
+  env: NodeJS.ProcessEnv,
+  timeout: number,
+  signal?: AbortSignal,
+): Promise<Omit<CheckResult, "id">> {
   env = checkEnvironment(cwd, env);
   const missing = missingPrimaryTool(command, cwd, env);
   if (missing) return Promise.resolve({ command, status: "missing_tool", duration_ms: 0, output_tail: `command not found: ${missing}` });
@@ -148,10 +172,17 @@ function executeCheck(command: string, cwd: string, env: NodeJS.ProcessEnv, time
       timedOut = true;
       stopAgentProcess(child, true);
     }, timeout);
+    const abort = () => {
+      stopAgentProcess(child, true);
+      child.stdout?.destroy();
+      child.stderr?.destroy();
+      finish(null);
+    };
     const finish = (code: number | null) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      signal?.removeEventListener("abort", abort);
       resolve({
         command,
         status: timedOut ? "timeout" : code === 0 ? "pass" : code === 127 || code === 9009 ? "missing_tool" : "fail",
@@ -169,9 +200,11 @@ function executeCheck(command: string, cwd: string, env: NodeJS.ProcessEnv, time
       finish(null);
     });
     child.on("close", finish);
+    signal?.addEventListener("abort", abort, { once: true });
+    if (signal?.aborted) abort();
   });
 }
-export async function runComparison(vault: Vault, options: CompareOptions, deps: CompareDependencies) {
+export function planComparison(vault: Vault, options: CompareOptions, deps: Pick<CompareDependencies, "packsDir">) {
   const runs = options.runs ?? 1,
     timeout = options.timeoutMs ?? DEFAULT_COMPARE_TIMEOUT_MS;
   if (!AGENT_IDS.includes(options.agent)) throw new Error("--agent must be claude, opencode or codex");
@@ -187,6 +220,10 @@ export async function runComparison(vault: Vault, options: CompareOptions, deps:
   const commands = checks.flatMap((check) =>
     check.data.type === "check" && check.data.command ? [{ id: check.id, command: check.data.command }] : [],
   );
+  return { runs, timeout, task, advice, expected, stack, checks, commands };
+}
+export async function runComparison(vault: Vault, options: CompareOptions, deps: CompareDependencies) {
+  const { runs, timeout, task, advice, expected, stack, checks, commands } = planComparison(vault, options, deps);
   const interactive = deps.isTTY ?? process.stdin.isTTY;
   deps.announce?.(
     `Planned: ${runs * 2} agent runs (${runs} without Basics, ${runs} with Basics). Timeout: ${timeout / 1000}s per condition. --yes approves agent runs only. --trust-checks approves listed checks in these fresh run directories for this invocation only; no vault trust is saved.`,
@@ -209,11 +246,17 @@ export async function runComparison(vault: Vault, options: CompareOptions, deps:
       `Check ${check.id}: ${checksApproved ? "approved for this invocation (will run)" : "untrusted (will not run)"}: ${check.command}`,
     );
   const directories = new CompareDirectories();
+  deps.progress?.({ phase: "planned" });
   const results: CompareRunResult[] = [];
   let interrupted = false;
   const prompt = `${task.prompt}\n\nImplement working files in the current project directory. Use supplied project instructions and available tools. Do not modify files outside this project or edit agent settings. Knowledge servers are read-only. Run relevant checks and finish with a brief summary.`;
   runsLoop: for (let run = 1; run <= runs; run++)
     for (const condition of ["without_basics", "with_basics"] as const) {
+      if (deps.signal?.aborted) {
+        interrupted = true;
+        break runsLoop;
+      }
+      deps.progress?.({ phase: "running", run, condition });
       let root: string | undefined;
       let prepared: ReturnType<typeof prepareCompareEnvironment> | undefined;
       let before: ReturnType<typeof snapshotFiles> | undefined;
@@ -244,6 +287,7 @@ export async function runComparison(vault: Vault, options: CompareOptions, deps:
           if (runner.activeId) runner.cancel(runner.activeId);
         };
         process.once("SIGINT", onInterrupt);
+        deps.signal?.addEventListener("abort", onInterrupt, { once: true });
         let agent: AgentRunResult;
         try {
           agent = await new Promise((resolve, reject) => {
@@ -252,12 +296,14 @@ export async function runComparison(vault: Vault, options: CompareOptions, deps:
                 { agent: options.agent, model: options.model, prompt, build: true },
                 { onChunk: () => {}, onDone: (_id, result) => resolve(result) },
               );
+              if (deps.signal?.aborted) onInterrupt();
             } catch (error) {
               reject(error);
             }
           });
         } finally {
           process.removeListener("SIGINT", onInterrupt);
+          deps.signal?.removeEventListener("abort", onInterrupt);
         }
         if (!root || !prepared || !before) throw new Error("compare workspace setup did not finish");
         const runChecks: CheckResult[] = [];
@@ -269,6 +315,10 @@ export async function runComparison(vault: Vault, options: CompareOptions, deps:
           detected = detectStack(vault, prepared.project);
           const deadline = Date.now() + Math.max(0, timeout - (agent.duration_ms ?? 0));
           for (const check of checks) {
+            if (deps.signal?.aborted) {
+              interrupted = true;
+              break;
+            }
             if (check.data.type !== "check") continue;
             if (check.data.command && !checksApproved && !isTrusted(vault, prepared.project, check.data.command)) {
               runChecks.push({
@@ -276,18 +326,22 @@ export async function runComparison(vault: Vault, options: CompareOptions, deps:
                 command: check.data.command,
                 status: "untrusted",
                 duration_ms: 0,
-                hint: `Review the listed commands and rerun compare with --trust-checks to approve checks for that invocation only. --yes never grants check trust. Alternatively, use --keep to retain this project, run basics export --stack ${stack.join(",")} in the project if basics.json is missing, then basics check ${JSON.stringify(prepared.project)} --only ${check.id} --trust with the same vault.`,
+                hint: untrustedCheckHint(stack, check.id),
               });
+              deps.progress?.({ phase: "checks", run, condition, check: check.id, status: "untrusted" });
               continue;
             }
             if (!agent.ok || !check.data.command || Date.now() >= deadline) {
-              runChecks.push({ id: check.id, status: "skip", duration_ms: 0 });
+              runChecks.push({ id: check.id, command: check.data.command, status: "skip", duration_ms: 0 });
+              deps.progress?.({ phase: "checks", run, condition, check: check.id, status: "skip" });
               continue;
             }
+            deps.progress?.({ phase: "checks", run, condition, check: check.id });
             runChecks.push({
               id: check.id,
-              ...(await executeCheck(check.data.command, prepared.project, prepared.env, Math.max(1, deadline - Date.now()))),
+              ...(await executeCheck(check.data.command, prepared.project, prepared.env, Math.max(1, deadline - Date.now()), deps.signal)),
             });
+            deps.progress?.({ phase: "checks", run, condition, check: check.id, status: runChecks.at(-1)!.status });
             assertNoExternalOutputLinks(root);
           }
           files = fileChanges(before, snapshotFiles(prepared.project));
@@ -312,8 +366,8 @@ export async function runComparison(vault: Vault, options: CompareOptions, deps:
         results.push({
           run,
           condition,
-          ok: agent.ok && !measurementError,
-          error: agent.error ?? measurementError,
+          ok: agent.ok && !measurementError && !deps.signal?.aborted,
+          error: compareErrorMessage(agent.error ?? measurementError, options.agent),
           timed_out: agent.timed_out ?? false,
           wall_ms: agent.duration_ms ?? 0,
           tokens: agent.tokens ?? null,
@@ -328,19 +382,20 @@ export async function runComparison(vault: Vault, options: CompareOptions, deps:
           directory: options.keep ? prepared.project : undefined,
           cleanup_errors: cleanupErrors,
         });
+        deps.progress?.({ phase: "condition-finished", run, condition });
         if (interrupted) break runsLoop;
       } finally {
         if (prepared)
           try {
             directories.remove(prepared.control);
           } catch (error) {
-            cleanupErrors.push(`cleanup ${prepared.control}: ${String(error)}`);
+            cleanupErrors.push(compareErrorMessage(`cleanup ${prepared.control}: ${String(error)}`, options.agent)!);
           }
         if (root && (!options.keep || !prepared))
           try {
             directories.remove(root);
           } catch (error) {
-            cleanupErrors.push(`cleanup ${root}: ${String(error)}`);
+            cleanupErrors.push(compareErrorMessage(`cleanup ${root}: ${String(error)}`, options.agent)!);
           }
       }
     }
@@ -393,6 +448,7 @@ export async function runComparison(vault: Vault, options: CompareOptions, deps:
     timeout_ms: timeout,
     keep: options.keep ?? false,
     trust_checks: checksApproved,
+    cancelled: interrupted || Boolean(deps.signal?.aborted),
     recommendation: expected,
     mode: advice.mode,
     results,
@@ -400,5 +456,6 @@ export async function runComparison(vault: Vault, options: CompareOptions, deps:
     file,
   };
   atomicWrite(file, `${JSON.stringify(report, null, 2)}\n`);
+  deps.progress?.({ phase: interrupted || deps.signal?.aborted ? "cancelled" : "finished" });
   return report;
 }

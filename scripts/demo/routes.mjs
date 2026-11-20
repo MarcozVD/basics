@@ -14,6 +14,7 @@ const routes = [
   "graph",
   "inbox",
   "recommend",
+  "compare",
   "projects",
   "settings",
   "skills",

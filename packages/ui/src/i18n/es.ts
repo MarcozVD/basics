@@ -1,6 +1,8 @@
 import type { en } from "./en";
 
 export const es: typeof en = {
+  "nav.compare": "Comparar",
+  "nav.compare.purpose": "Compara la misma tarea del agente con y sin tus notas de Basics.",
   "app.name": "Basics",
   "nav.primary": "Principal",
   "nav.home": "Inicio",

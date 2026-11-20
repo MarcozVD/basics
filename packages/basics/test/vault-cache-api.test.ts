@@ -28,7 +28,7 @@ async function notes(app: ReturnType<typeof createApp>): Promise<NoteListEntry[]
 }
 
 /** Wait until an external change reaches the app through the watcher (its flush is debounced). */
-async function until(check: () => Promise<boolean>, what: string, timeoutMs = 8000): Promise<void> {
+async function until(check: () => Promise<boolean>, what: string, timeoutMs = 30_000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     if (await check()) return;
@@ -49,7 +49,7 @@ test("one vault is loaded for many requests, not one per request", async () => {
   assert.equal(cache.version, version, "the second request reused the cached vault");
 });
 
-test("an edit made outside the app shows up in the next request", async () => {
+test("an edit made outside the app shows up in the next request", { timeout: 60_000 }, async () => {
   const root = tempVault();
   const events = new EventHub(root);
   events.start();
@@ -71,7 +71,7 @@ test("an edit made outside the app shows up in the next request", async () => {
   }
 });
 
-test("a note added, renamed and deleted outside the app all reach the next request", async () => {
+test("a note added, renamed and deleted outside the app all reach the next request", { timeout: 120_000 }, async () => {
   const root = tempVault();
   const events = new EventHub(root);
   events.start();

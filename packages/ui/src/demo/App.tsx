@@ -17,6 +17,7 @@ const Graph = lazy(() => import("@/pages/graph").then((module) => ({ default: mo
 const Inbox = lazy(() => import("@/pages/inbox").then((module) => ({ default: module.InboxPage })));
 const Proposal = lazy(() => import("@/pages/proposal").then((module) => ({ default: module.ProposalPage })));
 const Recommend = lazy(() => import("./recommend"));
+const Compare = lazy(() => import("@/pages/compare").then((module) => ({ default: module.ComparePage })));
 function DemoNotice() {
   const { language, setLanguage, t } = useI18n();
   const { resolvedTheme, setTheme } = useTheme();
@@ -96,6 +97,7 @@ const router = createBrowserRouter(
         { path: "inbox", element: deferred(<Inbox />) },
         { path: "inbox/:id", element: deferred(<Proposal />) },
         { path: "recommend", element: deferred(<Recommend />) },
+        { path: "compare", element: deferred(<Compare />) },
         { path: "*", element: <Unavailable /> },
       ],
     },

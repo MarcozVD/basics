@@ -1,6 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import {
   FolderKanban,
+  GitCompareArrows,
   House,
   Inbox,
   LayoutList,
@@ -47,6 +48,7 @@ export const NAV_LINKS: NavLink[] = [
   { to: "/graph", labelKey: "nav.graph", purposeKey: "nav.graph.purpose", icon: Waypoints, shortcut: "G" },
   { to: "/inbox", labelKey: "nav.inbox", purposeKey: "nav.inbox.purpose", icon: Inbox, shortcut: "I" },
   { to: "/recommend", labelKey: "nav.recommend", purposeKey: "nav.recommend.purpose", icon: Sparkles, shortcut: "R" },
+  { to: "/compare", labelKey: "nav.compare", purposeKey: "nav.compare.purpose", icon: GitCompareArrows, shortcut: "C" },
   { to: "/skills", labelKey: "nav.skills", purposeKey: "nav.skills.purpose", icon: Puzzle, shortcut: "K" },
 ];
 

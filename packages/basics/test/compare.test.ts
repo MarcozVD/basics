@@ -5,7 +5,14 @@ import path from "node:path";
 import { type Candidate, type Recommendation, trust, Vault } from "@marcozvd/basics-core";
 import { test, vi } from "vitest";
 import { AgentRunner } from "../src/agents.js";
-import { type CompareDependencies, expectedCompareStack, metricStats, resolveCompareTask, runComparison } from "../src/compare.js";
+import {
+  type CompareDependencies,
+  compareErrorMessage,
+  expectedCompareStack,
+  metricStats,
+  resolveCompareTask,
+  runComparison,
+} from "../src/compare.js";
 import { CompareDirectories, fileChanges, snapshotFiles } from "../src/compare-files.js";
 import { buildProgram } from "../src/program.js";
 
@@ -70,6 +77,46 @@ function fixture() {
   owner.own(base);
   return { base, vault, tempRoot, authHome, bin, deps, cleanup: () => owner.remove(base) };
 }
+test("agent error paths are removed before saving history while agent identity remains", async () => {
+  assert.equal(
+    compareErrorMessage("Could not reach https://example.invalid/api", "claude"),
+    "claude: Could not reach https://example.invalid/api",
+  );
+  for (const error of [
+    'Could not start "C:\\Program Files\\Claude\\claude.exe"',
+    "spawn C:/Users/private/agent.exe ENOENT",
+    "spawn /usr/local/bin/agent ENOENT",
+    "Failed in '/private/agent tools/work'",
+    "spawn \\\\server\\private\\agent.exe ENOENT",
+  ]) {
+    const safe = compareErrorMessage(error, "claude")!;
+    assert.match(safe, /^claude: /);
+    assert.match(safe, /<path>/);
+    assert.doesNotMatch(safe, /[A-Za-z]:[\\/]|\/usr\/|\/private\/|\\\\server/);
+    assert.equal(compareErrorMessage(safe, "claude"), safe);
+  }
+  const f = fixture();
+  try {
+    const report = await runComparison(
+      f.vault,
+      { agent: "claude", task: "dashboard", yes: true },
+      {
+        ...f.deps,
+        env: { ...f.deps.env, FAKE_COMPARE_MODE: "fail-path" },
+      },
+    );
+    const stored = JSON.parse(fs.readFileSync(report.file, "utf8"));
+    for (const result of stored.results) {
+      assert.equal(result.ok, false);
+      assert.match(result.error, /^claude: /);
+      assert.doesNotMatch(result.error, /[A-Za-z]:[\\/]|\/private\//);
+      assert.ok(!result.error.includes(process.execPath));
+    }
+  } finally {
+    f.cleanup();
+  }
+});
+
 test("confirmation refuses non-TTY, declined confirmation and missing agents before starting anything", async () => {
   const f = fixture();
   try {
@@ -117,6 +164,11 @@ test("--yes never grants check trust, including trust for another directory or a
     assert.equal(fs.existsSync(sentinel), false);
     assert.equal(confirmChecks.mock.calls.length, 0);
     assert.equal(report.trust_checks, false);
+    for (const result of report.results) {
+      assert.match(result.checks[0].hint!, /basics check <project>/);
+      assert.ok(!result.checks[0].hint!.includes(f.base));
+      assert.doesNotMatch(result.checks[0].hint!, /[A-Za-z]:[\\/]|\/(?:tmp|private|var|Users|home)\//);
+    }
     assert.ok(report.results.every((r) => r.ok && r.checks_passed === 0 && r.checks[0].status === "untrusted"));
     assert.ok(
       report.results.every((r) => r.checks[0].command === command && /basics check .* --only verify --trust/.test(r.checks[0].hint!)),

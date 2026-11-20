@@ -15,6 +15,7 @@ export const routeModules = {
   projects: () => import("@/pages/projects"),
   proposal: () => import("@/pages/proposal"),
   recommend: () => import("@/pages/recommend"),
+  compare: () => import("@/pages/compare"),
   skills: () => import("@/pages/skills"),
   settings: () => import("@/pages/settings"),
 };
@@ -28,6 +29,7 @@ const ROUTE_FOR_PATH: Partial<Record<string, RouteModuleKey>> = {
   "/graph": "graph",
   "/inbox": "inbox",
   "/recommend": "recommend",
+  "/compare": "compare",
   "/skills": "skills",
   "/settings": "settings",
 };

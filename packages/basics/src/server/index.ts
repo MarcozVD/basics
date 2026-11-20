@@ -18,7 +18,8 @@ export async function startServer(opts: {
   // Wait for the first scan: the vault cache relies on the watcher for external edits, so a change
   // made after the server answers must be seen.
   await events.ready();
-  const app = createApp({ root: opts.root, uiDir, events });
+  const closeHandlers: (() => Promise<void>)[] = [];
+  const app = createApp({ root: opts.root, uiDir, events, onClose: (close) => closeHandlers.push(close) });
   const server = serve({ fetch: app.fetch, port, hostname: host });
 
   await new Promise<void>((resolve, reject) => {
@@ -29,6 +30,7 @@ export async function startServer(opts: {
   return {
     url: `http://${host}:${port}`,
     close: async () => {
+      for (const close of closeHandlers) await close();
       await events.close();
       await new Promise<void>((resolve, reject) => {
         server.close((err) => (err ? reject(err) : resolve()));

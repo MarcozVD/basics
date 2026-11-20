@@ -10,6 +10,11 @@ if (mode === "sleep") {
   fs.writeFileSync("argv.json", JSON.stringify({ args, initial, withBasics, cwd: process.cwd(), home: process.env.HOME }));
   fs.writeFileSync("package.json", JSON.stringify({ dependencies: { react: "19.0.0" } }));
   fs.writeFileSync("verify.cjs", `process.exit(${withBasics ? 0 : 1});\n`);
+  if (mode === "check-tree")
+    fs.writeFileSync(
+      "verify.cjs",
+      `const child = require('node:child_process').spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {stdio:'inherit'}); require('node:fs').writeFileSync('check-pid', String(process.pid)); require('node:fs').writeFileSync('child-pid', String(child.pid)); setInterval(() => {}, 1000);`,
+    );
   if (mode === "tools") {
     const venv = process.env.FAKE_COMPARE_VENV || ".venv";
     const scripts = path.join(venv, process.platform === "win32" ? "Scripts" : "bin");
@@ -68,5 +73,6 @@ if (mode === "sleep") {
         part: { tokens: { input: 12, output: 5, ...(mode === "cache-tokens" ? { cache: { read: 100, write: 20 } } : {}) } },
       });
   }
-  if (mode === "fail") process.exitCode = 3;
+  if (mode === "fail-path") console.error(`Could not start "${process.execPath}" from "/private/agent tools/claude"`);
+  if (mode === "fail" || mode === "fail-path") process.exitCode = 3;
 }

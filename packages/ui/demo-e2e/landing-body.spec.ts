@@ -74,7 +74,8 @@ test("README contains matching app parts and generated transcripts and a sticky 
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/basics/");
   const body = page.getByTestId("landing-readme");
-  await expect(body.getByRole("heading", { level: 2 })).toHaveCount(6);
+  await expect(body.getByRole("heading", { level: 2 })).toHaveCount(7);
+  await expect(body.getByRole("heading", { level: 2 }).last()).toHaveAccessibleName("Compare the same task, both ways");
   await expect(body.getByRole("img", { name: "The Basics review loop", exact: true })).toHaveCount(1);
   await expect(body.locator('.app-part[data-part="proposal"]')).toHaveCount(1);
   await expect(body).toContainText(content.exported.tree);
@@ -83,6 +84,10 @@ test("README contains matching app parts and generated transcripts and a sticky 
   await expect(body).toContainText("npx tsc --noEmit");
   await expect(body).toContainText("--list");
   const toc = body.getByRole("navigation", { name: "On this page", exact: true });
+  await expect(toc.getByRole("link", { name: "Compare the same task, both ways", exact: true })).toHaveAttribute(
+    "href",
+    "#recorded-compare-title",
+  );
   expect(await toc.evaluate((element) => getComputedStyle(element).position)).toBe("sticky");
   await toc.getByRole("link", { name: "Your knowledge is scattered in chats", exact: true }).click();
   await expect(page).toHaveURL(/#your-notes$/);

@@ -2,6 +2,8 @@
 // biome-ignore lint/correctness/noUnusedImports: used by the Vue template.
 import { withBase } from "vitepress";
 import { ref } from "vue";
+// biome-ignore lint/correctness/noUnusedImports: used by the Vue template.
+import comparison from "../../../../scripts/demo/compare-recorded.json";
 import content from "../../../../scripts/demo/generated/landing.json";
 // biome-ignore lint/correctness/noUnusedImports: used by the Vue template.
 import AgentTranscript from "./AgentTranscript.vue";
@@ -32,8 +34,8 @@ useReveal(revealRoot);
 <template>
   <div ref="revealRoot" class="landing-readme" data-testid="landing-readme">
     <nav class="landing-toc" aria-label="On this page">
-      <ol><li data-reveal="0" v-for="(section, index) in sections" :key="section.id"><a :href="`#${section.id}`"><span :style="{ color: `var(--basics-${section.type})` }" aria-hidden="true">{{ String(index + 1).padStart(2, '0') }}</span>{{ section.title }}</a></li></ol>
-      <a class="landing-toc-faq" data-reveal="1" href="#landing-faq-title"><span aria-hidden="true">07</span>Questions before you install</a>
+      <ol><li data-reveal="0" v-for="(section, index) in sections" :key="section.id"><a :href="`#${section.id}`"><span :style="{ color: `var(--basics-${section.type})` }" aria-hidden="true">{{ String(index + 1).padStart(2, '0') }}</span>{{ section.title }}</a></li><li data-reveal="0"><a href="#recorded-compare-title"><span :style="{ color: 'var(--basics-layer)' }" aria-hidden="true">07</span>Compare the same task, both ways</a></li></ol>
+      <a class="landing-toc-faq" data-reveal="1" href="#landing-faq-title"><span aria-hidden="true">08</span>Questions before you install</a>
     </nav>
     <div class="landing-sections">
       <section v-for="(section, index) in sections" :key="section.id" :aria-labelledby="section.id" class="landing-section" :style="{ '--section-color': `var(--basics-${section.type})` }">
@@ -83,6 +85,24 @@ useReveal(revealRoot);
           <figure class="landing-artifact"><AgentTranscript data-reveal="3" :command="check.command.en" :answer-lines="check.answerLines.en" /><figcaption data-reveal="5">Simulated transcript of the demo stack's check list. Commands are listed, not run in your browser.</figcaption></figure>
         </template>
       </section>
+    <section class="landing-section" aria-labelledby="recorded-compare-title" style="--section-color: var(--basics-layer)">
+        <h2 id="recorded-compare-title"><span class="landing-section-number" data-reveal="0" aria-hidden="true">07</span><span data-reveal="1">Compare the same task, both ways</span></h2>
+        <p data-reveal="2">One recorded Claude Haiku run built a CSV reporting tool with and without Basics. This snapshot is not evidence of a general improvement. No agent runs in your browser.</p>
+        <div data-reveal="3" class="landing-artifact" style="overflow-x: auto">
+          <table class="recorded-compare">
+            <caption>One recorded run: CSV report</caption>
+            <thead><tr><th scope="col">Condition</th><th scope="col">Time</th><th scope="col">Checks passed</th><th scope="col">Stack agreement</th></tr></thead>
+            <tbody><tr v-for="result in comparison.results" :key="result.condition"><th scope="row">{{ result.condition === 'with_basics' ? 'With Basics' : 'Without Basics' }}</th><td>{{ (result.wall_ms / 1000).toFixed(1) }} s</td><td>{{ result.checks_passed }}/{{ result.checks.length }}</td><td>{{ result.stack_match === null ? 'Not reported' : `${Math.round(result.stack_match * 100)}%` }}</td></tr></tbody>
+          </table>
+        </div>
+        <p data-reveal="4"><a :href="withBase('/demo/compare/')">Inspect the recorded outputs and checks</a></p>
+    </section>
     </div>
   </div>
 </template>
+
+<style scoped>
+.recorded-compare { width: 100%; border-collapse: collapse; font-size: 14px; }
+.recorded-compare caption { text-align: left; margin-bottom: 16px; }
+.recorded-compare :is(th, td) { padding: 12px; text-align: left; border-bottom: 1px solid var(--basics-border); }
+</style>
