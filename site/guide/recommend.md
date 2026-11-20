@@ -23,7 +23,7 @@ backend
 | `history` | project history from accepted outcomes; printed only when it is not zero. See [Project history](#project-history). |
 
 Profiles whose description matches are returned too, which is why the same description can suggest a whole stack. A
-layer with no candidate above zero is omitted from the output — the CLI prints no section for it, `recommend_stack`
+layer with no candidate above zero is omitted from the output. The CLI prints no section for it, and `recommend_stack`
 leaves it out of `layers` (the core response still returns it as an empty list, for a stable API), and the **Recommend**
 screen renders no section for it. When every requested layer is empty, the screen shows one quiet message instead.
 
@@ -37,8 +37,8 @@ A tech that fits several layers appears once, under the layer of its note's firs
 
 ## Ask an agent
 
-The ranking above is local. If you would rather have a coding agent of your choice make the call — with its own model
-and its own reading of your vault — the **Recommend** screen has an **Ask an agent** action next to **Recommend**.
+The ranking above is local. If you would rather have a coding agent of your choice make the call, with its own model
+and its own reading of your vault, the **Recommend** screen has an **Ask an agent** action next to **Recommend**.
 
 It opens a compact panel:
 
@@ -71,7 +71,7 @@ Basics only passes the agent the description, the chosen layers and the `plan-st
 ## Keyword scoring
 
 - Positive terms in `use_when` and `performs_best` add points; tags also count.
-- Negations are understood in English and Spanish: `without SSR`, `no UI`, `avoid SSR`, `sin SEO`, `no UI`,
+- Negations are understood in English and Spanish: `without SSR`, `no UI`, `avoid SSR`, `sin SEO`,
   `evitar SSR`. The negated clause adds nothing for its positive terms, a matching `use_when` subtracts points, and a
   matching `avoid_when` adds them.
 - Naming a language (`in TypeScript`, `en TypeScript`, `in Rust`) boosts the techs written in that language. In each layer
@@ -162,13 +162,26 @@ The model is configurable with `embeddingsModel` (default `Xenova/multilingual-e
 
 ## Evaluating the ranking
 
-The eval checks the ranking against labelled cases from the repo. It runs four sets:
+The eval checks the ranking against labelled cases from the repo. A case gives a project description and the techs it
+expects in each layer. Every layer a case expects counts once, and each score is an average over those layer expectations,
+from 0 to 1, where higher is better:
 
-- **Official keyword cases**: 72 cases written against the official packs.
-- **Realistic fixture vault**: 25 cases on a larger vault written like a real one (`npm run eval -- --realistic`).
+- **hit@1**: the top-ranked tech in the layer is the expected one. When a case accepts several techs, any of them counts.
+- **hit@3**: one of the three top-ranked techs in the layer is an expected one.
+- **MRR** (mean reciprocal rank): the average of 1 divided by the rank of the first expected tech in the full ranking of
+  candidates with a positive score. First place scores 1, second place 0.5, third place about 0.33, and no expected tech
+  in the ranking scores 0.
+
+It runs four sets:
+
+- **Official keyword cases**: 72 cases written against the official packs. They score close to 1.0, so they mainly catch
+  regressions.
+- **Realistic fixture vault**: 25 cases on a larger vault written like a real one, also close to 1.0. Run only this set with
+  `npm run eval -- --realistic`.
 - **Public GitHub repositories**: 150 repositories, each with its description and the technologies its manifests use.
-  105 cases tune the ranking and 45 are held out. Held-out cases are never used for tuning. Libraries, examples and mixed
-  repositories stay in the full set. The apps-only rows (76 cases, 53 tune and 23 held out) measure applications alone.
+  105 cases tune the ranking and 45 are held out. Held-out cases are never used for tuning, so they are the closest measure
+  here of projects the ranking did not see. Libraries, examples and mixed repositories stay in the full set. The apps-only
+  rows (76 cases, 53 tune and 23 held out) keep only the application repositories and measure applications alone.
 - **Private set**: runs only on a maintainer's machine, from `BASICS_PRIVATE_EVAL`. CI always skips it, and its numbers
   are not comparable with the public sets.
 

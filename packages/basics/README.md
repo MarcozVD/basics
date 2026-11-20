@@ -3,7 +3,7 @@
 [![CI](https://github.com/MarcozVD/basics/actions/workflows/ci.yml/badge.svg)](https://github.com/MarcozVD/basics/actions/workflows/ci.yml)
 
 CLI, local web UI and MCP server for [Basics](https://github.com/MarcozVD/basics): a personal tech-stack vault in
-Markdown that your coding agents read and extend. Agents never write behind your back — every change lands in an
+Markdown that your coding agents read and extend. Agents never write behind your back: every change lands in an
 inbox for you to approve.
 
 ## Install
@@ -36,7 +36,7 @@ claude mcp add basics --scope user -- basics-mcp /absolute/path/to/my-vault
 ```
 
 Main commands: `basics init`, `list`, `validate`, `new`, `recommend`, `inbox`, `pack`, `export`, `detect`, `check`,
-`embeddings`, `doctor` and `ui`. Run `basics <command> --help` for flags.
+`compare`, `embeddings`, `doctor` and `ui`. Run `basics <command> --help` for flags.
 
 ## Docs
 
@@ -49,4 +49,4 @@ Full documentation: [marcozvd.github.io/basics](https://marcozvd.github.io/basic
 
 ## License
 
-MIT — see [LICENSE](https://github.com/MarcozVD/basics/blob/main/LICENSE).
+MIT. See [LICENSE](https://github.com/MarcozVD/basics/blob/main/LICENSE).

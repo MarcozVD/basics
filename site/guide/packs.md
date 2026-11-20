@@ -212,7 +212,7 @@ an **Approve all** button.
 
 ## Updating from older packs
 
-Some notes moved between packs in this release: PostgreSQL and SQL migrations moved from `python-api` to `databases`, SQLite
+Some notes moved between packs in 1.9.0: PostgreSQL and SQL migrations moved from `python-api` to `databases`, SQLite
 moved from `rust-api` to `databases`, TypeScript, its strict practice and its typecheck check moved from `web-typescript`
 to `typescript`, and Python, pytest, Python typing and the Python lint check moved from `python-api` to `python`. After you
 upgrade, `basics pack update` proposes each moved note under its new pack, and proposes the new notes too, such as the `ml`
@@ -234,7 +234,7 @@ basics pack add acme/my-pack --path packs/docker --lang en   # a subdirectory ho
 
 `pack add` downloads `https://codeload.github.com/<owner>/<repo>/tar.gz/<ref>` (default `HEAD`), extracts it into
 `<vault>/.basics/packs/<owner>/<repo>/` with a `source.json` describing the repo, ref, `--path` and version, and prints what
-it proposed — for example:
+it proposed, for example:
 
 ```
 added acme/my-pack@v2.1.0
@@ -255,14 +255,14 @@ basics inbox approve-all --pack acme/my-pack
 or, in the UI, open the filtered inbox and hit **Approve all**. Once approved, notes get
 `source: pack:<owner>/<repo>@<version>` and `pack_lang`, and `basics pack list` shows the installed version,
 `pack update <owner>/<repo>` re-fetches the cached ref and proposes only the changed notes (a no-op when the version did
-not increase), and `basics pack remove <owner>/<repo>` deletes the cache only — installed notes stay.
+not increase), and `basics pack remove <owner>/<repo>` deletes the cache only. Installed notes stay.
 
 ### Safety rules
 
 A community pack is **untrusted content**: it is never executed and never written straight into the vault.
 
-- Only `pack.json` and `notes/<lang>/<type-dir>/*.md` are read from the archive. Everything else — READMEs, scripts,
-  config files, nested folders — is ignored.
+- Only `pack.json` and `notes/<lang>/<type-dir>/*.md` are read from the archive. Everything else (READMEs, scripts,
+  config files, nested folders) is ignored.
 - Limits: the whole archive is rejected if any file is **> 256 KB**, it has **> 1000 entries**, or it unpacks to
   **> 10 MB**.
 - Symlinks, hard links, absolute paths and `..` segments are rejected.
@@ -299,7 +299,7 @@ my-pack/
       ... same ids as en/ ...
 ```
 
-A note also needs to sit in the type directory it declares — `layers/`, `tech/`, `practices/`, `checks/`, `profiles/`,
+A note also needs to sit in the type directory it declares: `layers/`, `tech/`, `practices/`, `checks/`, `profiles/`,
 `projects/`. Anything in other directories, or with other file names, is ignored.
 
 `pack.json`:
