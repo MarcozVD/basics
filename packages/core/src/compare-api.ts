@@ -1,8 +1,35 @@
 import type { AgentId } from "./api.js";
 
-export type CompareCondition = "without_basics" | "with_basics";
+export const COMPARE_CONDITIONS = ["none", "agents-md", "basics"] as const;
+export type CompareCondition = (typeof COMPARE_CONDITIONS)[number];
+export type LegacyCompareCondition = "without_basics" | "with_basics";
+export function normalizeCompareCondition(condition: CompareCondition | LegacyCompareCondition): CompareCondition {
+  return condition === "without_basics" ? "none" : condition === "with_basics" ? "basics" : condition;
+}
+export function reportConditions(report: Pick<CompareReport, "conditions" | "results">): CompareCondition[] {
+  return [...new Set((report.conditions ?? report.results.map((r) => r.condition)).map(normalizeCompareCondition))];
+}
+export interface McpToolCalls {
+  total: number;
+  by_tool: Record<string, number>;
+}
+export interface AcceptanceSpec {
+  /** Runner-owned JSON bundle: {files: {relativePath: UTF8Content}}. Never sent to agents. */
+  bundle: string;
+  command: string;
+}
+export interface AcceptanceResult {
+  status: "pass" | "fail" | "error";
+  passed: number | null;
+  failed: number | null;
+  reason?: string;
+  duration_ms: number;
+}
 export type CompareCheckStatus = "pass" | "fail" | "skip" | "timeout" | "missing_tool" | "untrusted";
 export interface CompareRequest {
+  conditions?: CompareCondition[];
+  acceptance?: AcceptanceSpec;
+  studyDir?: string;
   task?: string;
   sample?: string;
   agent: AgentId;
@@ -26,7 +53,12 @@ export interface CompareStats {
 }
 export interface CompareResult {
   run: number;
-  condition: CompareCondition;
+  condition: CompareCondition | LegacyCompareCondition;
+  mcp_tool_calls?: McpToolCalls | null;
+  acceptance?: AcceptanceResult | null;
+  contaminated?: boolean;
+  contamination_reasons?: string[];
+  shutdown_confirmed?: boolean;
   ok: boolean;
   error?: string;
   timed_out: boolean;
@@ -42,6 +74,9 @@ export interface CompareResult {
   cleanup_errors: string[];
 }
 export interface CompareReport {
+  conditions?: CompareCondition[];
+  /** Event-based detection is incomplete; no enforced filesystem isolation. */
+  validity_note?: string;
   schema_version: number;
   id: string;
   at: string;
@@ -68,6 +103,9 @@ export interface CompareReport {
       files_added: CompareStats | null;
       files_changed: CompareStats | null;
       files_deleted: CompareStats | null;
+      mcp_tool_calls?: CompareStats | null;
+      acceptance_passed?: CompareStats | null;
+      contaminated_runs?: number;
     }
   >;
 }

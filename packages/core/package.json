@@ -21,6 +21,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./compare": {
+      "types": "./dist/compare-api.d.ts",
+      "default": "./dist/compare-api.js"
     }
   },
   "files": [
