@@ -78,7 +78,7 @@ basics --vault ~/basics-vault compare --sample rust-api/login-api --agent claude
 - `--trust-checks` approves the listed vault check commands for that invocation only. Nothing is saved to trust.
 - `--keep` keeps the project folders and `--json` prints the report.
 
-Each agent run is a full session that uses your quota or credits. Compare shows the planned count first: two sessions by default, and `--yes` is required outside a terminal. Before you quote a result, read the [compare guide](https://marcozvd.github.io/basics/guide/compare.html). One run proves nothing, and stack match measures agreement with Basics' own recommendation, not code quality.
+Each agent run is a full session that uses your quota or credits. Compare shows the planned count first: two sessions by default, and `--yes` is required outside a terminal. Before you quote a result, read the [compare guide](https://marcozvd.github.io/basics/guide/compare.html). One run proves nothing, and stack match measures agreement with Basics' own recommendation, not code quality. The web UI runs the same comparisons on a Compare page (`g` then `c`), with live progress, cancel and saved history.
 
 ## Documentation
 

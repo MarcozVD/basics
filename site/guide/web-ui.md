@@ -12,7 +12,7 @@ sees the edit and requests stay fast on large vaults.
 
 ## Screens
 
-Navigation is a sidebar on the left by default: Home, Explore, Projects, Graph, Inbox (with the pending count), Recommend and
+Navigation is a sidebar on the left by default: Home, Explore, Projects, Graph, Inbox (with the pending count), Recommend, Compare and
 Skills, with **Settings** at the bottom. The top of the sidebar holds the vault folder and a search button that opens the command
 palette. On windows 1280px and wider the sidebar shows the labels. From 768px to 1279px it is an icon rail, and hovering or
 focusing an item shows its name, shortcut and purpose. Below 768px the sidebar is hidden; a menu button opens it as a drawer.
@@ -38,6 +38,7 @@ There are no page sidebars; secondary panels are overlays closed with `Esc`. You
 | **Settings** | Six sections: **General** (language, theme, navigation style and bar position, vault path; in the [desktop app](desktop) also **Open folder** and **Change folder**), **Startup**, **Agents** (connect or disconnect each coding agent and see the file change it makes; agents Basics does not find sit under **Other agents**, and **Other agent: manual setup** gives JSON, TOML, HTTP and command snippets to copy), **Search** (semantic search on or off; project history on or off, and its strength), **Updates** and **About**. Each change applies as soon as you pick it; there is no Save button. Startup and Updates are desktop-only; see [Desktop settings](desktop#desktop-settings). |
 | **Skills** | Every skill installed for your coding agents, grouped by area. One filter row holds the search and an agent select, with area chips beside it. Expand a row for its path, version and area control; the area control is where you change a skill's area, and **Changed by you** shows when you have. |
 | **Recommend** | Project description first; layers are one collapsed line (`All layers, 3 per layer`) that opens the layer chips and per-layer stepper. Once there is a result, the example prompts hide and the intro moves behind `?`. Profiles, then a shortlist with one section per layer: each tech is one card with its title and reasons (**Matches**, **Fits profile**, **Watch out**), and **Also fits** names its other layers. No scores show until you open a card's **Why**. Select techs, then export with the **STACK.md / AGENTS.md / CLAUDE.md / Cursor** tabs of the modal, each with copy or download. Shows whether the mode is **Keywords** or **Hybrid**. While a new ranking runs, the previous one stays on screen, dimmed. On an empty vault it asks you to install the starter packs first. An **Ask an agent** run is kept per browser tab: it keeps going when you leave the page, and the Recommend item in the navigation (sidebar or floating bar) shows its progress. |
+| **Compare** | Runs the same task with and without Basics from the browser and shows both results side by side. Starting a run asks you to confirm the agent runs and, separately, to approve any checks. See [Compare](#compare). |
 
 Each screen's one-line intro sits under its title until the screen has content, then moves behind the `?` in the header. Settings keeps its intro behind the `?`. Its `×` hides the intro for that screen in this browser, and the `?` still shows it.
 
@@ -48,7 +49,7 @@ Each page names itself in the browser tab, for example `Explore · Basics`. The 
 A note and a proposal have a **Back** control that names the page you came from. Alt+Left, Alt+Right and the mouse side
 buttons also move back and forward through the pages you visited in this session, and each page returns with its scroll
 position and Explore's filters restored. A note or proposal opened directly, with no earlier page, goes back to Explore or
-Inbox. Home, Explore, Projects, Graph, Inbox, Recommend, Skills and Settings have no back control; you reach them from the
+Inbox. Home, Explore, Projects, Graph, Inbox, Recommend, Compare, Skills and Settings have no back control; you reach them from the
 navigation. If a note has unsaved changes, going back asks you first.
 
 ## Reviewing proposals
@@ -66,6 +67,60 @@ Closing the browser tab, or reloading it, before the 6 seconds end cancels the d
 If an edit fails, your draft is kept. A field error reopens the editor with the errors shown on the fields. Other errors
 show a toast with **Open**, which brings the editor back with your draft.
 
+## Compare
+
+Compare runs the same comparison as [`basics compare`](./compare.md) from the browser. Open it from the sidebar, with `g` then
+`c`, or from the command palette. It needs a coding agent installed on this computer: Claude Code, Codex or OpenCode. Without
+one, the page says so and cannot start a run.
+
+**Set up a run.** Choose a task: pick a **Pack sample**, a task from an official pack in your language, or choose **Write your
+own task** and describe what the agent should build. Pick the agent and, if you want, a model; **Agent default** leaves the model
+to the agent. **Runs per condition** accepts 1 to 10, and **Timeout per condition (seconds)** accepts 1 to 3600. **Review run**
+prepares the plan on the server. The form stays locked while a comparison is being prepared or runs.
+
+**Confirm the agent runs.** The first dialog says how many agent runs will start. Each one uses your agent account's usual
+quota and may incur provider charges. Basics cannot predict the cost, so the dialog shows no amount.
+
+**Approve checks separately.** The second step lists each check ID and its command. The **Approve listed checks for this run**
+checkbox is off by default. Without it, the checks stay untrusted and do not run, and the agent runs still go ahead. Approval
+covers this comparison only and is never saved as vault trust, the same as `--trust-checks` on the command line.
+
+**Watch and cancel.** Progress moves through Planned, Agent running, Checking output, Condition finished and Finished, and it
+updates live. If you leave the page and come back, it shows the comparison that is still running. **Cancel** stops the agent
+and any running check. The page then shows "Cancelling and cleaning up..." until the temporary folders are removed. A cancelled
+run stays in the history, marked as cancelled.
+
+Only one comparison runs at a time, cancellation and cleanup included. A start is refused when another comparison is running,
+when the review is more than five minutes old, or when the check commands changed. The page then shows "Comparison unavailable";
+review the run again.
+
+**Read the result.** The **At a glance** table sits above the detailed cards and compares Without Basics with With Basics on:
+
+- stack agreement, as "N of M layers";
+- checks passed, as "N of M approved", with unapproved commands counted separately;
+- wall time, in seconds;
+- tokens (input + output, excluding cache).
+
+With repeated runs, each figure also shows the mean and the standard deviation (SD). A figure the CLI did not report reads
+"Not reported", never zero.
+
+Below the table, the two cards sit side by side on a wide screen and stack on a narrow one. For each run, a card shows the
+recommended and the used technologies per layer, with a match or no-match mark ("Used: none detected" when nothing was found);
+every check's status and command; wall time; tokens, with cache read and cache creation on their own rows when reported; added,
+changed, deleted and excluded files; and an excerpt of the assistant's output, up to 3000 characters. Check output and file
+lists open with keyboard-operable disclosures.
+
+**History.** The list shows up to the 200 latest saved comparisons, with their date, agent and model. Open one to read its cards
+again. **Delete result** asks "Delete this result?" and says that only this saved result is deleted, while project files and
+vault notes stay intact. Cancel keeps it. Deleting removes only that one JSON file.
+
+**Limits.** The limits in the [CLI guide](./compare.md#limits) apply here too: one run proves nothing, stack agreement is not
+quality, and token totals are counts, not a bill.
+
+**The landing page.** The Compare section of the landing page and the Compare page of the demo show one recorded Claude Haiku
+run on a CSV report task, with and without Basics. It is a static snapshot. No agent runs in the demo, and it is not evidence of
+a general improvement.
+
 ## Shortcuts
 
 | Keys | Action |
@@ -74,7 +129,7 @@ show a toast with **Open**, which brings the editor back with your draft.
 | `Ctrl`/`⌘+,` | Open Settings |
 | `Alt`+`←` / `Alt`+`→`, mouse buttons 3 and 4 | Back / forward through the pages you visited, with scroll and filters restored |
 | `Ctrl`/`⌘+B` | Show or hide the sidebar's labels (full sidebar or icon rail); no effect in Floating style |
-| `g` then `h` / `e` / `p` / `g` / `i` / `r` / `k` | Go to Home / Explore / Projects / Graph / Inbox / Recommend / Skills |
+| `g` then `h` / `e` / `p` / `g` / `i` / `r` / `c` / `k` | Go to Home / Explore / Projects / Graph / Inbox / Recommend / Compare / Skills |
 | `Ctrl`/`⌘+S` | Save the note in the editor |
 | `Ctrl`/`⌘+F` | Focus search in Explore and in the graph. In the [desktop app](desktop) it opens the command palette search instead |
 | `↑` / `↓`, `Enter` | Move through lists (Explore, Inbox, palette) and open. In the Inbox the selected row takes focus on load, and the arrows move the selection and its focus together |

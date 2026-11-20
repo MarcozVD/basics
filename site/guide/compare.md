@@ -9,7 +9,9 @@ basics --vault ~/basics-vault compare --sample rust-api/login-api --agent claude
 basics --vault ~/basics-vault compare "JSON API with login and tests" --agent codex --runs 3
 ```
 
-The full flag list is in the [CLI reference](../reference/cli.md). Before you quote a result, read [Limits](#limits).
+The full flag list is in the [CLI reference](../reference/cli.md). The web UI runs the same comparisons on its
+[Compare page](./web-ui.md#compare), with the same confirmations and check approval. Before you quote a result, read
+[Limits](#limits).
 
 ## What each run does
 
@@ -168,6 +170,8 @@ Read these before you quote any number.
   Compare cannot tell which one caused a difference.
 - **Results change with the model, the agent version, your account and the day.** They cannot be reproduced on demand.
 - **Compare is a personal test, not a benchmark.** Use it to learn how Basics behaves with your agent and your tasks.
+- **The landing page shows one recorded run.** It is one Claude Haiku session on a CSV report task, kept as an example. It is
+  not evidence of a general improvement.
 
 ## Safety and trust
 
