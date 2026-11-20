@@ -196,3 +196,53 @@ test("the shell fits a 320px browser and the 900x600 minimum window", async ({ p
     }
   }
 });
+
+test("at 390px the menu button has its own bar and never covers scrolled content on any page", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 800 });
+  for (const route of ["/", "/explore", "/projects", "/graph", "/inbox", "/recommend", "/compare", "/skills", "/settings"]) {
+    await page.goto(route);
+    await settle(page);
+    await page.getByTestId("sidebar-menu").waitFor();
+    await page.evaluate(() => {
+      const main = document.getElementById("main-content");
+      if (main) main.scrollTop = 120;
+    });
+    const geometry = await page.evaluate(() => {
+      const menu = document.querySelector('[data-testid="sidebar-menu"]')?.getBoundingClientRect();
+      const main = document.getElementById("main-content")?.getBoundingClientRect();
+      return { menuBottom: menu?.bottom ?? 0, mainTop: main?.top ?? 0, overflow: document.documentElement.scrollWidth - window.innerWidth };
+    });
+    expect(geometry.menuBottom, `${route} menu button sits above the scrolling panel`).toBeLessThanOrEqual(geometry.mainTop + 0.5);
+    expect(geometry.overflow, `${route} horizontal overflow`).toBeLessThanOrEqual(1);
+  }
+});
+
+test("at 390px Settings copy wraps inside the panel in English and Spanish", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  for (const language of ["en", "es"]) {
+    await page.request.put("/api/config", { data: { language } });
+    await page.goto("/settings?section=search");
+    await page.locator("#settings-search").waitFor();
+    const clipped = await page
+      .locator("#settings-search p")
+      .evaluateAll((nodes) =>
+        nodes
+          .filter((node) => node.getBoundingClientRect().right > window.innerWidth || node.scrollWidth > node.clientWidth + 1)
+          .map((node) => node.textContent),
+      );
+    expect(clipped, `${language} clipped paragraphs`).toEqual([]);
+  }
+  await page.request.put("/api/config", { data: { language: "en" } });
+});
+
+test("Compare text inputs share the rounded-rectangle form style of its selects", async ({ page }) => {
+  await page.goto("/compare");
+  await settle(page);
+  const radius = (selector: string) =>
+    page.locator(selector).evaluate((node) => getComputedStyle(node.closest("div[class*='overflow-hidden']") ?? node).borderTopLeftRadius);
+  const select = await page
+    .locator("select")
+    .first()
+    .evaluate((node) => getComputedStyle(node).borderTopLeftRadius);
+  for (const id of ["#compare-model", "#compare-runs", "#compare-timeout"]) expect(await radius(id), id).toBe(select);
+});
