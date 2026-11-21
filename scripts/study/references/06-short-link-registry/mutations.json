@@ -1,0 +1,9 @@
+[
+  {
+    "name": "accepts-ftp",
+    "file": "main.mjs",
+    "find": "[\"http:\", \"https:\"].includes(url.protocol)",
+    "replace": "[\"http:\", \"https:\", \"ftp:\"].includes(url.protocol)"
+  },
+  { "name": "stores-raw-target", "file": "main.mjs", "find": "  return url.href;", "replace": "  return target;" }
+]

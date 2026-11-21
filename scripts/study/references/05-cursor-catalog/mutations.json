@@ -1,0 +1,14 @@
+[
+  {
+    "name": "desc-reverses-tie-break",
+    "file": "main.mjs",
+    "find": "  return a.id - b.id;",
+    "replace": "  return dir === \"asc\" ? a.id - b.id : b.id - a.id;"
+  },
+  {
+    "name": "cursor-on-full-page",
+    "file": "main.mjs",
+    "find": "const more = rest.length > limit;",
+    "replace": "const more = rest.length >= limit;"
+  }
+]

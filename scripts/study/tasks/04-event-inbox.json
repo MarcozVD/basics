@@ -1,0 +1,6 @@
+{
+  "id": "04-event-inbox",
+  "title": "Deduplicating event inbox",
+  "interface": "http",
+  "prompt": "Build an in-memory HTTP event inbox. POST /events accepts a JSON object with exactly id (string matching [A-Za-z0-9_-]{1,64}), type (nonempty string of at most 40 characters), at (integer >= 0, a logical timestamp) and payload (a JSON object). A new event returns 201 with the event as {id,type,at,payload}. Delivering an id that already exists with an identical event (payload compared as JSON values, ignoring object key order) returns 200 with the stored event and changes nothing; an existing id with any different field returns 409 and changes nothing. Invalid or malformed input returns 400 and changes nothing. GET /events/:id returns the event or 404. GET /events returns 200 {items,total} with all events ordered by at ascending, then by id in plain code-unit string order, independent of arrival order; an optional type query parameter filters by exact type, and total is the filtered count. Unknown query parameters return 400. No persistence or external services are needed."
+}

@@ -1,0 +1,14 @@
+[
+  {
+    "name": "conflict-accepted-as-duplicate",
+    "file": "main.mjs",
+    "find": "if (same(existing, event)) return send(200, existing);",
+    "replace": "return send(200, existing);"
+  },
+  {
+    "name": "ties-by-arrival",
+    "file": "main.mjs",
+    "find": ".sort((a, b) => a.at - b.at || order(a.id, b.id));",
+    "replace": ".sort((a, b) => a.at - b.at);"
+  }
+]
