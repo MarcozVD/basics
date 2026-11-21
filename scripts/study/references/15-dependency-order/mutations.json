@@ -1,0 +1,9 @@
+[
+  { "name": "reverses-edges", "file": "main.mjs", "find": "const [from, to] = edge;", "replace": "const [to, from] = edge;" },
+  {
+    "name": "misses-cycles",
+    "file": "main.mjs",
+    "find": "const cycle = order.length !== input.nodes.length;",
+    "replace": "const cycle = false;"
+  }
+]

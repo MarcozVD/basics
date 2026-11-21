@@ -1,0 +1,14 @@
+[
+  {
+    "name": "keeps-null",
+    "file": "main.mjs",
+    "find": "if (value === null) delete result[key];",
+    "replace": "if (value === null) result[key] = null;"
+  },
+  {
+    "name": "concatenates-arrays",
+    "file": "main.mjs",
+    "find": "else result[key] = object(value) ? merge(result[key], value) : value;",
+    "replace": "else result[key] = Array.isArray(value) && Array.isArray(result[key]) ? result[key].concat(value) : object(value) ? merge(result[key], value) : value;"
+  }
+]

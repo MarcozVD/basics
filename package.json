@@ -21,6 +21,7 @@
     "study:vault": "node scripts/study/build-vault.mjs",
     "study:run": "node scripts/study/run.mjs",
     "study:analyze": "node scripts/study/analyze.mjs",
+    "study:validate": "node scripts/study/validate.mjs",
     "demo:transcripts": "node scripts/demo/generate-transcripts.mjs",
     "docs:prepare": "npm run build && node scripts/demo/record.mjs && node scripts/demo/landing-data.mjs && npm run demo:transcripts",
     "docs:dev": "npm run docs:prepare && vitepress dev site",
