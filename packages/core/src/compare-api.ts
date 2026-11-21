@@ -99,6 +99,8 @@ export interface CompareStats {
   max: number;
 }
 export interface CompareResult {
+  resolved_model?: string;
+  reported_models?: string[];
   run: number;
   condition: CompareCondition | LegacyCompareCondition;
   mcp_tool_calls?: McpToolCalls | null;
