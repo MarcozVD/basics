@@ -193,12 +193,20 @@ function acquire(output) {
   writeJson(file, { pid: process.pid });
   return () => fs.unlinkSync(file);
 }
-export async function executeCell(lock, cell, output, signal) {
+async function loadRuntime(lock) {
   const runtime = fs.realpathSync(lock.config.runtime),
     require = createRequire(path.join(runtime, "package.json"));
   const { Vault } = await import(pathToFileURL(require.resolve("@marcozvd/basics-core")).href);
   const { runComparison } = await import(pathToFileURL(path.join(runtime, "dist/compare.js")).href);
   const { publicCompareReport } = await import(pathToFileURL(path.join(runtime, "dist/server/compare.js")).href);
+  return { Vault, runComparison, publicCompareReport, packsDir: path.join(runtime, "dist/packs") };
+}
+/**
+ * Run one cell through Basics compare. `inject` replaces the external runtime (modules and packs) so tests can exercise
+ * this exact path with the in-repo build and a fake agent; real studies never pass it.
+ */
+export async function executeCell(lock, cell, output, signal, inject = {}) {
+  const { Vault, runComparison, publicCompareReport, packsDir } = inject.modules ?? (await loadRuntime(lock));
   const agent = lock.config.agents[cell.agent],
     toolchains = { ...lock.config.toolchains };
   if (toolchains.python) toolchains.python3 ??= toolchains.python;
@@ -232,7 +240,7 @@ export async function executeCell(lock, cell, output, signal) {
       },
     },
     {
-      packsDir: path.join(runtime, "dist/packs"),
+      packsDir,
       tempRoot: path.join(output, "projects"),
       env,
       resolveExe: () => executable,
@@ -275,7 +283,7 @@ export async function runStudy(output, { execute = false, approveChecks = false,
       let result = null,
         error;
       try {
-        result = await (deps.executeCell ?? executeCell)(lock, cell, output, signal);
+        result = await (deps.executeCell ?? executeCell)(lock, cell, output, signal, deps);
       } catch (failure) {
         error = String(failure.message).replaceAll(repoRoot, "<study>").slice(0, 1000);
       }
