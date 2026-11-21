@@ -18,6 +18,7 @@
     "eval": "node scripts/eval.mjs",
     "eval:agent-roles": "node scripts/eval-agent-roles.mjs",
     "study:bundles": "node scripts/study/build-bundles.mjs",
+    "study:vault": "node scripts/study/build-vault.mjs",
     "demo:transcripts": "node scripts/demo/generate-transcripts.mjs",
     "docs:prepare": "npm run build && node scripts/demo/record.mjs && node scripts/demo/landing-data.mjs && npm run demo:transcripts",
     "docs:dev": "npm run docs:prepare && vitepress dev site",
