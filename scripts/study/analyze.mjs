@@ -38,7 +38,8 @@ function measurement(result, metric) {
   return Number.isFinite(value) ? value : null;
 }
 export function analyze(lock, records, { resamples = 10000 } = {}) {
-  const keyed = new Map(),
+  const pilot = lock.config.mode === "pilot",
+    keyed = new Map(),
     expected = new Map(lock.cells.map((cell) => [cell.id, cell]));
   for (const record of records) {
     const cell = expected.get(record.id);
@@ -115,7 +116,7 @@ export function analyze(lock, records, { resamples = 10000 } = {}) {
           if (repeats.length === lock.config.repeats) differences.push(describe(repeats).mean);
           else incomplete++;
         }
-        const isPrimary = primary(baseline).includes(metric);
+        const isPrimary = !pilot && primary(baseline).includes(metric);
         comparisons.push({
           agent,
           baseline,
@@ -131,7 +132,7 @@ export function analyze(lock, records, { resamples = 10000 } = {}) {
       }
   }
   const family = comparisons.filter((value) => value.primary);
-  if (family.length !== 12) throw new Error("Primary Holm family must contain 12 hypotheses");
+  if (!pilot && family.length !== 12) throw new Error("Primary Holm family must contain 12 hypotheses");
   const adjusted = holm(family.map((value) => value.inference?.pvalue ?? null));
   family.forEach((value, index) => {
     value.adjusted_pvalue = adjusted[index];
@@ -141,10 +142,13 @@ export function analyze(lock, records, { resamples = 10000 } = {}) {
     lock_hash: lock.hash,
     seed: lock.config.seed,
     unit: "paired task means over all locked repeats",
-    primary_family: 12,
+    mode: pilot ? "pilot" : "study",
+    non_primary: pilot,
+    primary_family: pilot ? 0 : 12,
     groups,
     comparisons,
     threats: [
+      ...(pilot ? ["Pilot run: reduced design, no primary hypotheses, no Holm family; descriptive only"] : []),
       "No enforced filesystem isolation; unreported or indirect reads may evade contamination detection",
       "Task and vault author overlap; only two agents and a small selected task set",
       "Missing acceptance observations and incomplete pairs can bias measured-run estimates",
@@ -190,6 +194,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   if (hash(body) !== expected) throw new Error("Study lock hash mismatch");
   const result = analyze(lock, loadRecords(output, lock));
   fs.writeFileSync(path.join(output, "analysis.json"), json(result));
+  if (result.non_primary) console.log("PILOT RUN: non-primary, descriptive only, no primary hypotheses");
   console.log("agent condition measured mean_acceptance fully_passing stack_match checks tokens mcp contaminated");
   for (const group of result.groups)
     console.log(

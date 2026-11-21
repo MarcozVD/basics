@@ -49,7 +49,7 @@ export function matrix(tasks, config) {
   ];
   const random = rng(config.seed),
     blocks = [];
-  for (const agent of ["claude", "opencode"])
+  for (const agent of ["claude", "opencode"].filter((name) => config.agents[name]))
     for (const task of tasks) for (let repeat = 1; repeat <= config.repeats; repeat++) blocks.push({ task: task.id, agent, repeat });
   for (let i = blocks.length - 1; i > 0; i--) {
     const j = Math.floor(random() * (i + 1));
@@ -112,14 +112,16 @@ export function preflight(config) {
     if (version !== agent.version) throw new Error(`Agent CLI version changed: ${id}`);
     agents[id] = { version, requested_model: agent.model };
   }
-  const catalogue = outputOf(config.agents.opencode.cli, ["models", "tokenharbor1"]);
-  if (
-    !catalogue
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .includes(config.agents.opencode.model)
-  )
-    throw new Error("Pinned OpenCode model missing from configured catalogue");
+  if (config.agents.opencode) {
+    const catalogue = outputOf(config.agents.opencode.cli, ["models", "tokenharbor1"]);
+    if (
+      !catalogue
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .includes(config.agents.opencode.model)
+    )
+      throw new Error("Pinned OpenCode model missing from configured catalogue");
+  }
   return {
     fake: false,
     os: os.platform(),
@@ -138,7 +140,9 @@ export function createStudy(configInput, output, deps = {}) {
   if (microUsd(config.reservation_usd) > microUsd(config.budget_usd)) throw new Error("Reservation exceeds batch budget");
   if (inside(repoRoot, output)) throw new Error("Study output must stay outside the source checkout");
   const metadata = (deps.preflight ?? preflight)(config);
-  const tasks = loadTasks();
+  const every = loadTasks(),
+    tasks = config.tasks ? every.filter((task) => config.tasks.includes(task.id)) : every;
+  if (config.tasks && tasks.length !== config.tasks.length) throw new Error("Pilot lists an unknown study task");
   fresh(output);
   fs.mkdirSync(path.join(output, "runs"));
   fs.mkdirSync(path.join(output, "projects"));
@@ -153,6 +157,7 @@ export function createStudy(configInput, output, deps = {}) {
     bundles: bundles.map(({ id, hash }) => ({ id, hash })),
     vault,
     source_hash: sourceHash(),
+    primary: config.mode === "study",
     cells: matrix(tasks, config),
     budget_note: "Scheduling cap with reservations, not a guaranteed provider billing ceiling",
   };
