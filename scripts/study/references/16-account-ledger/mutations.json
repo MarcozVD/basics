@@ -1,0 +1,9 @@
+[
+  {
+    "name": "credits-missing-destination",
+    "file": "main.mjs",
+    "find": "if (!balances.has(op.from) || !balances.has(op.to)) {",
+    "replace": "if (!balances.has(op.from)) {"
+  },
+  { "name": "reapplies-duplicates", "file": "main.mjs", "find": "if (applied.has(op.id)) {", "replace": "if (false) {" }
+]

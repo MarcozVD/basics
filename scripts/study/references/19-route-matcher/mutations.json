@@ -1,0 +1,9 @@
+[
+  {
+    "name": "param-beats-static",
+    "file": "main.mjs",
+    "find": "const RANK = { static: 0, param: 1, wildcard: 2 };",
+    "replace": "const RANK = { static: 1, param: 0, wildcard: 2 };"
+  },
+  { "name": "no-percent-decoding", "file": "main.mjs", "find": "return decodeURIComponent(segment);", "replace": "return segment;" }
+]

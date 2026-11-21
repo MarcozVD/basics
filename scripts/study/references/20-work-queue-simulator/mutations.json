@@ -1,0 +1,4 @@
+[
+  { "name": "lowest-priority-first", "file": "main.mjs", "find": "b.priority - a.priority ||", "replace": "a.priority - b.priority ||" },
+  { "name": "no-retry-delay", "file": "main.mjs", "find": "job.available_at = t + 10 * job.attempts;", "replace": "job.available_at = t;" }
+]

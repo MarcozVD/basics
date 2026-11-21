@@ -1,0 +1,9 @@
+[
+  { "name": "substring-exclude", "file": "main.mjs", "find": ": name === pattern", "replace": ": name.includes(pattern)" },
+  {
+    "name": "character-sizes",
+    "file": "main.mjs",
+    "find": "size: fs.lstatSync(full).size",
+    "replace": "size: fs.readFileSync(full, \"utf8\").length"
+  }
+]

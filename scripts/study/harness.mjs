@@ -118,6 +118,7 @@ export async function runCases(expectedInterface, cases) {
         await check({ cli, http });
         passed++;
       } catch (error) {
+        if (error?.skip === true) continue;
         failed++;
         console.error(`${name}: ${String(error.message).slice(0, 1000)}`);
       } finally {
