@@ -10,6 +10,9 @@ if (mode === "sleep") {
   fs.writeFileSync("argv.json", JSON.stringify({ args, initial, withBasics, cwd: process.cwd(), home: process.env.HOME }));
   fs.writeFileSync("package.json", JSON.stringify({ dependencies: { react: "19.0.0" } }));
   fs.writeFileSync("verify.cjs", `process.exit(${withBasics ? 0 : 1});\n`);
+  if (mode === "study-solution")
+    for (const name of fs.readdirSync(process.env.FAKE_STUDY_SOLUTION))
+      fs.copyFileSync(path.join(process.env.FAKE_STUDY_SOLUTION, name), name);
   if (mode === "check-tree")
     fs.writeFileSync(
       "verify.cjs",
@@ -55,7 +58,10 @@ if (mode === "sleep") {
       };
       emit({
         type: "assistant",
-        message: { content: [block, block, { type: "tool_use", id: "other", name: "Read", input: { file_path: "package.json" } }] },
+        message: {
+          model: args.includes("--model") ? args[args.indexOf("--model") + 1] : "fixture-model",
+          content: [block, block, { type: "tool_use", id: "other", name: "Read", input: { file_path: "package.json" } }],
+        },
       });
     } else if (args[0] === "exec") {
       const item =
@@ -69,6 +75,10 @@ if (mode === "sleep") {
         id: "part-1",
         type: "tool",
         callID: "call-1",
+        model: {
+          providerID: "tokenharbor1",
+          modelID: args.includes("-m") ? args[args.indexOf("-m") + 1].split("/").at(-1) : "fixture-model",
+        },
         tool: mode === "contamination" ? "read" : "basics_get_note",
         state: { status: "error", input: mode === "contamination" ? { file_path: outside } : { id: "react" } },
       };
@@ -82,6 +92,8 @@ if (mode === "sleep") {
     fs.writeFileSync("child-pid", String(child.pid));
     setTimeout(() => process.exit(0), 1200);
   }
+  if (args[0] === "-p" && mode === "study-solution")
+    emit({ type: "assistant", message: { model: args[args.indexOf("--model") + 1], content: [] } });
   if (args[0] === "-p")
     emit({
       type: "result",

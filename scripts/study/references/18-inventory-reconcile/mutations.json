@@ -1,0 +1,9 @@
+[
+  {
+    "name": "zero-means-absent",
+    "file": "main.mjs",
+    "find": "records.set(sku, Number(qty));",
+    "replace": "if (Number(qty) > 0) records.set(sku, Number(qty));"
+  },
+  { "name": "last-duplicate-wins", "file": "main.mjs", "find": "|| records.has(sku)) {", "replace": ") {" }
+]

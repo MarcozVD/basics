@@ -1,0 +1,6 @@
+{
+  "id": "06-short-link-registry",
+  "title": "Short-link registry",
+  "interface": "http",
+  "prompt": "Build an in-memory HTTP short-link registry. POST /links accepts exactly alias (matching [a-z0-9][a-z0-9-]{0,31}) and target (an absolute URL of at most 2048 characters that parses with the WHATWG URL parser, uses the http or https scheme, has a nonempty host and carries no username or password). Success returns 201 {alias,target} where target is the normalized form produced by the WHATWG URL parser (its href), for example https://example.com/a%20b?q=%C3%BC for a target written with a space and a non-ASCII character. An alias already in use returns 409; any other invalid or malformed input returns 400. GET /links/:alias returns 200 {alias,target} or 404. DELETE /links/:alias returns 204 with no body or 404, and the alias can be created again afterwards. GET /r/:alias answers 302 with a Location header equal to the stored target and an empty body, or 404 for an unknown alias; aliases are case-sensitive. The service never fetches or contacts the targets. No persistence or external services are needed."
+}

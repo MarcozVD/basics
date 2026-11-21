@@ -1,0 +1,9 @@
+[
+  { "name": "release-not-idempotent", "file": "main.mjs", "find": "if (!reservation.released) {", "replace": "if (true) {" },
+  {
+    "name": "ignores-changed-payload",
+    "file": "main.mjs",
+    "find": "if (known.sku !== sku || known.quantity !== value.quantity) throw fail(422, \"Key reused with a different request\");",
+    "replace": ""
+  }
+]

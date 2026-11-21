@@ -1,0 +1,6 @@
+{
+  "id": "15-dependency-order",
+  "title": "Deterministic dependency graph ordering",
+  "interface": "cli",
+  "prompt": "Build a CLI reading {nodes,edges} JSON from stdin. Nodes is an array of unique IDs matching [a-z][a-z0-9-]*. Each edge is [dependency,dependant], referring to declared nodes; duplicate edges are ignored. Return {order,cycle}: an acyclic graph gets every node once in topological order, always choosing the lexicographically smallest currently available node, with cycle:false. A cycle, including a self-cycle, produces order:[] and cycle:true. Empty graphs are valid. Invalid JSON, extra root fields, duplicate/invalid node IDs or undeclared/malformed edges must exit nonzero with empty stdout and a diagnostic on stderr. Valid input exits 0 and prints exactly one JSON object plus newline. No external services are needed."
+}

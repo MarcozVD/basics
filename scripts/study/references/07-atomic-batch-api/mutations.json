@@ -1,0 +1,14 @@
+[
+  {
+    "name": "no-rollback",
+    "file": "main.mjs",
+    "find": "const working = new Map([...records].map(([id, record]) => [id, { ...record }])),",
+    "replace": "const working = records,"
+  },
+  {
+    "name": "stale-revision-accepted",
+    "file": "main.mjs",
+    "find": "if (current.rev !== op.rev) throw fail(409, \"Stale revision\", { index });",
+    "replace": ""
+  }
+]

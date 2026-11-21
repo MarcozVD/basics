@@ -92,12 +92,15 @@ test("all fake event formats deduplicate MCP calls and flag study reads for summ
   const f = fixture();
   try {
     for (const agent of ["claude", "opencode", "codex"] as const) {
+      const model =
+        agent === "claude" ? "claude-haiku-fixture" : agent === "opencode" ? "tokenharbor1/deepseek-v4.1-flash-1017" : undefined;
       const report = await runComparison(
         f.vault,
-        { agent, task: "dashboard", conditions: ["basics"], yes: true, timeoutMs: 15000 },
+        { agent, model, task: "dashboard", conditions: ["basics"], yes: true, timeoutMs: 15000 },
         { ...f.deps, env: { ...f.deps.env, FAKE_COMPARE_MODE: "mcp-events" } },
       );
       assert.deepEqual(report.results[0].mcp_tool_calls, { total: 1, by_tool: { get_note: 1 } });
+      if (model) assert.equal(report.results[0].resolved_model, model);
       assert.equal(report.results[0].contaminated, false);
       const contaminated = await runComparison(
         f.vault,

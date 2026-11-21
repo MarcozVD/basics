@@ -1,0 +1,14 @@
+[
+  {
+    "name": "unicode-lowercase",
+    "file": "main.mjs",
+    "find": "text.replace(/[A-Z]/g, (letter) => letter.toLowerCase())",
+    "replace": "text.toLowerCase()"
+  },
+  {
+    "name": "counts-repeated-query-tokens",
+    "file": "main.mjs",
+    "find": "[...new Set(tokens(input.query))]",
+    "replace": "tokens(input.query)"
+  }
+]

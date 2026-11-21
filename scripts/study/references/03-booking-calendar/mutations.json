@@ -1,0 +1,9 @@
+[
+  {
+    "name": "adjacent-is-overlap",
+    "file": "main.mjs",
+    "find": "startMs < other.endMs && other.startMs < endMs",
+    "replace": "startMs <= other.endMs && other.startMs <= endMs"
+  },
+  { "name": "resources-share-calendar", "file": "main.mjs", "find": "other.resource === resource && startMs", "replace": "startMs" }
+]

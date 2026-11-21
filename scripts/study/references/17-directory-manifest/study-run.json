@@ -1,0 +1,1 @@
+{ "interface": "cli", "command": ["node", "main.mjs"] }

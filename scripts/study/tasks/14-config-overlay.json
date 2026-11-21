@@ -1,0 +1,6 @@
+{
+  "id": "14-config-overlay",
+  "title": "Deterministic JSON configuration overlays",
+  "interface": "cli",
+  "prompt": "Build a CLI reading one JSON array of object overlays from stdin. Merge left to right, recursively merging object values. Arrays and scalar values replace the previous value; null as an object-property value deletes that property, including at nested levels. When an object replaces a scalar or array, merge it into a new empty object using the same null-deletion rule. Treat all JSON property names as ordinary keys. An empty array produces {}. Print exactly the merged JSON object and a newline to stdout, exit 0. Malformed JSON, a non-array root or any overlay that is null, an array or a non-object is invalid: exit nonzero, leave stdout empty and write a useful diagnostic on stderr. Never modify files or the source input. No external services are needed."
+}

@@ -1,0 +1,4 @@
+[
+  { "name": "half-up", "file": "main.mjs", "find": "(rest === half && magnitude % 2n === 1n)", "replace": "rest === half" },
+  { "name": "jpy-two-decimals", "file": "main.mjs", "find": "(currency === \"JPY\" ? 0 : 2)", "replace": "2" }
+]

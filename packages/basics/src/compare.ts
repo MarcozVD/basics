@@ -89,6 +89,8 @@ interface CheckResult {
   output_tail?: string;
 }
 export interface CompareRunResult {
+  resolved_model?: string;
+  reported_models?: string[];
   run: number;
   condition: CompareCondition;
   mcp_tool_calls: McpToolCalls | null;
@@ -489,6 +491,8 @@ export async function runComparison(vault: Vault, options: CompareOptions, deps:
           match: ids.some((id) => used[layer]?.includes(id)),
         }));
         results.push({
+          resolved_model: agent.resolved_model,
+          reported_models: agent.reported_models,
           run,
           condition,
           mcp_tool_calls: agent.mcp_tool_calls ?? null,

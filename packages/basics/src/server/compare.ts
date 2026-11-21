@@ -82,6 +82,8 @@ export function publicCompareReport(report: CompareReport, env: NodeJS.ProcessEn
       ]),
     ),
     results: report.results.map((r) => ({
+      resolved_model: r.resolved_model,
+      reported_models: r.reported_models,
       run: r.run,
       condition: normalizeCompareCondition(r.condition),
       mcp_tool_calls: r.mcp_tool_calls ?? null,

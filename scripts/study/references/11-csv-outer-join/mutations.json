@@ -1,0 +1,9 @@
+[
+  {
+    "name": "first-match-only",
+    "file": "main.mjs",
+    "find": "for (const r of group.right.length ? group.right : [null])",
+    "replace": "for (const r of group.right.length ? group.right.slice(0, 1) : [null])"
+  },
+  { "name": "input-order-keys", "file": "main.mjs", "find": "[...groups.keys()].sort(order)", "replace": "[...groups.keys()]" }
+]

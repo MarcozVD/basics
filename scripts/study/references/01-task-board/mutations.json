@@ -1,0 +1,9 @@
+[
+  {
+    "name": "ignores-filter",
+    "file": "main.mjs",
+    "find": ".filter((task) => status === null || task.status === status)",
+    "replace": ".filter(() => true)"
+  },
+  { "name": "accepts-blank-title", "file": "main.mjs", "find": "!body.title.trim() || ", "replace": "" }
+]

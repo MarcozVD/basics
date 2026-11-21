@@ -392,6 +392,8 @@ export interface TokenUsage {
 }
 
 export interface AgentRunResult {
+  resolved_model?: string;
+  reported_models?: string[];
   mcp_tool_calls?: McpToolCalls | null;
   contaminated?: boolean;
   contamination_reasons?: string[];
@@ -489,8 +491,24 @@ export class AgentRunner {
       return setupFailure(error);
     }
     let usage: TokenUsage | undefined;
+    let resolvedModel: string | undefined;
+    const reportedModels = new Set<string>();
     const observations = new AgentObservations(opts.agent, cwd, this.opts.protectedPaths);
     const parser = parserFor(format, (event) => {
+      if (opts.agent === "claude" && event.type === "assistant") {
+        const model = (event.message as { model?: unknown } | undefined)?.model;
+        if (typeof model === "string") {
+          resolvedModel = model;
+          reportedModels.add(model);
+        }
+      }
+      if (opts.agent === "opencode") {
+        const model = (event.part as { model?: { providerID?: unknown; modelID?: unknown } } | undefined)?.model;
+        if (typeof model?.providerID === "string" && typeof model.modelID === "string") {
+          resolvedModel = `${model.providerID}/${model.modelID}`;
+          reportedModels.add(resolvedModel);
+        }
+      }
       if (opts.build) observations.observe(event);
       const part = event.part as { tokens?: { input?: number; output?: number } } | undefined;
       const counts = (
@@ -596,6 +614,8 @@ export class AgentRunner {
               : exitError(code, stderr));
       const result: AgentRunResult = { ok: !failure && !cleanupError, text: parser.text() };
       if (opts.build) {
+        result.resolved_model = resolvedModel;
+        result.reported_models = [...reportedModels];
         result.shutdown_confirmed = shutdownConfirmed;
         if (!shutdownConfirmed) result.shutdown_diagnostics = tree?.diagnostics;
         result.mcp_tool_calls = observations.calls(!run.cancelled && !run.timedOut);
