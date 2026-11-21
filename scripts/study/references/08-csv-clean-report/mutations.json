@@ -1,0 +1,4 @@
+[
+  { "name": "keeps-duplicates", "file": "main.mjs", "find": "if (seen.has(id)) {", "replace": "if (false) {" },
+  { "name": "no-bom-support", "file": "main.mjs", "find": "if (text.charCodeAt(0) === 0xfeff) text = text.slice(1);", "replace": "" }
+]

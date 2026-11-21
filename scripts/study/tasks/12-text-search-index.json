@@ -1,0 +1,6 @@
+{
+  "id": "12-text-search-index",
+  "title": "Ranked text search",
+  "interface": "cli",
+  "prompt": "Build a CLI reading one JSON object {documents,query} from stdin; documents is an array of {id,text} with unique nonempty string ids and string texts, query a string. Tokenization: lowercase only the ASCII letters A-Z (all other characters, including non-ASCII letters such as É, keep their case and are compared exactly), then split into tokens, which are maximal runs of Unicode letters and digits (characters with the Unicode properties L or N); every other character separates tokens. Query tokens are deduplicated. A document's score is the sum, over the distinct query tokens, of the number of times that token occurs in the document's tokens. Return only documents with a score above 0, ordered by score descending then id in plain code-unit string order. Print exactly one JSON object and a newline: {results} where results is an array of {id,score}. A query without tokens gives {\"results\":[]}. Invalid JSON, wrong shapes or duplicate ids: exit nonzero, leave stdout empty and write a diagnostic to stderr. Exit 0 on success. No external services or search libraries are needed."
+}

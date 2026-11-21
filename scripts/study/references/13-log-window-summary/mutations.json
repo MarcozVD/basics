@@ -1,0 +1,9 @@
+[
+  {
+    "name": "floor-rank",
+    "file": "main.mjs",
+    "find": "Math.ceil((p / 100) * sorted.length) - 1",
+    "replace": "Math.floor((p / 100) * sorted.length)"
+  },
+  { "name": "ignores-offsets", "file": "main.mjs", "find": "Date.parse(value.ts)", "replace": "Date.parse(value.ts.slice(0, 19) + \"Z\")" }
+]

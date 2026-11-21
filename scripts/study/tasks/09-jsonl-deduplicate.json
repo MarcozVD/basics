@@ -1,0 +1,6 @@
+{
+  "id": "09-jsonl-deduplicate",
+  "title": "JSONL deduplication with diagnostics",
+  "interface": "cli",
+  "prompt": "Build a CLI that reads JSON Lines from stdin (lines end with LF or CRLF; blank or whitespace-only lines are skipped but still count for line numbers, which are 1-based physical lines) and deduplicates records by id. A valid record is a JSON object whose id member is a nonempty string. The first record for each id wins; later records with the same id are dropped silently. Write each kept record to stdout as one line of compact JSON (the standard serialization of the parsed value without extra spaces) in input order, each followed by a newline, and nothing else on stdout. For every other line write one diagnostic line to stderr: {\"line\":N,\"reason\":\"malformed\"} when the line is not valid JSON or not a JSON object, or {\"line\":N,\"reason\":\"missing_id\"} when it is an object without a nonempty string id. Diagnostics follow input order. The CLI must cope with inputs of at least 100000 lines and exit 0 whenever the input could be read. No external services are needed."
+}

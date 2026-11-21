@@ -1,0 +1,14 @@
+[
+  {
+    "name": "last-wins",
+    "file": "main.mjs",
+    "find": "if (seen.has(value.id)) return;",
+    "replace": "if (seen.has(value.id)) kept.splice(kept.findIndex((entry) => JSON.parse(entry).id === value.id), 1);"
+  },
+  {
+    "name": "zero-based-lines",
+    "file": "main.mjs",
+    "find": "{ line: index + 1, reason: \"missing_id\" }",
+    "replace": "{ line: index, reason: \"missing_id\" }"
+  }
+]

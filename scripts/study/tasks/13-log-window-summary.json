@@ -1,0 +1,6 @@
+{
+  "id": "13-log-window-summary",
+  "title": "Log window summary with percentiles",
+  "interface": "cli",
+  "prompt": "Build a CLI reading JSON Lines from stdin (LF or CRLF line endings; blank lines are skipped but still count for line numbers, which are 1-based physical lines). A valid line is a JSON object with ts (an ISO 8601 timestamp with seconds and an explicit offset such as Z or +02:00, fractional seconds allowed) and ms (a finite non-negative JSON number). Any other nonblank line is rejected. Windows are 60-second intervals aligned to the Unix epoch in UTC, [start,start+60s), so offsets are converted to instants first. For each nonempty window compute count and the nearest-rank percentiles p50 and p95 of ms: sort ascending, the p-th percentile is the value at 1-based rank ceil(p/100*count). Print exactly one JSON object and a newline: {windows,rejected}. windows is ordered by start and lists {start,count,p50,p95} with start formatted like 2026-03-01T10:00:00.000Z; rejected lists the rejected line numbers ascending. Input order does not matter. Empty input gives {\"windows\":[],\"rejected\":[]}. Exit 0 whenever the input could be read. No external services are needed."
+}
